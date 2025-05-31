@@ -1,69 +1,112 @@
-# Copyright (c) 2025 Vanderbilt University
-# Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas, Sam Hays
-
 import json
-import decimal
-from pydantic import BaseModel
+from decimal import Decimal
+from typing import Any
 
 
-class DecimalEncoder(json.JSONEncoder):
+class SafeDecimalEncoder(json.JSONEncoder):
     """
-    A custom JSON encoder that converts decimal.Decimal objects to integers.
-    """
+    JSON encoder that converts Decimal objects to strings.
 
-    def default(self, obj: object) -> object:
-        """
-        Override the default method to handle decimal.Decimal objects.
-
-        Args:
-            obj (object): The object to encode.
-
-        Returns:
-            object: The encoded object, converting decimal.Decimal to int if applicable.
-        """
-        if isinstance(obj, decimal.Decimal):
-            return int(obj)
-        return super(DecimalEncoder, self).default(obj)
-
-
-def pydantic_encoder(obj: object) -> dict:
-    """
-    Encode Pydantic BaseModel objects into dictionaries.
+    This preserves full precision and avoids float rounding issues.
+    Useful for APIs and financial data.
 
     Args:
         obj (object): The object to encode.
 
     Returns:
-        dict: The dictionary representation of the BaseModel object.
+        str: The string representation of the Decimal.
 
     Raises:
-        TypeError: If the object is not a Pydantic BaseModel.
-    """
-    if isinstance(obj, BaseModel):
-        return obj.dict()
-    raise TypeError(f"Object of type '{obj.__class__.__name__}' is not serializable")
-
-
-class CombinedEncoder(json.JSONEncoder):
-    """
-    A custom JSON encoder that combines encoding for Pydantic BaseModel objects
-    and decimal.Decimal objects.
+        TypeError: If the object is not serializable.
     """
 
-    def default(self, obj: object) -> object:
-        """
-        Override the default method to handle BaseModel, set, and decimal.Decimal objects.
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            return str(obj)
+        return super().default(obj)
 
-        Args:
-            obj (object): The object to encode.
 
-        Returns:
-            object: The encoded object, converting BaseModel to a dictionary,
-                    set to a list, and decimal.Decimal to an integer if applicable.
-        """
-        if isinstance(obj, BaseModel):
-            return obj.model_dump()
-        elif isinstance(obj, set):
-            return list(obj)
-        # Use the default DecimalEncoder for any other type it covers
-        return DecimalEncoder.default(self, obj)
+class SmartDecimalEncoder(json.JSONEncoder):
+    """
+    JSON encoder that converts Decimal to int if whole, otherwise float.
+
+    This attempts to maintain numeric fidelity without converting to strings.
+
+    Args:
+        obj (object): The object to encode.
+
+    Returns:
+        int or float: A numeric representation of the Decimal.
+
+    Raises:
+        TypeError: If the object is not serializable.
+    """
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            return float(obj) if obj % 1 != 0 else int(obj)
+        return super().default(obj)
+
+
+class LossyDecimalEncoder(json.JSONEncoder):
+    """
+    JSON encoder that converts all Decimal values to integers.
+
+    This truncates decimal precision. Use with caution.
+
+    Args:
+        obj (object): The object to encode.
+
+    Returns:
+        int: The truncated integer value of the Decimal.
+
+    Raises:
+        TypeError: If the object is not serializable.
+    """
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            return int(obj)
+        return super().default(obj)
+
+
+def dumps_safe(obj: Any, **kwargs) -> str:
+    """
+    Serialize an object to JSON using SafeDecimalEncoder.
+
+    Args:
+        obj (object): The object to serialize.
+        **kwargs: Additional arguments passed to json.dumps.
+
+    Returns:
+        str: JSON-encoded string with Decimal values as strings.
+    """
+    return json.dumps(obj, cls=SafeDecimalEncoder, **kwargs)
+
+
+def dumps_smart(obj: Any, **kwargs) -> str:
+    """
+    Serialize an object to JSON using SmartDecimalEncoder.
+
+    Args:
+        obj (object): The object to serialize.
+        **kwargs: Additional arguments passed to json.dumps.
+
+    Returns:
+        str: JSON-encoded string with Decimal values as int or float.
+    """
+    return json.dumps(obj, cls=SmartDecimalEncoder, **kwargs)
+
+
+def dumps_lossy(obj: Any, **kwargs) -> str:
+    """
+    Serialize an object to JSON using LossyDecimalEncoder.
+
+    Args:
+        obj (object): The object to serialize.
+        **kwargs: Additional arguments passed to json.dumps.
+
+    Returns:
+        str: JSON-encoded string with Decimal values as int (with truncation).
+    """
+    return json.dumps(obj, cls=LossyDecimalEncoder, **kwargs)

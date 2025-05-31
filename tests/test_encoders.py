@@ -1,47 +1,64 @@
 import json
 import decimal
-from pydantic import BaseModel
-from encoders import DecimalEncoder, CombinedEncoder
+from encoders import (
+    SafeDecimalEncoder,
+    SmartDecimalEncoder,
+    LossyDecimalEncoder,
+    dumps_safe,
+    dumps_smart,
+    dumps_lossy,
+)
 
 
-class SampleModel(BaseModel):
-    name: str
-    value: int
-
-
-def test_decimal_encoder_with_decimal():
+def test_safe_decimal_encoder_with_decimal():
     obj = decimal.Decimal("10.5")
-    result = json.dumps(obj, cls=DecimalEncoder)
-    assert result == "10"
+    result = json.dumps(obj, cls=SafeDecimalEncoder)
+    assert result == '"10.5"'  # Decimal is serialized as a string
 
 
-def test_decimal_encoder_with_non_decimal():
+def test_safe_decimal_encoder_with_non_decimal():
     obj = "test"
-    result = json.dumps(obj, cls=DecimalEncoder)
-    assert result == '"test"'
+    result = json.dumps(obj, cls=SafeDecimalEncoder)
+    assert result == '"test"'  # Non-decimal objects are serialized normally
 
 
-def test_combined_encoder_with_basemodel():
-    obj = SampleModel(name="test", value=123)
-    result = json.dumps(obj, cls=CombinedEncoder)
-    assert result == '{"name": "test", "value": 123}'
+def test_smart_decimal_encoder_with_whole_decimal():
+    obj = decimal.Decimal("10.0")
+    result = json.dumps(obj, cls=SmartDecimalEncoder)
+    assert result == "10"  # Whole decimal is serialized as an integer
 
 
-def test_combined_encoder_with_set():
-    obj = {1, 2, 3}
-    result = json.dumps(obj, cls=CombinedEncoder)
-    assert (
-        result == "[1, 2, 3]" or result == "[2, 3, 1]" or result == "[3, 1, 2]"
-    )  # Order may vary
+def test_smart_decimal_encoder_with_fractional_decimal():
+    obj = decimal.Decimal("10.5")
+    result = json.dumps(obj, cls=SmartDecimalEncoder)
+    assert result == "10.5"  # Fractional decimal is serialized as a float
 
 
-def test_combined_encoder_with_decimal():
-    obj = decimal.Decimal("42.7")
-    result = json.dumps(obj, cls=CombinedEncoder)
-    assert result == "42"
+def test_lossy_decimal_encoder_with_decimal():
+    obj = decimal.Decimal("10.5")
+    result = json.dumps(obj, cls=LossyDecimalEncoder)
+    assert result == "10"  # Decimal is truncated to an integer
 
 
-def test_combined_encoder_with_non_special_type():
-    obj = "example"
-    result = json.dumps(obj, cls=CombinedEncoder)
-    assert result == '"example"'
+def test_lossy_decimal_encoder_with_whole_decimal():
+    obj = decimal.Decimal("42.0")
+    result = json.dumps(obj, cls=LossyDecimalEncoder)
+    assert result == "42"  # Whole decimal is serialized as an integer
+
+
+def test_dumps_safe():
+    obj = {"value": decimal.Decimal("123.456")}
+    result = dumps_safe(obj)
+    assert result == '{"value": "123.456"}'  # Decimal is serialized as a string
+
+
+def test_dumps_smart():
+    obj = {"value": decimal.Decimal("123.456")}
+    result = dumps_smart(obj)
+    assert result == '{"value": 123.456}'  # Decimal is serialized as a float
+
+
+def test_dumps_lossy():
+    obj = {"value": decimal.Decimal("123.456")}
+    result = dumps_lossy(obj)
+    assert result == '{"value": 123}'  # Decimal is truncated to an integerimport json
