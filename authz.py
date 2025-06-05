@@ -61,15 +61,11 @@ def verify_user_as_admin(access_token: str, purpose: str) -> bool:
             return response_content.get("isAdmin", False)
         return False
 
-    except requests.exceptions.RequestException as e:
+    except requests.RequestException as e:
         # Handle network-related exceptions
         print(f"Network error during authentication: {e}")
         return False
     except json.JSONDecodeError as e:
         # Handle JSON parsing errors
         print(f"Error decoding JSON response: {e}")
-        return False
-    except Exception as e:
-        # Catch-all for other exceptions
-        print(f"Unexpected error during authentication: {e}")
         return False

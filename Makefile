@@ -18,7 +18,7 @@ format:
 
 # Run tests with coverage report
 coverage:
-	pytest --cov --cov-report=term-missing --cov-fail-under=100
+	pytest --cov --cov-report=term-missing --cov-fail-under=100 -v
 
 # Clean up coverage files
 clean:
