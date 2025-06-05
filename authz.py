@@ -12,11 +12,11 @@ with different authentication and authorization systems.
 Copyright (c) 2025 Vanderbilt University
 Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas, Sam Hays
 """
-# Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas, Sam Hays
 
 import os
 import requests
 import json
+from requests.models import Response
 
 
 def verify_user_as_admin(access_token: str, purpose: str) -> bool:
@@ -32,7 +32,6 @@ def verify_user_as_admin(access_token: str, purpose: str) -> bool:
     """
     print("Initiating authentication of user as admin.")
 
-    # Ensure the API_BASE_URL environment variable is set
     api_base_url = os.environ.get("API_BASE_URL")
     if not api_base_url:
         print("Error: API_BASE_URL environment variable is not set.")
@@ -48,20 +47,19 @@ def verify_user_as_admin(access_token: str, purpose: str) -> bool:
     }
 
     try:
-        response = requests.post(
+        response: Response = requests.post(
             endpoint, headers=headers, data=json.dumps(request_payload)
         )
 
         print("Response received:", response.content)
 
         # Parse the response content
-        response_content = response.json()
+        response_content: dict = response.json()
 
         # Check for success and admin status
         if response.status_code == 200 and response_content.get("success", False):
             return response_content.get("isAdmin", False)
-        else:
-            return False
+        return False
 
     except requests.exceptions.RequestException as e:
         # Handle network-related exceptions
