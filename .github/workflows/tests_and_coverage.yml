@@ -1,0 +1,26 @@
+name: Run Tests and Coverage
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install pytest coverage
+          pip install -r requirements.txt || true
+
+      - name: Run tests and enforce 100% coverage
+        run: |
+          coverage run -m pytest
+                coverage report --fail-under=100
+      - name: Check if tests and coverage passed
+        run: echo "✅ All tests passed and coverage is 100%"
