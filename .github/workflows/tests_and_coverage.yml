@@ -1,9 +1,9 @@
-name: Run Tests and Coverage
+name: Run Tests, Format and Check code, and Coverage
 
 on: [push, pull_request]
 
 jobs:
-  test:
+  tests_coverage_and_formatting:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,12 +15,17 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest coverage
+          python -m pip install --upgrade pip
           pip install -r requirements.txt || true
+          pip install pytest coverage pre-commit
+
+      - name: Run pre-commit hooks
+        run: |
+          pre-commit run --all-files --show-diff-on-failure
 
       - name: Run tests and enforce 100% coverage
         run: |
           coverage run -m pytest
                 coverage report --fail-under=100
       - name: Check if tests and coverage passed
-        run: echo "✅ All tests passed and coverage is 100%"
+        run: echo "🎉 Clean code, tests, and coverage confirmed!"
