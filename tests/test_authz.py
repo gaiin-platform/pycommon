@@ -1,7 +1,8 @@
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from requests import HTTPError, ConnectionError
+from requests import ConnectionError, HTTPError
+
 from authz import verify_user_as_admin
 
 
@@ -79,6 +80,7 @@ def test_verify_user_as_admin_http_error(mock_get_env, mock_post):
     # Assertions
     assert result is False
 
+
 @patch("authz.requests.post")
 @patch("authz.os.environ.get")
 def test_verify_user_as_admin_connection_error(mock_get_env, mock_post):
@@ -93,6 +95,7 @@ def test_verify_user_as_admin_connection_error(mock_get_env, mock_post):
 
     # Assertions
     assert result is False
+
 
 @patch("authz.requests.post")
 @patch("authz.os.environ.get")

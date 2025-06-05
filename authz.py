@@ -13,9 +13,10 @@ Copyright (c) 2025 Vanderbilt University
 Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas, Sam Hays
 """
 
-import os
-import requests
 import json
+import os
+
+import requests
 from requests.models import Response
 
 

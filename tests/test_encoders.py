@@ -1,12 +1,13 @@
-import json
 import decimal
+import json
+
 from encoders import (
+    LossyDecimalEncoder,
     SafeDecimalEncoder,
     SmartDecimalEncoder,
-    LossyDecimalEncoder,
+    dumps_lossy,
     dumps_safe,
     dumps_smart,
-    dumps_lossy,
 )
 
 

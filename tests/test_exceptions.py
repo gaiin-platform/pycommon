@@ -1,5 +1,4 @@
-import pytest
-from exceptions import HTTPException, HTTPBadRequest, HTTPUnauthorized, HTTPNotFound
+from exceptions import HTTPBadRequest, HTTPException, HTTPNotFound, HTTPUnauthorized
 
 
 def test_http_exception():
