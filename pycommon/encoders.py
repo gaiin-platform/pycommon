@@ -1,3 +1,20 @@
+# Copyright (c) 2025 Vanderbilt University
+"""
+encoders.py
+
+This module provides custom JSON encoders for handling Python Decimal objects
+and other serialization needs. It includes multiple encoder classes tailored
+to different use cases, such as preserving precision, converting to numeric
+types, or truncating precision.
+
+These encoders are designed to be used with the `json` module and provide
+flexibility for APIs, financial applications, and other scenarios requiring
+custom serialization logic.
+
+Copyright (c) 2025 Vanderbilt University
+Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas, Sam Hays
+"""
+
 import json
 from decimal import Decimal
 from typing import Any
