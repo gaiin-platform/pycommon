@@ -1,4 +1,4 @@
-from pycommon.exceptions import (
+from exceptions import (
     HTTPBadRequest,
     HTTPException,
     HTTPNotFound,
