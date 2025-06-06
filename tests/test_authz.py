@@ -3,11 +3,11 @@ from unittest.mock import MagicMock, patch
 
 from requests import ConnectionError, HTTPError
 
-from authz import verify_user_as_admin
+from pycommon.authz import verify_user_as_admin
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_success(mock_get_env, mock_post):
     # Mock environment variable
     mock_get_env.return_value = "http://mock-api.com"
@@ -34,8 +34,8 @@ def test_verify_user_as_admin_success(mock_get_env, mock_post):
     )
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_failure(mock_get_env, mock_post):
     # Mock environment variable
     mock_get_env.return_value = "http://mock-api.com"
@@ -53,7 +53,7 @@ def test_verify_user_as_admin_failure(mock_get_env, mock_post):
     assert result is False
 
 
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_missing_env(mock_get_env):
     # Mock missing environment variable
     mock_get_env.return_value = None
@@ -65,8 +65,8 @@ def test_verify_user_as_admin_missing_env(mock_get_env):
     assert result is False
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_http_error(mock_get_env, mock_post):
     # Mock environment variable
     mock_get_env.return_value = "http://mock-api.com"
@@ -81,8 +81,8 @@ def test_verify_user_as_admin_http_error(mock_get_env, mock_post):
     assert result is False
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_connection_error(mock_get_env, mock_post):
     # Mock environment variable
     mock_get_env.return_value = "http://mock-api.com"
@@ -97,8 +97,8 @@ def test_verify_user_as_admin_connection_error(mock_get_env, mock_post):
     assert result is False
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_json_decode_error(mock_get_env, mock_post):
     # Mock environment variable
     mock_get_env.return_value = "http://mock-api.com"

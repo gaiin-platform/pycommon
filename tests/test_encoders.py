@@ -1,7 +1,7 @@
 import decimal
 import json
 
-from encoders import (
+from pycommon.encoders import (
     LossyDecimalEncoder,
     SafeDecimalEncoder,
     SmartDecimalEncoder,

@@ -1,4 +1,9 @@
-from exceptions import HTTPBadRequest, HTTPException, HTTPNotFound, HTTPUnauthorized
+from pycommon.exceptions import (
+    HTTPBadRequest,
+    HTTPException,
+    HTTPNotFound,
+    HTTPUnauthorized,
+)
 
 
 def test_http_exception():
