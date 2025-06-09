@@ -10,6 +10,7 @@ click==8.2.1
 coverage==7.8.2
 distlib==0.3.9
 dotenv==0.9.9
+ecdsa==0.19.1
 filelock==3.18.0
 identify==2.6.12
 idna==3.10
@@ -24,16 +25,19 @@ pathspec==0.12.1
 platformdirs==4.3.8
 pluggy==1.6.0
 pre_commit==4.2.0
+pyasn1==0.6.1
 pydantic==2.10.4
 pydantic_core==2.27.2
 pytest==8.3.5
 pytest-cov==6.1.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
+python-jose==3.5.0
 PyYAML==6.0.2
 referencing==0.36.2
 requests==2.32.3
 rpds-py==0.25.1
+rsa==4.9.1
 s3transfer==0.13.0
 six==1.17.0
 types-requests==2.32.0.20250602

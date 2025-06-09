@@ -1,7 +1,10 @@
 import decimal
 import json
 
+from pydantic import BaseModel
+
 from encoders import (
+    CustomPydanticJSONEncoder,
     LossyDecimalEncoder,
     SafeDecimalEncoder,
     SmartDecimalEncoder,
@@ -90,3 +93,38 @@ def test_dumps_lossy():
     obj = {"value": decimal.Decimal("123.456")}
     result = dumps_lossy(obj)
     assert result == '{"value": 123}'  # Decimal is truncated to an integerimport json
+
+
+def test_custom_pydantic_json_encoder_with_pydantic_model():
+    class SampleModel(BaseModel):
+        name: str
+        value: decimal.Decimal
+
+    obj = SampleModel(name="Test", value=decimal.Decimal("123.456"))
+    result = json.dumps(obj, cls=CustomPydanticJSONEncoder)
+    assert (
+        result == '{"name": "Test", "value": "123.456"}'
+    )  # Pydantic model serialized as dict
+
+
+def test_custom_pydantic_json_encoder_with_set():
+    obj = {1, 2, 3}
+    result = json.dumps(obj, cls=CustomPydanticJSONEncoder)
+    assert result == "[1, 2, 3]"  # Set is serialized as a list
+
+
+def test_custom_pydantic_json_encoder_with_decimal():
+    obj = decimal.Decimal("123.456")
+    result = json.dumps(obj, cls=CustomPydanticJSONEncoder)
+    assert result == '"123.456"'  # Decimal is serialized as a string
+
+
+def test_custom_pydantic_json_encoder_with_unserializable_object():
+    class Unserializable:
+        pass
+
+    obj = Unserializable()
+    try:
+        json.dumps(obj, cls=CustomPydanticJSONEncoder)
+    except TypeError as e:
+        assert "is not JSON serializable" in str(e)
