@@ -26,5 +26,5 @@ repos:
     rev: v1.10.0
     hooks:
       - id: mypy
-        args: [--install-types, --non-interactive]
+        args: [--install-types, --non-interactive, --ignore-missing-imports]
         language_version: python3

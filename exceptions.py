@@ -1,4 +1,3 @@
-# Copyright (c) 2025 Vanderbilt University
 """
 exceptions.py
 
@@ -9,7 +8,6 @@ custom exceptions, ensuring consistency and reusability throughout the codebase.
 Copyright (c) 2025 Vanderbilt University
 Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas, Sam Hays
 """
-# Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas, Sam Hays
 
 
 class HTTPException(Exception):
@@ -65,3 +63,39 @@ class HTTPNotFound(HTTPException):
 
     def __init__(self, message="Not Found"):
         super().__init__(404, message)
+
+
+class ClaimException(Exception):
+    """
+    Custom exception for claim-related errors.
+
+    This exception is used to indicate issues related to claims in the system.
+    It can be extended with additional attributes or methods as needed.
+    """
+
+    def __init__(self, message="Claim error occurred"):
+        super().__init__(message)
+
+
+class EnvVarError(Exception):
+    """
+    Custom exception for environment-related errors.
+
+    This exception is raised when there are issues with environment variables
+    or configurations that are necessary for the application to function correctly.
+    """
+
+    def __init__(self, message="Environment variable error occurred"):
+        super().__init__(message)
+
+
+class UnknownApiUserException(Exception):
+    """
+    Custom exception for unknown API users.
+
+    This exception is raised when an API request is made by a user
+    that is not recognized or does not exist in the system.
+    """
+
+    def __init__(self, message="Unknown API user"):
+        super().__init__(message)

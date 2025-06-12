@@ -19,6 +19,8 @@ import json
 from decimal import Decimal
 from typing import Any
 
+from pydantic import BaseModel
+
 
 class SafeDecimalEncoder(json.JSONEncoder):
     """
@@ -85,6 +87,36 @@ class LossyDecimalEncoder(json.JSONEncoder):
         if isinstance(obj, Decimal):
             return int(obj)
         return super().default(obj)
+
+
+class CustomPydanticJSONEncoder(json.JSONEncoder):
+    """
+    A custom JSON encoder that extends the default JSONEncoder to handle
+    additional data types such as Pydantic BaseModel instances and sets.
+
+    - Serializes Pydantic BaseModel instances using their `model_dump()` method.
+    - Converts sets to lists for JSON compatibility.
+    - Falls back to SafeDecimalEncoder for handling Decimal objects and other types.
+
+    Args:
+        obj (object): The object to encode.
+
+    Returns:
+        Any: A JSON-serializable representation of the object.
+
+    Raises:
+        TypeError: If the object is not serializable.
+    """
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, BaseModel):
+            # Serialize Pydantic BaseModel instances as dictionaries
+            return obj.model_dump()
+        elif isinstance(obj, set):
+            # Convert sets to lists for JSON compatibility
+            return list(obj)
+        # Fallback to SafeDecimalEncoder for Decimal and other types
+        return SafeDecimalEncoder().default(obj)
 
 
 def dumps_safe(obj: Any, **kwargs) -> str:

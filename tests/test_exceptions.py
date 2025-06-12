@@ -1,8 +1,11 @@
 from exceptions import (
+    ClaimException,
+    EnvVarError,
     HTTPBadRequest,
     HTTPException,
     HTTPNotFound,
     HTTPUnauthorized,
+    UnknownApiUserException,
 )
 
 
@@ -42,4 +45,37 @@ def test_not_found_exception():
     custom_message = "Resource not found"
     exc = HTTPNotFound(custom_message)
     assert exc.status_code == 404
+    assert str(exc) == custom_message
+
+
+def test_environment_error_default_message():
+    exc = EnvVarError()
+    assert str(exc) == "Environment variable error occurred"
+
+
+def test_environment_error_custom_message():
+    custom_message = "Missing required environment variable"
+    exc = EnvVarError(custom_message)
+    assert str(exc) == custom_message
+
+
+def test_claim_exception_default_message():
+    exc = ClaimException()
+    assert str(exc) == "Claim error occurred"
+
+
+def test_claim_exception_custom_message():
+    custom_message = "Invalid claim data"
+    exc = ClaimException(custom_message)
+    assert str(exc) == custom_message
+
+
+def test_unknown_api_user_exception_default_message():
+    exc = UnknownApiUserException()
+    assert str(exc) == "Unknown API user"
+
+
+def test_unknown_api_user_exception_custom_message():
+    custom_message = "API user not recognized"
+    exc = UnknownApiUserException(custom_message)
     assert str(exc) == custom_message
