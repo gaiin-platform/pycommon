@@ -15,13 +15,14 @@ import json
 import os
 import re
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
 import requests
 from boto3.dynamodb.conditions import Key
 from dotenv import load_dotenv
 from jose import jwt
+from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
 from jsonschema import SchemaError
 from jsonschema import validate as json_validate
 from jsonschema.exceptions import ValidationError
@@ -29,7 +30,13 @@ from requests import Response
 
 from decorators import required_env_vars
 from encoders import CustomPydanticJSONEncoder
-from exceptions import ClaimException, HTTPBadRequest, HTTPException, HTTPUnauthorized
+from exceptions import (
+    ClaimException,
+    HTTPBadRequest,
+    HTTPException,
+    HTTPUnauthorized,
+    UnknownApiUserException,
+)
 from permissions import get_permission_checker
 
 ALGORITHMS = ["RS256"]
@@ -80,7 +87,6 @@ def verify_user_as_admin(access_token: str, purpose: str) -> bool:
         print(f"Network error during authentication: {e}")
         return False
     except json.JSONDecodeError as e:
-        # Handle JSON parsing errors
         print(f"Error decoding JSON response: {e}")
         return False
 
@@ -142,13 +148,23 @@ def get_claims(token: str) -> dict:
         raise ClaimException("No valid RSA key found in JWKS")
 
     # Finally, decode
-    payload = jwt.decode(
-        token,
-        rsa_key,
-        algorithms=ALGORITHMS,
-        audience=oauth_audience,
-        issuer=oauth_issuer_base_url,
-    )
+    try:
+        payload = jwt.decode(
+            token,
+            rsa_key,
+            algorithms=ALGORITHMS,
+            audience=oauth_audience,
+            issuer=oauth_issuer_base_url,
+        )
+    except ExpiredSignatureError as e:
+        print(f"JWT token has expired: {e}")
+        raise ClaimException("JWT token has expired")
+    except JWTClaimsError as e:
+        print(f"JWT claims error: {e}")
+        raise ClaimException("Invalid JWT claims")
+    except JWTError as e:
+        print(f"JWT decoding error: {e}")
+        raise ClaimException("Invalid JWT token")
 
     print(f"IDP_PREFIX from env: {idp_prefix}")
     print(f"Original username: {payload['username']}")
@@ -244,9 +260,10 @@ def _parse_and_validate(
         list: A list containing the name and validated data.
 
     Raises:
-        HTTPBadRequest: If the input is invalid or the
-                        user lacks permissions.
-    """
+        HTTPBadRequest: If the input is invalid or the user lacks permissions.
+        HTTPUnauthorized: If the user does not have permission to perform the operation.
+    """  # noqa: E501
+
     data: dict = {}
     if validate_body:
         try:
@@ -347,15 +364,8 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
     # Check rate limits
     rate_limit = item.get("rateLimit", {})
 
-    # TODO: Maybe add these calculations in that function?
-    if _is_rate_limited(current_user, rate_limit):
-        rate: float = float(rate_limit.get("rate", 0))
-        period = rate_limit.get("period", None)
-        if period:
-            msg = f"rate limit exceeded (${rate:.2f}/{period})"
-        else:
-            msg = "rate limit exceeded (no period specified)"
-        print(msg)
+    limited, msg = _is_rate_limited(current_user, rate_limit)
+    if limited:
         raise HTTPUnauthorized(msg)
 
     # Update last accessed timestamp
@@ -373,58 +383,116 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
     }
 
 
-def _determine_api_user(data):
-    key_type_pattern = r"/(.*?)Key/"
-    match = re.search(key_type_pattern, data["api_owner_id"])
-    key_type = match.group(1) if match else None
+def _determine_api_user(data: Dict[str, Any]) -> str:
+    """
+    Determines the API user based on the api_owner_id field in the provided data.
+
+    The function inspects the 'api_owner_id' to extract the key type (owner, delegate, or system)
+    and returns the corresponding user identifier from the data dictionary.
+
+    Args:
+        data (Dict[str, Any]): The dictionary containing API key metadata, including 'api_owner_id'.
+
+    Returns:
+        str: The user identifier associated with the API key.
+
+    Raises:
+        Exception: If the key type is invalid, unrecognized, or the expected user field is missing.
+
+    Security Considerations:
+        - Assumes 'api_owner_id' is trusted and well-formed. If user input can control this field,
+          additional validation/sanitization may be required.
+        - Raises a generic Exception on error; consider using a more specific exception type for production.
+    """  # noqa: E501
+    # Precompile regex for efficiency and safety;
+    # pattern is non-greedy and safe for typical short strings.
+    key_type_pattern = re.compile(r"/(.*?)Key/")
+    match: Optional[re.Match] = key_type_pattern.search(data.get("api_owner_id", ""))
+    key_type: Optional[str] = match.group(1) if match else None
 
     if key_type == "owner":
-        return data.get("owner")
+        user = data.get("owner")
     elif key_type == "delegate":
-        return data.get("delegate")
+        user = data.get("delegate")
     elif key_type == "system":
-        return data.get("systemId")
+        user = data.get("systemId")
     else:
         print("Unknown or missing key type in api_owner_id:", key_type)
-        raise Exception("Invalid or unrecognized key type.")
+        raise UnknownApiUserException("Invalid or unrecognized key type.")
+
+    if not user or not isinstance(user, str):
+        raise UnknownApiUserException(
+            f"Missing or invalid user identifier for key type '{key_type}'."
+        )
+
+    return user
 
 
-def _is_rate_limited(current_user, rate_limit):
+@required_env_vars("COST_CALCULATIONS_DYNAMO_TABLE")
+def _is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
+    """
+    Checks if the current user has exceeded their rate limit based on usage data stored in DynamoDB.
+
+    Args:
+        current_user (str): The identifier for the user whose rate limit is being checked.
+        rate_limit (dict): A dictionary containing rate limit configuration, including 'period' and 'rate'.
+
+    Returns:
+        Tuple[bool, str]: A tuple containing a boolean indicating if the user is rate limited and a message.
+                          The message indicates the reason for the boolean and may include details that the
+                          end-user should not see.
+    """  # noqa: E501
+
     print(rate_limit)
-    if rate_limit["period"] == "Unlimited":
-        return False
+    period: Optional[str] = rate_limit.get("period")
+    if period is None:
+        return False, "Rate limit period is not specified in the rate_limit data"
+    if period == "Unlimited":
+        return False, "No rate limit set"
 
-    cost_calc_table = os.getenv("COST_CALCULATIONS_DYNAMO_TABLE")
-    if not cost_calc_table:
-        raise ValueError("COST_CALCULATIONS_DYNAMO_TABLE is not provided in env var.")
+    cost_calc_table: str = os.getenv("COST_CALCULATIONS_DYNAMO_TABLE")  # type: ignore
 
     dynamodb = boto3.resource("dynamodb")
     table = dynamodb.Table(cost_calc_table)
-
     try:
         print("Query cost calculation table")
         response = table.query(KeyConditionExpression=Key("id").eq(current_user))
-        items = response["Items"]
+        items = response.get("Items", [])
         if not items:
-            print("Table entry does not exist. Cannot verify if rate limited.")
-            return False
+            return False, "Table entry does not exist. Cannot verify if rate limited."
 
-        rate_data = items[0]
+        rate_data: dict = items[0]
 
-        period = rate_limit["period"]
         col_name = f"{period.lower()}Cost"
+        spent = rate_data.get(col_name)
+        if spent is None:
+            return False, f"Column {col_name} not found in rate data"
 
-        spent = rate_data[col_name]
         if period == "Hourly":
-            spent = spent[
-                datetime.now().hour
-            ]  # Get the current hour as a number from 0 to 23
-        print(f"Amount spent {spent}")
-        return spent >= rate_limit["rate"]
+            current_hour = datetime.now().hour
+            if not isinstance(spent, list) or current_hour >= len(spent):
+                return False, "Hourly cost data is missing or malformed."
+            spent = spent[current_hour]  # Get the current hour's usage
 
+        print(f"Amount spent {spent}")
+        rate_val: Optional[str] = rate_limit.get("rate")
+        if rate_val is None:
+            return False, "Rate value missing in rate_limit."
+
+        rate: float = float(rate_limit.get("rate", 0))
+        period = rate_limit.get("period", None)
+        is_limited: bool = spent >= rate
+        if is_limited:
+            return True, f"rate limit exceeded (${rate:.2f}/{period})"
+
+        return False, "Rate limit not exceeded"
+
+    except boto3.exceptions.Boto3Error as error:
+        print(f"Boto3 error during rate limit DynamoDB operation: {error}")
+        return False, "Error accessing DynamoDB for rate limit check"
     except Exception as error:
-        print(f"Error during rate limit DynamoDB operation: {error}")
-        return False
+        print(f"Unexpected error during rate limit DynamoDB operation: {error}")
+        return False, "Unexpected error during rate limit check"
 
 
 def _parse_token(event: Dict[str, Any]) -> str:

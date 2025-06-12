@@ -5,6 +5,7 @@ from exceptions import (
     HTTPException,
     HTTPNotFound,
     HTTPUnauthorized,
+    UnknownApiUserException,
 )
 
 
@@ -66,4 +67,15 @@ def test_claim_exception_default_message():
 def test_claim_exception_custom_message():
     custom_message = "Invalid claim data"
     exc = ClaimException(custom_message)
+    assert str(exc) == custom_message
+
+
+def test_unknown_api_user_exception_default_message():
+    exc = UnknownApiUserException()
+    assert str(exc) == "Unknown API user"
+
+
+def test_unknown_api_user_exception_custom_message():
+    custom_message = "API user not recognized"
+    exc = UnknownApiUserException(custom_message)
     assert str(exc) == custom_message

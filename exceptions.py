@@ -87,3 +87,15 @@ class EnvVarError(Exception):
 
     def __init__(self, message="Environment variable error occurred"):
         super().__init__(message)
+
+
+class UnknownApiUserException(Exception):
+    """
+    Custom exception for unknown API users.
+
+    This exception is raised when an API request is made by a user
+    that is not recognized or does not exist in the system.
+    """
+
+    def __init__(self, message="Unknown API user"):
+        super().__init__(message)
