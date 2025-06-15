@@ -856,7 +856,7 @@ def test_api_claims_rate_limit_exceeded(mock_getenv, mock_boto3):
         ]
     }
     mock_boto3.return_value.Table.return_value = mock_table
-    with patch("authz._is_rate_limited", return_value={True, "rate limit exceeded"}):
+    with patch("authz._is_rate_limited", return_value=(True, "rate limit exceeded")):
         with pytest.raises(HTTPUnauthorized, match="rate limit exceeded"):
             api_claims({}, {}, "mock_token")
 
