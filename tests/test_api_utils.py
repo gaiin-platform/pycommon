@@ -33,25 +33,13 @@ def test_tokenv1_generation_and_properties():
     t2 = TokenV1()
     # Should generate different keys and salts
     assert t1.raw_key != t2.raw_key
-    assert t1.salt != t2.salt
     assert isinstance(t1.key, str)
-    assert isinstance(t1.salt, str)
     assert isinstance(t1.raw_key, str)
 
 
-def test_tokenv1_custom_key_and_salt():
-    key = "customkey"
-    salt = "customsalt"
-    t = TokenV1(key, salt)
-    assert t.raw_key == key
-    assert t.salt == salt
-    assert t.key == t._key_generator(key, salt)
-
-
 def test_tokenv1_validate_and_eq():
-    key = "mykey"
-    salt = "mysalt"
-    t = TokenV1(key, salt)
+    key = "ampv1-mykey"
+    t = TokenV1(key)
     # Should validate with the correct raw key
     assert t.validate(key)
     # Should not validate with a wrong key
@@ -64,8 +52,18 @@ def test_tokenv1_validate_and_eq():
 
 
 def test_tokenv1_key_generator_consistency():
-    key = "anotherkey"
-    salt = "anothersalt"
-    t = TokenV1(key, salt)
-    # The key should always be the same for the same input
-    assert t._key_generator(key, salt) == t.key
+    key = "ampv1-anotherkey"
+    t = TokenV1(key)
+    assert t._key_generator(key) == t.key
+
+
+def test_tokenv1_string_input():
+    key = 123
+    with pytest.raises(TypeError):
+        TokenV1(key)  # Should raise TypeError since key is not a string
+
+
+def test_tokenv1_invalid_key_identifier():
+    key = "bad-identifier"
+    with pytest.raises(ValueError):
+        TokenV1(key)

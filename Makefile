@@ -23,3 +23,13 @@ coverage:
 # Clean up coverage files
 clean:
 	rm -rf .pytest_cache htmlcov .coverage
+
+setup:
+	@echo "Setting up the environment..."
+	set -e; \
+	python3 -m venv venv; \
+	. venv/bin/activate && pip install -r requirements.txt; \
+	chmod +x scripts/*.sh && \
+	scripts/setup_precommit.sh
+	@echo "Setup complete."
+	@echo "To activate the virtual environment, run: . venv/bin/activate"

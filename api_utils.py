@@ -83,21 +83,37 @@ class TokenV1(Token):
     Inherits from the Token class.
     """
 
+    # we do not salt this token due to the high entropy of the key and
+    # the fact that it is already a secure random value and, finally, because
+    # the hash is used as an index in the database.
+    # Remember salting is used to prevent rainbow table attacks, but in this case,
+    # the key is already a secure random value with high entropy.
+    _salt: str = ""
     _raw_key: str
-    _salt: str
     _key: str
+    _identifier: str = "ampv1-"
 
-    def __init__(self, key: str = "", salt: str = ""):
+    def __init__(self, key: str = ""):
 
-        # generate our key on instantiation if they are not provided
-        self._raw_key = secrets.token_urlsafe(32) if key == "" else key
-        self._salt = secrets.token_bytes(32).hex() if salt == "" else salt
-        self._key = self._key_generator(self._raw_key, self._salt)
+        if not isinstance(key, str):
+            raise TypeError("Key must be a string.")
+
+        if key != "":
+            if not key.startswith(self._identifier):
+                raise ValueError(f"TokenV1 key must start with '{self._identifier}'.")
+            self._raw_key = key
+            self._key = self._key_generator(self._raw_key, self._salt)
+        else:
+            self._raw_key = f"{self._identifier}{secrets.token_urlsafe(32)}"
+            self._key = self._key_generator(self._raw_key, self._salt)
 
         super().__init__(self._key, self._salt)
 
-    def _key_generator(self, raw_key: str, salt: str) -> str:
+    def _key_generator(self, raw_key: str, salt: str = "") -> str:
         """Generates a hashed key using the raw key and salt.
+
+        Note that in the V1 token, the salt is not used in the hashing process
+        because the key is already a secure random value with high entropy.
 
         Args:
             raw_key (str): The raw key to be hashed.
@@ -108,7 +124,9 @@ class TokenV1(Token):
         return shake_256(raw_key.encode() + salt.encode()).hexdigest(64)
 
     def validate(self, raw_key: str) -> bool:
-        return secrets.compare_digest(self.key, self._key_generator(raw_key, self.salt))
+        return secrets.compare_digest(
+            self.key, self._key_generator(raw_key, self._salt)
+        )
 
     def __eq__(self, value):
         """
