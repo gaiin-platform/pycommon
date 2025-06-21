@@ -99,3 +99,9 @@ class UnknownApiUserException(Exception):
 
     def __init__(self, message="Unknown API user"):
         super().__init__(message)
+
+
+class ActionError(Exception):
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
