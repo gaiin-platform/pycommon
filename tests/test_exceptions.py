@@ -1,4 +1,5 @@
-from exceptions import (
+from pycommon.exceptions import (
+    ActionError,
     ClaimException,
     EnvVarError,
     HTTPBadRequest,
@@ -76,6 +77,22 @@ def test_unknown_api_user_exception_default_message():
 
 
 def test_unknown_api_user_exception_custom_message():
-    custom_message = "API user not recognized"
-    exc = UnknownApiUserException(custom_message)
-    assert str(exc) == custom_message
+    """Test UnknownApiUserException with custom message."""
+    custom_message = "Custom unknown API user error"
+    exception = UnknownApiUserException(custom_message)
+    assert str(exception) == custom_message
+
+
+def test_action_error_default_message():
+    """Test ActionError with default message."""
+    exception = ActionError("Action failed")
+    assert exception.message == "Action failed"
+    assert str(exception) == "Action failed"
+
+
+def test_action_error_custom_message():
+    """Test ActionError with custom message."""
+    custom_message = "Custom action error message"
+    exception = ActionError(custom_message)
+    assert exception.message == custom_message
+    assert str(exception) == custom_message

@@ -1,7 +1,7 @@
 import pytest
 from jsonschema.exceptions import ValidationError
 
-from authz import _validate_data
+from pycommon.authz import _validate_data
 
 
 def test_validate_data_success():

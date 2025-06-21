@@ -28,16 +28,16 @@ from jsonschema import validate as json_validate
 from jsonschema.exceptions import ValidationError
 from requests import Response
 
-from decorators import required_env_vars
-from encoders import CustomPydanticJSONEncoder
-from exceptions import (
+from .const import NO_RATE_LIMIT
+from .decorators import required_env_vars
+from .encoders import CustomPydanticJSONEncoder
+from .exceptions import (
     ClaimException,
     HTTPBadRequest,
     HTTPException,
     HTTPUnauthorized,
     UnknownApiUserException,
 )
-from permissions import get_permission_checker
 
 ALGORITHMS = ["RS256"]
 
@@ -142,7 +142,13 @@ def get_claims(token: str) -> dict:
         print(f"Error decoding JSON response from JWKS: {e}")
         raise ClaimException("Invalid JWKS response")
 
-    rsa_key: Optional[dict] = jwks_data.get("Keys", {}).get(header.get("kid"), None)
+    rsa_key: Optional[dict] = None
+    if "keys" in jwks_data:
+        for key in jwks_data["keys"]:
+            if key.get("kid") == header.get("kid"):
+                rsa_key = key
+                break
+
     if not rsa_key:
         print(f"No RSA key found for kid: {header.get('kid')}")
         raise ClaimException("No valid RSA key found in JWKS")
@@ -177,6 +183,7 @@ def get_claims(token: str) -> dict:
     dynamodb = boto3.resource("dynamodb")
     table = dynamodb.Table(accounts_table_name)
     account: Optional[str] = None
+    rate_limit: Optional[dict] = NO_RATE_LIMIT
     response = table.get_item(Key={"user": user})
     if "Item" not in response:
         raise ClaimException(f"No item found for user: {user}")
@@ -185,12 +192,15 @@ def get_claims(token: str) -> dict:
     for acct in accounts:
         if acct["isDefault"]:
             account = acct["id"]
+            if acct.get("rateLimit"):
+                rate_limit = acct["rateLimit"]
 
     if not account:
         print("setting account to general_account")
         account = "general_account"
 
     payload["account"] = account
+    payload["rate_limit"] = rate_limit
     payload["username"] = user
     # Here we can established the allowed access according to the feature
     # flags in the future. For now it is set to full_access, which says they
@@ -246,6 +256,7 @@ def _parse_and_validate(
     api_accessed: bool,
     validator_rules: dict,
     validate_body: bool = True,
+    permission_checker: Optional[Callable] = None,
 ) -> List[Any]:
     """Parse and validate the input event.
 
@@ -255,6 +266,8 @@ def _parse_and_validate(
         op (str): The operation being performed.
         api_accessed (bool): Whether the API is being accessed.
         validate_body (bool): Whether to validate the request body.
+        permission_checker (Callable, optional): Function to check permissions.
+            Should accept (user, type, op, data) and return a callable that accepts (user, data).
 
     Returns:
         list: A list containing the name and validated data.
@@ -281,12 +294,13 @@ def _parse_and_validate(
         except ValidationError as e:
             raise HTTPBadRequest(e.message)
 
-    permission_checker = get_permission_checker(current_user, name, op, data)
-    if not permission_checker(current_user, data):
-        print("User does not have permission to perform the operation.")
-        raise HTTPUnauthorized(
-            "User does not have permission to perform the operation."
-        )
+    if permission_checker:
+        permission_func = permission_checker(current_user, name, op, data)
+        if not permission_func(current_user, data):
+            print("User does not have permission to perform the operation.")
+            raise HTTPUnauthorized(
+                "User does not have permission to perform the operation."
+            )
 
     return [name, data]
 
@@ -380,6 +394,7 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
         "username": current_user,
         "account": item["account"]["id"],
         "allowed_access": access,
+        "rate_limit": rate_limit,
     }
 
 
@@ -528,7 +543,10 @@ def _parse_token(event: Dict[str, Any]) -> str:
 
 
 def validated(
-    op: str, validate_rules: Dict[str, Any], validate_body: bool = True
+    op: str,
+    validate_rules: Dict[str, Any],
+    permission_checker: Callable,
+    validate_body: bool = True,
 ) -> Callable:
     """Decorator to validate input data and permissions for an API operation.
 
@@ -536,6 +554,9 @@ def validated(
         op (str): The operation being performed.
         validate_rules (dict): The validation rules.
         validate_body (bool): Whether to validate the request body.
+        permission_checker (Callable): Function to check permissions.
+        Should accept (user, type, op, data) and return a callable that accepts
+        (user, data).
 
     Returns:
         Callable: The decorated function.
@@ -559,11 +580,18 @@ def validated(
                     raise HTTPUnauthorized("User not found.")
 
                 [name, data] = _parse_and_validate(
-                    current_user, event, op, api_accessed, validate_rules, validate_body
+                    current_user,
+                    event,
+                    op,
+                    api_accessed,
+                    validate_rules,
+                    validate_body,
+                    permission_checker,
                 )
 
                 data["access_token"] = token
                 data["account"] = claims["account"]
+                data["rate_limit"] = claims["rate_limit"]
                 data["api_accessed"] = api_accessed
                 data["allowed_access"] = claims["allowed_access"]
 
