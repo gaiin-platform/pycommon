@@ -10,7 +10,7 @@ help:
 
 # Run tests with pytest
 test:
-	cd .. && python -m pytest pycommon/tests/ -v
+	pytest
 
 # Format code with black
 format:
@@ -18,7 +18,7 @@ format:
 
 # Run tests with coverage report
 coverage:
-	cd .. && python -m pytest pycommon/tests/ --cov=pycommon --cov-report=term-missing --cov-fail-under=100 -v --cov-report xml:pycommon/cov.xml
+	pytest --cov --cov-report=term-missing --cov-fail-under=100  -v --cov-report xml:cov.xml
 
 # Clean up coverage files
 clean:
