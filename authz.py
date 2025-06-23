@@ -28,10 +28,10 @@ from jsonschema import validate as json_validate
 from jsonschema.exceptions import ValidationError
 from requests import Response
 
-from .const import NO_RATE_LIMIT
-from .decorators import required_env_vars
-from .encoders import CustomPydanticJSONEncoder
-from .exceptions import (
+from const import NO_RATE_LIMIT
+from decorators import required_env_vars
+from encoders import CustomPydanticJSONEncoder
+from exceptions import (
     ClaimException,
     HTTPBadRequest,
     HTTPException,
@@ -142,12 +142,13 @@ def get_claims(token: str) -> dict:
         print(f"Error decoding JSON response from JWKS: {e}")
         raise ClaimException("Invalid JWKS response")
 
+    # This datastructure is:
+    # { "keys": [ {}, {}, ... ] }
     rsa_key: Optional[dict] = None
-    if "keys" in jwks_data:
-        for key in jwks_data["keys"]:
-            if key.get("kid") == header.get("kid"):
-                rsa_key = key
-                break
+    for key in jwks_data.get("keys", []):
+        if key.get("kid") == header.get("kid"):
+            rsa_key = key
+            break
 
     if not rsa_key:
         print(f"No RSA key found for kid: {header.get('kid')}")
@@ -294,13 +295,18 @@ def _parse_and_validate(
         except ValidationError as e:
             raise HTTPBadRequest(e.message)
 
-    if permission_checker:
-        permission_func = permission_checker(current_user, name, op, data)
-        if not permission_func(current_user, data):
-            print("User does not have permission to perform the operation.")
-            raise HTTPUnauthorized(
-                "User does not have permission to perform the operation."
-            )
+    try:
+        # If the permission checker exists, is callable, returns a callabe and
+        # that callable returns False, then we raise an HTTPUnauthorized
+        if permission_checker is not None:
+            if not permission_checker(current_user, name, op, data)(current_user, data):
+                print("User does not have permission to perform the operation.")
+                raise HTTPUnauthorized(
+                    "User does not have permission to perform the operation."
+                )
+    except (NameError, TypeError):
+        # This  means our permission checker is not defined
+        pass
 
     return [name, data]
 

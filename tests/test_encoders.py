@@ -3,7 +3,7 @@ import json
 
 from pydantic import BaseModel
 
-from pycommon.encoders import (
+from encoders import (
     CustomPydanticJSONEncoder,
     LossyDecimalEncoder,
     SafeDecimalEncoder,

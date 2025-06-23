@@ -1,6 +1,6 @@
 import pytest
 
-from pycommon.api_utils import Token, TokenV1
+from api_utils import Token, TokenV1
 
 
 class DummyToken(Token):
