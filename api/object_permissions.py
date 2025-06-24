@@ -17,6 +17,21 @@ def update_object_permissions(
     permission_level: str = "read",
     policy: str = "",
 ) -> bool:
+    """
+    Update object permissions for specified users and data sources.
+
+    Args:
+        access_token: Bearer token for authentication
+        shared_with_users: List of user emails to share with
+        keys: List of data source keys
+        object_type: Type of object being shared
+        principal_type: Type of principal (default: "user")
+        permission_level: Level of permission to grant (default: "read")
+        policy: Additional policy configuration
+
+    Returns:
+        bool: True if permissions were updated successfully, False otherwise
+    """
     permissions_endpoint = (
         os.environ["API_BASE_URL"] + "/utilities/update_object_permissions"
     )
@@ -47,21 +62,15 @@ def update_object_permissions(
         )  # to adhere to object access return response dict
 
         if (
-            response.status_code != 200
-            or response_content.get("statusCode", None) != 200
-        ):
-            return False
-        elif (
             response.status_code == 200
             and response_content.get("statusCode", None) == 200
         ):
             return True
 
-        return False
-
     except Exception as e:
         print(f"Error updating permissions: {e}")
-        return False
+
+    return False
 
 
 def can_access_objects(
@@ -69,6 +78,17 @@ def can_access_objects(
     data_sources: List[Dict[str, Any]],
     permission_level: str = "read",
 ) -> bool:
+    """
+    Check if the authenticated user can access the specified data sources.
+
+    Args:
+        access_token: Bearer token for authentication
+        data_sources: List of data source dictionaries with id and type
+        permission_level: Required permission level (default: "read")
+
+    Returns:
+        bool: True if user has access to all data sources, False otherwise
+    """
     print(f"Checking access on data sources: {data_sources}")
 
     # Skip empty data sources
@@ -122,7 +142,6 @@ def can_access_objects(
 
     except Exception as e:
         print(f"Error checking access on data sources: {e}")
-        return False
 
     return False
 
@@ -132,6 +151,18 @@ def simulate_can_access_objects(
     object_ids: List[str],
     permission_levels: Optional[List[str]] = None,
 ) -> Dict[str, Dict[str, bool]]:
+    """
+    Simulate access permissions for specified objects and permission levels.
+
+    Args:
+        access_token: Bearer token for authentication
+        object_ids: List of object IDs to check access for
+        permission_levels: List of permission levels to check (default: ["read"])
+
+    Returns:
+        Dict[str, Dict[str, bool]]: Nested dictionary with object IDs as keys and
+        permission levels as nested keys, with boolean access values
+    """
     if permission_levels is None:
         permission_levels = ["read"]
 
@@ -167,12 +198,6 @@ def simulate_can_access_objects(
         )  # to adhere to object access return response dict
 
         if (
-            response.status_code != 200
-            or response_content.get("statusCode", None) != 200
-        ):
-            print("Error simulating user access")
-            return all_denied
-        elif (
             response.status_code == 200
             and response_content.get("statusCode", None) == 200
         ):
@@ -181,9 +206,11 @@ def simulate_can_access_objects(
                 return result["data"]
             else:
                 return all_denied
+        else:
+            print("Error simulating user access")
+            return all_denied
 
     except Exception as e:
         print(f"Error simulating access on data sources: {e}")
-        return all_denied
 
     return all_denied

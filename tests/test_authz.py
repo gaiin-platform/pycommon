@@ -666,6 +666,7 @@ def test_api_claims_success(mock_getenv, mock_boto3):
     assert result["account"] == "mock_account_id"
     assert result["allowed_access"] == ["file_upload", "share"]
     assert result["rate_limit"] == {"period": "Hourly", "rate": 100}
+    assert result["api_key_id"] == "user/ownerKey/mock_owner"
 
 
 @patch("authz.boto3.resource")
@@ -944,12 +945,13 @@ def test_validated_api_access_success(
         ok=True,
         json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
     )
-    mock_parse_token.return_value = "api-token"
+    mock_parse_token.return_value = "amp-token"
     mock_api_claims.return_value = {
         "username": "api_user",
         "account": "acc",
         "allowed_access": ["full_access"],
         "rate_limit": {},
+        "api_key_id": "user/ownerKey/api_user",
     }
     mock_get_claims.return_value = {
         "username": "api_user",

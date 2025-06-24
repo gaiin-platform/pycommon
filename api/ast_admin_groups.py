@@ -8,6 +8,15 @@ import requests
 
 
 def get_all_ast_admin_groups(access_token: str) -> dict:
+    """
+    Retrieve all AST (Assistant) admin groups.
+
+    Args:
+        access_token: Bearer token for authentication
+
+    Returns:
+        dict: Response containing all AST admin groups or error information
+    """
     print("Initiate get ast admin call")
 
     endpoint = os.environ["API_BASE_URL"] + "/groups/list_all"
@@ -27,10 +36,10 @@ def get_all_ast_admin_groups(access_token: str) -> dict:
             response.json()
         )  # to adhere to object access return response dict
 
-        if response.status_code != 200 or not response_content.get("success", False):
-            return {"success": False, "data": None}
-        elif response.status_code == 200 and response_content.get("success", False):
+        if response.status_code == 200 and response_content.get("success", False):
             return response_content
+        else:
+            return {"success": False, "data": None}
 
     except Exception as e:
         print(f"Error getting ast admin groups: {e}")
@@ -39,6 +48,16 @@ def get_all_ast_admin_groups(access_token: str) -> dict:
 
 
 def update_ast_admin_groups(access_token: str, data: dict) -> dict:
+    """
+    Update AST (Assistant) admin groups with new configuration.
+
+    Args:
+        access_token: Bearer token for authentication
+        data: Dictionary containing the update data for AST admin groups
+
+    Returns:
+        dict: Response containing success status and any relevant data or error messages
+    """
     print("Initiate update ast admin groups call")
 
     endpoint = os.environ["API_BASE_URL"] + "/groups/update"
@@ -57,15 +76,15 @@ def update_ast_admin_groups(access_token: str, data: dict) -> dict:
             response.json()
         )  # to adhere to object access return response dict
 
-        if response.status_code != 200 or not response_content.get("success", False):
+        if response.status_code == 200 and response_content.get("success", False):
+            return response_content
+        else:
             return {
                 "success": False,
                 "message": response_content.get(
                     "message", "Failed to update supported models"
                 ),
             }
-        elif response.status_code == 200 and response_content.get("success", False):
-            return response_content
 
     except Exception as e:
         print(f"Error updating supported Models: {e}")

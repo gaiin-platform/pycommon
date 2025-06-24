@@ -75,7 +75,7 @@ def extract_dict(ast_node):
 
 
 def extract_complex_dict(ast_node):
-    """Extract nested dictionary structures from AST Dict node."""
+    """Extract complex dictionary from AST Dict node."""
     result = {}
     for key, value in zip(ast_node.keys, ast_node.values):
         if isinstance(value, ast.Dict):
@@ -84,8 +84,6 @@ def extract_complex_dict(ast_node):
             result[key.s] = extract_list(value)
         elif isinstance(value, ast.Constant):
             result[key.s] = value.value
-        elif isinstance(value, ast.Str):
-            result[key.s] = value.s
         else:
             # Try to get a literal value or default to string representation
             try:
@@ -105,8 +103,6 @@ def extract_list(ast_node):
             result.append(extract_list(item))
         elif isinstance(item, ast.Constant):
             result.append(item.value)
-        elif isinstance(item, ast.Str):
-            result.append(item.s)
         else:
             # Try to get a literal value or default to string representation
             try:
@@ -122,7 +118,10 @@ def extract_tags(op_kwargs):
     # Ensure tags is a list
     if isinstance(tags, ast.List):
         # Extract elements from the ast.List
-        tags = [elt.s if isinstance(elt, ast.Str) else str(elt) for elt in tags.elts]
+        tags = [
+            elt.value if isinstance(elt, ast.Constant) else str(elt)
+            for elt in tags.elts
+        ]
 
     return tags if isinstance(tags, list) else []
 
@@ -154,12 +153,12 @@ def extract_ops_from_file(file_path: str) -> List[OperationModel]:
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef):
                 for decorator in node.decorator_list:
-                    # Look for both old and new decorators
+                    # Look for decorators with parentheses (ast.Call)
                     decorator_name = None
                     if isinstance(decorator, ast.Call) and hasattr(decorator, "func"):
                         if hasattr(decorator.func, "id"):
                             decorator_name = decorator.func.id
-                    elif hasattr(decorator, "id"):
+                    elif isinstance(decorator, ast.Name):  # pragma: no cover
                         decorator_name = decorator.id
 
                     if decorator_name in [
@@ -405,9 +404,14 @@ def resolve_ops_table(stage: Optional[str], ops_table: Optional[str]) -> Optiona
         for _ in range(2):
             var_file_path = os.path.join(current_dir, "var", var_file_name)
             if os.path.exists(var_file_path):
-                with open(var_file_path, "r") as file:
-                    config = yaml.safe_load(file)
-                return config.get("OPS_DYNAMODB_TABLE")
+                try:
+                    with open(var_file_path, "r") as file:
+                        config = yaml.safe_load(file)
+                    return config.get("OPS_DYNAMODB_TABLE")
+                except (yaml.YAMLError, OSError):
+                    # If there's an error reading or parsing the YAML file,
+                    # continue searching
+                    pass
 
             # Check one directory up
             current_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
@@ -441,10 +445,10 @@ def main():
                 "pass it with --ops_table <table_name>."
             )
             sys.exit(1)
-
-        # Set the environment variable for DynamoDB operations
-        os.environ["OPS_DYNAMODB_TABLE"] = ops_table
-        scan_and_register_ops(args.dir or ".", current_user="system")
+        else:
+            # Set the environment variable for DynamoDB operations
+            os.environ["OPS_DYNAMODB_TABLE"] = ops_table
+            scan_and_register_ops(args.dir or ".", current_user="system")
 
 
 if __name__ == "__main__":

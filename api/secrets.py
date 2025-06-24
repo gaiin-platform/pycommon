@@ -12,6 +12,18 @@ DEFAULT_PREFIX = os.getenv("DEFAULT_SECRET_PARAMETER_PREFIX", "/pdb")
 
 
 def get_secret_value(secret_name: str) -> str:
+    """
+    Retrieve a secret value from AWS Secrets Manager.
+
+    Args:
+        secret_name: Name or ARN of the secret to retrieve
+
+    Returns:
+        str: The secret value as a string
+
+    Raises:
+        ValueError: If the secret cannot be retrieved
+    """
     # Create a Secrets Manager client
     client = boto3.client("secretsmanager")
 

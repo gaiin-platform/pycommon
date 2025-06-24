@@ -401,6 +401,7 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
         "account": item["account"]["id"],
         "allowed_access": access,
         "rate_limit": rate_limit,
+        "api_key_id": item["api_owner_id"],
     }
 
 
@@ -597,6 +598,7 @@ def validated(
 
                 data["access_token"] = token
                 data["account"] = claims["account"]
+                data["api_key_id"] = claims.get("api_key_id")
                 data["rate_limit"] = claims["rate_limit"]
                 data["api_accessed"] = api_accessed
                 data["allowed_access"] = claims["allowed_access"]

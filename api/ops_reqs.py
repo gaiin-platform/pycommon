@@ -9,6 +9,15 @@ import requests
 
 
 def get_all_op(access_token: str) -> dict:
+    """
+    Retrieve all operations available to the authenticated user.
+
+    Args:
+        access_token: Bearer token for authentication
+
+    Returns:
+        dict: Response containing all operations or error information
+    """
     print("Initiate get ops call")
 
     endpoint = os.environ["API_BASE_URL"] + "/ops/get_all"
@@ -27,22 +36,29 @@ def get_all_op(access_token: str) -> dict:
             response.json()
         )  # to adhere to object access return response dict
 
-        if response.status_code != 200 or not response_content.get("success", False):
-            return {"success": False, "data": None}
-        elif response.status_code == 200 and response_content.get("success", False):
+        if response.status_code == 200 and response_content.get("success", False):
             return response_content
-
-        # Default return if none of the above conditions are met
-        return {"success": False, "data": None}
 
     except Exception as e:
         print(f"Error getting all ops: {e}")
-        return {"success": False, "data": None}
+
+    return {"success": False, "data": None}
 
 
 def register_ops(
     access_token: str, ops: List[Dict[str, Any]], system_op: bool = False
 ) -> bool:
+    """
+    Register a list of operations with the system.
+
+    Args:
+        access_token: Bearer token for authentication
+        ops: List of operation dictionaries to register
+        system_op: Whether these are system operations (default: False)
+
+    Returns:
+        bool: True if operations were registered successfully, False otherwise
+    """
     endpoint = os.environ["API_BASE_URL"] + "/ops/register"
 
     request = {"data": {"ops": ops, "system_op": system_op}}
@@ -59,9 +75,7 @@ def register_ops(
             response.json()
         )  # to adhere to object access return response dict
 
-        if response.status_code != 200 or not response_content.get("success", False):
-            return False
-        elif response.status_code == 200 and response_content.get("success", False):
+        if response.status_code == 200 and response_content.get("success", False):
             return True
 
     except Exception as e:
