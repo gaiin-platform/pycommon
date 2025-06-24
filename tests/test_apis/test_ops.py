@@ -4,7 +4,6 @@
 
 from unittest.mock import MagicMock
 
-
 import pytest
 
 from api.ops import (
@@ -174,6 +173,7 @@ def test_api_tool_decorator_permissions_already_exist():
     assert "/existing_path" in mock_permissions.permissions_by_state_type
     assert "read" in mock_permissions.permissions_by_state_type["/existing_path"]
 
+
 def test_api_tool_decorator_method_validation():
     """Test that api_tool validates method parameter correctly."""
     # Reset global state
@@ -268,4 +268,3 @@ def test_api_tool_decorator_invalid_method():
         )
         def test_function_invalid3():
             return {"result": "success"}
-
