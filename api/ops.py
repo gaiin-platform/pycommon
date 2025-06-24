@@ -7,11 +7,18 @@ _op_type: str = "built_in"
 
 
 class PermissionChecker(Protocol):
-    def __call__(self, user: str, data: Any) -> bool: ...
+    def __call__(self, user: str, data: Any) -> bool:
+        """Check if user has permission to access data."""
+        pass  # pragma: no cover
 
 
 def set_route_data(route_data: Dict[str, Dict[str, Any]]):
-    """Allow services to inject their own route_data"""
+    """
+    Allow services to inject their own route_data.
+
+    Args:
+        route_data: Dictionary containing route configuration data
+    """
     global _route_data
     _route_data = route_data
 
@@ -19,13 +26,23 @@ def set_route_data(route_data: Dict[str, Dict[str, Any]]):
 def set_permissions_by_state(
     permissions_by_state: Dict[str, Dict[str, PermissionChecker]],
 ):
-    """Allow services to inject their own permissions_by_state"""
+    """
+    Allow services to inject their own permissions_by_state.
+
+    Args:
+        permissions_by_state: Dictionary mapping states to permission checkers
+    """
     global _permissions_by_state
     _permissions_by_state = permissions_by_state
 
 
 def set_op_type(op_type: str):
-    """Allow services to set a default op_type for all operations"""
+    """
+    Allow services to set a default op_type for all operations.
+
+    Args:
+        op_type: The operation type to set as default
+    """
     global _op_type
     _op_type = op_type
 

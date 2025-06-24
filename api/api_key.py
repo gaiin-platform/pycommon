@@ -9,6 +9,16 @@ import requests
 
 
 def deactivate_key(access_token: str, api_owner_id: str) -> bool:
+    """
+    Deactivate an API key for a given owner.
+
+    Args:
+        access_token: Bearer token for authentication
+        api_owner_id: ID of the API key owner
+
+    Returns:
+        bool: True if deactivation was successful, False otherwise
+    """
     print("Initiate deactivate key call")
 
     amplify_group_endpoint = os.environ["API_BASE_URL"] + "/apiKeys/deactivate_key"
@@ -28,10 +38,7 @@ def deactivate_key(access_token: str, api_owner_id: str) -> bool:
         )  # to adhere to object access return response dict
         print("Response: ", response_content)
 
-        if response.status_code != 200 or "success" not in response_content:
-            print("Error calling deactivate api key: ", response_content)
-            return False
-        elif response.status_code == 200:
+        if response.status_code == 200 and response_content.get("success", False):
             return True
 
     except Exception as e:

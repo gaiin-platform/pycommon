@@ -15,6 +15,19 @@ class EndpointType(Enum):
 
 
 def get_endpoint(endpoint_type: EndpointType) -> str:
+    """
+    Retrieve an endpoint URL from AWS Secrets Manager based on the endpoint type.
+
+    Args:
+        endpoint_type: Type of endpoint to retrieve (CHAT_ENDPOINT or API_BASE_URL)
+
+    Returns:
+        str: The endpoint URL for the specified type
+
+    Raises:
+        ValueError: If the endpoint type is not found in secrets manager
+        ClientError: If there's an error retrieving the secret
+    """
     secret_name = os.environ["APP_ARN_NAME"]
     region_name = os.environ.get("AWS_REGION", "us-east-1")
     # Create a Secrets Manager client

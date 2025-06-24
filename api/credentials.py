@@ -10,6 +10,18 @@ from botocore.exceptions import ClientError
 
 
 def get_credentials(secret_name: str) -> str:
+    """
+    Retrieve credentials from AWS Secrets Manager.
+
+    Args:
+        secret_name: Name of the secret to retrieve from Secrets Manager
+
+    Returns:
+        str: The secret string value
+
+    Raises:
+        ClientError: If there's an error retrieving the secret
+    """
     # Create a Secrets Manager client
     session = boto3.session.Session()
     client = session.client(service_name="secretsmanager")
@@ -24,6 +36,18 @@ def get_credentials(secret_name: str) -> str:
 
 
 def get_json_credetials(secret_arn: str) -> dict:
+    """
+    Retrieve and parse JSON credentials from AWS Secrets Manager.
+
+    Args:
+        secret_arn: ARN of the secret containing JSON credentials
+
+    Returns:
+        dict: Parsed JSON credentials as a dictionary
+
+    Raises:
+        ClientError: If there's an error retrieving the secret
+    """
     # Create a Secrets Manager client
     session = boto3.session.Session()
     client = session.client(service_name="secretsmanager")
@@ -39,6 +63,21 @@ def get_json_credetials(secret_arn: str) -> dict:
 
 
 def get_endpoint(model_name: str, endpoint_arn: str) -> tuple[str, str]:
+    """
+    Retrieve a random endpoint and API key for a specified model from AWS
+    Secrets Manager.
+
+    Args:
+        model_name: Name of the model to get endpoint for
+        endpoint_arn: ARN of the secret containing endpoint configuration
+
+    Returns:
+        tuple[str, str]: Tuple containing (endpoint_url, api_key)
+
+    Raises:
+        ClientError: If there's an error retrieving the secret
+        ValueError: If the specified model is not found in the secret
+    """
     # Create a Secrets Manager client
     session = boto3.session.Session()
     client = session.client(service_name="secretsmanager")
