@@ -435,7 +435,7 @@ def main():
     # Execute the command
     if args.command == "ls":
         scan_and_print_ops(args.dir or ".")
-    elif args.command == "register":  # pragma: no cover
+    elif args.command == "register":
         # Resolve the DynamoDB table name
         ops_table = resolve_ops_table(args.stage, args.ops_table)
         if not ops_table:
