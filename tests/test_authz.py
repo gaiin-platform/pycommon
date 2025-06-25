@@ -16,6 +16,9 @@ from authz import (
     _validate_data,
     api_claims,
     get_claims,
+    set_permission_checker,
+    set_validate_rules,
+    setup_validated,
     validated,
     verify_user_as_admin,
 )
@@ -961,7 +964,10 @@ def test_validated_api_access_success(
     }
     mock_parse_and_validate.return_value = ["path", {"foo": "bar"}]
 
-    @validated("op", {}, always_allow_permission_checker, True)
+    # Set up global state for validation
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", True)
     def test_handler_api_access(event, context, user, name, data):
         return {"ok": True}
 
@@ -991,7 +997,10 @@ def test_validated_user_access_success(
     }
     mock_parse_and_validate.return_value = ["path", {"foo": "bar"}]
 
-    @validated("op", {}, always_allow_permission_checker, True)
+    # Set up global state for validation
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", True)
     def test_handler_user_access(event, context, user, name, data):
         return {"ok": True}
 
@@ -1021,7 +1030,10 @@ def test_validated_user_not_found(
     }
     mock_parse_and_validate.return_value = ["path", {"foo": "bar"}]
 
-    @validated("op", {}, always_allow_permission_checker, True)
+    # Set up global state for validation
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", True)
     def test_handler_user_not_found(event, context, user, name, data):
         return {"ok": True}  # pragma: no cover
 
@@ -1051,7 +1063,10 @@ def test_validated_http_exception(
     }
     mock_parse_and_validate.side_effect = HTTPBadRequest("bad input")
 
-    @validated("op", {}, always_allow_permission_checker, True)
+    # Set up global state for validation
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", True)
     def test_handler_http_exception(event, context, user, name, data):
         return {"ok": True}  # pragma: no cover
 
@@ -1448,3 +1463,47 @@ def test_get_claims_jwt_expired_claims_error(
     mock_decode.side_effect = JWTClaimsError("Invalid JWT Claims")
     with pytest.raises(ClaimException, match="Invalid JWT claims"):
         get_claims("sometoken")
+
+
+def test_setup_validated():
+    """Test the setup_validated function sets
+    both global variables correctly.
+    """
+    test_rules = {"test": "rules"}
+
+    def test_checker(u, t, o, d):
+        return lambda u, d: True
+
+    setup_validated(test_rules, test_checker)
+
+    # Import the globals to check they were set
+    import authz
+
+    assert authz._validate_rules == test_rules
+    assert authz._permission_checker == test_checker
+
+
+def test_set_validate_rules():
+    """Test the set_validate_rules function sets the global variable correctly."""
+    test_rules = {"individual": "rules"}
+
+    set_validate_rules(test_rules)
+
+    # Import the globals to check they were set
+    import authz
+
+    assert authz._validate_rules == test_rules
+
+
+def test_set_permission_checker():
+    """Test the set_permission_checker function sets the global variable correctly."""
+
+    def test_checker(u, t, o, d):
+        return lambda u, d: False
+
+    set_permission_checker(test_checker)
+
+    # Import the globals to check they were set
+    import authz
+
+    assert authz._permission_checker == test_checker
