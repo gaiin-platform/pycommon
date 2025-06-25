@@ -4,6 +4,8 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from api.ops import (
     PermissionChecker,
     api_tool,
@@ -170,3 +172,99 @@ def test_api_tool_decorator_permissions_already_exist():
     # The existing permission should remain unchanged
     assert "/existing_path" in mock_permissions.permissions_by_state_type
     assert "read" in mock_permissions.permissions_by_state_type["/existing_path"]
+
+
+def test_api_tool_decorator_method_validation():
+    """Test that api_tool validates method parameter correctly."""
+    # Reset global state
+    set_route_data({"dummy": {}})
+    set_op_type("test")
+    set_permissions_by_state(None)
+
+    # Test valid methods: GET
+    @api_tool(
+        path="/test_get",
+        name="Test GET Tool",
+        description="A test GET tool",
+        parameters={"type": "object"},
+        method="GET",
+    )
+    def test_function_get():
+        return {"result": "success"}
+
+    result = test_function_get()
+    assert result == {"result": "success"}
+
+    from api.ops import _route_data
+
+    assert "/test_get" in _route_data
+    assert _route_data["/test_get"]["method"] == "GET"
+
+    # Test valid methods: POST
+    @api_tool(
+        path="/test_post",
+        name="Test POST Tool",
+        description="A test POST tool",
+        parameters={"type": "object"},
+        method="POST",
+    )
+    def test_function_post():
+        return {"result": "success"}
+
+    result_post = test_function_post()
+    assert result_post == {"result": "success"}
+    assert "/test_post" in _route_data
+    assert _route_data["/test_post"]["method"] == "POST"
+
+
+def test_api_tool_decorator_invalid_method():
+    """Test that api_tool raises ValueError for invalid methods."""
+    # Reset global state
+    set_route_data({"dummy": {}})
+    set_op_type("test")
+    set_permissions_by_state(None)
+
+    # Test invalid method - should raise ValueError during decoration
+    with pytest.raises(
+        ValueError, match="Method must be either 'GET' or 'POST', got 'PUT'"
+    ):
+
+        @api_tool(
+            path="/test_invalid",
+            name="Test Invalid Tool",
+            description="A test tool with invalid method",
+            parameters={"type": "object"},
+            method="PUT",
+        )
+        def test_function_invalid():
+            return {"result": "success"}
+
+    # Test another invalid method
+    with pytest.raises(
+        ValueError, match="Method must be either 'GET' or 'POST', got 'DELETE'"
+    ):
+
+        @api_tool(
+            path="/test_invalid2",
+            name="Test Invalid Tool 2",
+            description="A test tool with invalid method",
+            parameters={"type": "object"},
+            method="DELETE",
+        )
+        def test_function_invalid2():
+            return {"result": "success"}
+
+    # Test case-sensitive validation
+    with pytest.raises(
+        ValueError, match="Method must be either 'GET' or 'POST', got 'get'"
+    ):
+
+        @api_tool(
+            path="/test_invalid3",
+            name="Test Invalid Tool 3",
+            description="A test tool with lowercase method",
+            parameters={"type": "object"},
+            method="get",
+        )
+        def test_function_invalid3():
+            return {"result": "success"}

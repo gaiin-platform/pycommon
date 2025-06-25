@@ -11,7 +11,7 @@ from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.types import TypeSerializer
 from pydantic import BaseModel, ValidationError, field_validator
 
-dynamodb = boto3.resource("dynamodb")
+dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 serializer = TypeSerializer()
 
 IGNORED_DIRECTORIES = {"node_modules", "venv", "__pycache__"}
