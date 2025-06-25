@@ -5,7 +5,7 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from api.assistants import (
+from pycommon.api.assistants import (
     add_assistant_path,
     create_assistant,
     delete_assistant,
@@ -16,7 +16,7 @@ from api.assistants import (
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_share_assistant_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -29,7 +29,7 @@ def test_share_assistant_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_share_assistant_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -42,7 +42,7 @@ def test_share_assistant_success_elif_branch(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.get")
+@patch("pycommon.api.assistants.requests.get")
 def test_list_assistants_success(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -55,7 +55,7 @@ def test_list_assistants_success(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.get")
+@patch("pycommon.api.assistants.requests.get")
 def test_list_assistants_failure(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -68,7 +68,7 @@ def test_list_assistants_failure(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_remove_astp_perms_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -81,7 +81,7 @@ def test_remove_astp_perms_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_delete_assistant_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -94,7 +94,7 @@ def test_delete_assistant_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_create_assistant_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -107,7 +107,7 @@ def test_create_assistant_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_add_assistant_path_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -120,7 +120,7 @@ def test_add_assistant_path_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_add_assistant_path_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -133,7 +133,7 @@ def test_add_assistant_path_success_elif_branch(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_add_assistant_path_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -146,7 +146,7 @@ def test_add_assistant_path_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_share_assistant_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -159,7 +159,7 @@ def test_share_assistant_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_share_assistant_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -169,7 +169,7 @@ def test_share_assistant_exception(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.get")
+@patch("pycommon.api.assistants.requests.get")
 def test_list_assistants_exception(mock_get):
     mock_get.side_effect = Exception("Network error")
 
@@ -179,7 +179,7 @@ def test_list_assistants_exception(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_remove_astp_perms_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -192,7 +192,7 @@ def test_remove_astp_perms_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_remove_astp_perms_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -202,7 +202,7 @@ def test_remove_astp_perms_exception(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_delete_assistant_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -215,7 +215,7 @@ def test_delete_assistant_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_delete_assistant_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -225,7 +225,7 @@ def test_delete_assistant_exception(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_create_assistant_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -238,7 +238,7 @@ def test_create_assistant_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_create_assistant_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -248,7 +248,7 @@ def test_create_assistant_exception(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_add_assistant_path_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -258,7 +258,7 @@ def test_add_assistant_path_exception(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_add_assistant_path_final_return(mock_post):
     # Mock a scenario where the function reaches the final return statement
     # This happens when the response is neither successful nor an exception
@@ -272,7 +272,7 @@ def test_add_assistant_path_final_return(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.assistants.requests.post")
+@patch("pycommon.api.assistants.requests.post")
 def test_add_assistant_exception_line_199(mock_post):
     mock_post.side_effect = Exception("Network error")
 

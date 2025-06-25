@@ -5,14 +5,14 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from api.ast_admin_groups import (
+from pycommon.api.ast_admin_groups import (
     get_all_ast_admin_groups,
     update_ast_admin_groups,
 )
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ast_admin_groups.requests.get")
+@patch("pycommon.api.ast_admin_groups.requests.get")
 def test_get_all_ast_admin_groups_success(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -25,7 +25,7 @@ def test_get_all_ast_admin_groups_success(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ast_admin_groups.requests.get")
+@patch("pycommon.api.ast_admin_groups.requests.get")
 def test_get_all_ast_admin_groups_success_elif_branch(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -38,7 +38,7 @@ def test_get_all_ast_admin_groups_success_elif_branch(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ast_admin_groups.requests.get")
+@patch("pycommon.api.ast_admin_groups.requests.get")
 def test_get_all_ast_admin_groups_failure(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -51,7 +51,7 @@ def test_get_all_ast_admin_groups_failure(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ast_admin_groups.requests.get")
+@patch("pycommon.api.ast_admin_groups.requests.get")
 def test_get_all_ast_admin_groups_exception(mock_get):
     mock_get.side_effect = Exception("Network error")
 
@@ -61,7 +61,7 @@ def test_get_all_ast_admin_groups_exception(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ast_admin_groups.requests.post")
+@patch("pycommon.api.ast_admin_groups.requests.post")
 def test_update_ast_admin_groups_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -74,7 +74,7 @@ def test_update_ast_admin_groups_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ast_admin_groups.requests.post")
+@patch("pycommon.api.ast_admin_groups.requests.post")
 def test_update_ast_admin_groups_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -87,7 +87,7 @@ def test_update_ast_admin_groups_success_elif_branch(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ast_admin_groups.requests.post")
+@patch("pycommon.api.ast_admin_groups.requests.post")
 def test_update_ast_admin_groups_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -100,7 +100,7 @@ def test_update_ast_admin_groups_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ast_admin_groups.requests.post")
+@patch("pycommon.api.ast_admin_groups.requests.post")
 def test_update_ast_admin_groups_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 

@@ -5,11 +5,11 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from api.api_key import deactivate_key, get_api_keys
+from pycommon.api.api_key import deactivate_key, get_api_keys
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.api_key.requests.post")
+@patch("pycommon.api.api_key.requests.post")
 def test_deactivate_key_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -22,7 +22,7 @@ def test_deactivate_key_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.api_key.requests.post")
+@patch("pycommon.api.api_key.requests.post")
 def test_deactivate_key_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -35,7 +35,7 @@ def test_deactivate_key_success_elif_branch(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.api_key.requests.post")
+@patch("pycommon.api.api_key.requests.post")
 def test_deactivate_key_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -48,7 +48,7 @@ def test_deactivate_key_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.api_key.requests.get")
+@patch("pycommon.api.api_key.requests.get")
 def test_get_api_keys_success(mock_get):
     mock_response = MagicMock()
     mock_response.json.return_value = {"keys": ["key1", "key2"]}
@@ -66,7 +66,7 @@ def test_get_api_keys_no_base_url():
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.api_key.requests.get")
+@patch("pycommon.api.api_key.requests.get")
 def test_get_api_keys_exception(mock_get):
     mock_get.side_effect = Exception("Network error")
 
@@ -76,7 +76,7 @@ def test_get_api_keys_exception(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.api_key.requests.post")
+@patch("pycommon.api.api_key.requests.post")
 def test_deactivate_key_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 

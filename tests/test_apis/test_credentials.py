@@ -8,10 +8,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from api.credentials import get_credentials, get_endpoint, get_json_credetials
+from pycommon.api.credentials import get_credentials, get_endpoint, get_json_credetials
 
 
-@patch("api.credentials.boto3.session.Session")
+@patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_credentials_success(mock_session):
     mock_client = MagicMock()
     mock_client.get_secret_value.return_value = {"SecretString": "secret_value"}
@@ -23,7 +23,7 @@ def test_get_credentials_success(mock_session):
     mock_client.get_secret_value.assert_called_once_with(SecretId="test_secret")
 
 
-@patch("api.credentials.boto3.session.Session")
+@patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_credentials_client_error(mock_session):
     mock_client = MagicMock()
     mock_client.get_secret_value.side_effect = ClientError(
@@ -35,7 +35,7 @@ def test_get_credentials_client_error(mock_session):
         get_credentials("test_secret")
 
 
-@patch("api.credentials.boto3.session.Session")
+@patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_json_credentials_success(mock_session):
     mock_client = MagicMock()
     mock_client.get_secret_value.return_value = {
@@ -49,7 +49,7 @@ def test_get_json_credentials_success(mock_session):
     mock_client.get_secret_value.assert_called_once_with(SecretId="test_secret_arn")
 
 
-@patch("api.credentials.boto3.session.Session")
+@patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_json_credentials_json_decode_error_line_52_53(mock_session):
     # Test JSON decode error in get_json_credetials lines 52-53
     mock_client = MagicMock()
@@ -62,7 +62,7 @@ def test_get_json_credentials_json_decode_error_line_52_53(mock_session):
         get_json_credetials("test-secret")
 
 
-@patch("api.credentials.boto3.session.Session")
+@patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_json_credentials_client_error_lines_33_34(mock_session):
     mock_client = MagicMock()
     mock_client.get_secret_value.side_effect = ClientError(
@@ -74,8 +74,8 @@ def test_get_json_credentials_client_error_lines_33_34(mock_session):
         get_json_credetials("test-secret")
 
 
-@patch("api.credentials.random.choice")
-@patch("api.credentials.boto3.session.Session")
+@patch("pycommon.api.credentials.random.choice")
+@patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_endpoint_success(mock_session, mock_choice):
     mock_client = MagicMock()
     secret_data = {
@@ -102,7 +102,7 @@ def test_get_endpoint_success(mock_session, mock_choice):
     assert api_key == "key1"
 
 
-@patch("api.credentials.boto3.session.Session")
+@patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_endpoint_model_not_found(mock_session):
     mock_client = MagicMock()
     secret_data = {"models": [{"other_model": {"endpoints": []}}]}
@@ -115,7 +115,7 @@ def test_get_endpoint_model_not_found(mock_session):
         get_endpoint("test_model", "test_arn")
 
 
-@patch("api.credentials.boto3.session.Session")
+@patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_endpoint_json_decode_error_lines_51_53(mock_session):
     mock_client = MagicMock()
     mock_client.get_secret_value.return_value = {"SecretString": "invalid json content"}
@@ -125,7 +125,7 @@ def test_get_endpoint_json_decode_error_lines_51_53(mock_session):
         get_endpoint("test_model", "test_arn")
 
 
-@patch("api.credentials.boto3.session.Session")
+@patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_endpoint_client_error_lines_52_53(mock_session):
     # Test ClientError exception handling in get_endpoint lines 52-53
     mock_client = MagicMock()

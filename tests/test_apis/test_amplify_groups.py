@@ -5,14 +5,14 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from api.amplify_groups import (
+from pycommon.api.amplify_groups import (
     verify_member_of_ast_admin_group,
     verify_user_in_amp_group,
 )
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.amplify_groups.requests.post")
+@patch("pycommon.api.amplify_groups.requests.post")
 def test_verify_member_of_ast_admin_group_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -25,7 +25,7 @@ def test_verify_member_of_ast_admin_group_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.amplify_groups.requests.post")
+@patch("pycommon.api.amplify_groups.requests.post")
 def test_verify_member_of_ast_admin_group_not_member(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -38,7 +38,7 @@ def test_verify_member_of_ast_admin_group_not_member(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.amplify_groups.requests.post")
+@patch("pycommon.api.amplify_groups.requests.post")
 def test_verify_user_in_amp_group_empty_groups(mock_post):
     result = verify_user_in_amp_group("test_token", [])
     assert result is False
@@ -50,7 +50,7 @@ def test_verify_user_in_amp_group_empty_groups(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.amplify_groups.requests.post")
+@patch("pycommon.api.amplify_groups.requests.post")
 def test_verify_user_in_amp_group_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -63,7 +63,7 @@ def test_verify_user_in_amp_group_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.amplify_groups.requests.post")
+@patch("pycommon.api.amplify_groups.requests.post")
 def test_verify_user_in_amp_group_not_member(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -76,7 +76,7 @@ def test_verify_user_in_amp_group_not_member(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.amplify_groups.requests.post")
+@patch("pycommon.api.amplify_groups.requests.post")
 def test_verify_member_of_ast_admin_group_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -89,7 +89,7 @@ def test_verify_member_of_ast_admin_group_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.amplify_groups.requests.post")
+@patch("pycommon.api.amplify_groups.requests.post")
 def test_verify_member_of_ast_admin_group_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -99,7 +99,7 @@ def test_verify_member_of_ast_admin_group_exception(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.amplify_groups.requests.post")
+@patch("pycommon.api.amplify_groups.requests.post")
 def test_verify_user_in_amp_group_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -112,7 +112,7 @@ def test_verify_user_in_amp_group_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.amplify_groups.requests.post")
+@patch("pycommon.api.amplify_groups.requests.post")
 def test_verify_user_in_amp_group_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 

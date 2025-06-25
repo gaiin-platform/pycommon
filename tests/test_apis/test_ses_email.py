@@ -5,11 +5,11 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from api.ses_email import send_email
+from pycommon.api.ses_email import send_email
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ses_email.requests.post")
+@patch("pycommon.api.ses_email.requests.post")
 def test_send_email_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -22,7 +22,7 @@ def test_send_email_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ses_email.requests.post")
+@patch("pycommon.api.ses_email.requests.post")
 def test_send_email_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -35,7 +35,7 @@ def test_send_email_success_elif_branch(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ses_email.requests.post")
+@patch("pycommon.api.ses_email.requests.post")
 def test_send_email_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -48,7 +48,7 @@ def test_send_email_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ses_email.requests.post")
+@patch("pycommon.api.ses_email.requests.post")
 def test_send_email_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 

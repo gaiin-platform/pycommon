@@ -449,6 +449,11 @@ def main():
             # Set the environment variable for DynamoDB operations
             os.environ["OPS_DYNAMODB_TABLE"] = ops_table
             scan_and_register_ops(args.dir or ".", current_user="system")
+    else:  # pragma: no cover
+        # we are excluding this section from coverage because argparse ensures that
+        # the command is one of the choices, so this code should never be reached,
+        # but we don't want to exclude anything from coverage above.
+        raise AssertionError("Unreachable: argparse `choices` ensures coverage")
 
 
 if __name__ == "__main__":

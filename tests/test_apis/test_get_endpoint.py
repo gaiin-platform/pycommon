@@ -9,11 +9,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from api.get_endpoint import EndpointType, get_endpoint
+from pycommon.api.get_endpoint import EndpointType, get_endpoint
 
 
 @patch.dict(os.environ, {"APP_ARN_NAME": "test_arn", "AWS_REGION": "us-east-1"})
-@patch("api.get_endpoint.boto3.session.Session")
+@patch("pycommon.api.get_endpoint.boto3.session.Session")
 def test_get_endpoint_success(mock_session):
     mock_client = MagicMock()
     secret_data = {"CHAT_ENDPOINT": "http://chat.example.com"}
@@ -28,7 +28,7 @@ def test_get_endpoint_success(mock_session):
 
 
 @patch.dict(os.environ, {"APP_ARN_NAME": "test_arn", "AWS_REGION": "us-east-1"})
-@patch("api.get_endpoint.boto3.session.Session")
+@patch("pycommon.api.get_endpoint.boto3.session.Session")
 def test_get_endpoint_not_found(mock_session):
     mock_client = MagicMock()
     secret_data = {"OTHER_ENDPOINT": "http://other.example.com"}
@@ -42,7 +42,7 @@ def test_get_endpoint_not_found(mock_session):
 
 
 @patch.dict(os.environ, {"APP_ARN_NAME": "test_arn", "AWS_REGION": "us-east-1"})
-@patch("api.get_endpoint.boto3.session.Session")
+@patch("pycommon.api.get_endpoint.boto3.session.Session")
 def test_get_endpoint_client_error(mock_session):
     mock_client = MagicMock()
     mock_client.get_secret_value.side_effect = ClientError(

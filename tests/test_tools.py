@@ -11,7 +11,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from tools.ops import (
+from pycommon.tools.ops import (
     OperationModel,
     extract_complex_dict,
     extract_dict,
@@ -393,7 +393,7 @@ class TestOperationExtraction:
     def test_extract_ops_from_file_with_api_tool(self):
         """Test extracting operations from file with @api_tool decorator."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 @api_tool(
     path="/test",
@@ -434,7 +434,7 @@ def test_function():
     def test_extract_ops_from_file_with_set_op_type(self):
         """Test extracting operations with custom op_type."""
         python_code = """
-from api.ops import api_tool, set_op_type
+from pycommon.api.ops import api_tool, set_op_type
 
 set_op_type("custom")
 
@@ -461,7 +461,7 @@ def test_function():
     def test_extract_ops_from_file_with_set_op_type_non_string(self):
         """Test extracting operations with set_op_type using non-string argument."""
         python_code = """
-from api.ops import api_tool, set_op_type
+from pycommon.api.ops import api_tool, set_op_type
 
 # This will trigger the str() fallback in set_op_type extraction
 set_op_type(123)
@@ -489,7 +489,7 @@ def test_function():
     def test_extract_ops_from_file_with_vop_decorator(self):
         """Test extracting operations from file with @vop decorator."""
         python_code = """
-from api.ops import vop
+from pycommon.api.ops import vop
 
 @vop(
     path="/test",
@@ -514,7 +514,7 @@ def test_function():
     def test_extract_ops_from_file_with_op_decorator(self):
         """Test extracting operations from file with @op decorator."""
         python_code = """
-from tools.ops import op
+from pycommon.tools.ops import op
 
 @op(
     path="/test",
@@ -539,7 +539,7 @@ def test_function():
     def test_extract_ops_from_file_with_non_string_attributes(self):
         """Test extracting operations with non-string name, description, path."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 # This would create AST nodes without 's' attribute, triggering str() fallback
 name_var = "Dynamic Name"
@@ -573,7 +573,7 @@ def test_function():
     def test_extract_ops_from_file_with_non_string_method(self):
         """Test extracting operations with non-string method."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 method_var = "GET"
 
@@ -601,7 +601,7 @@ def test_function():
     def test_extract_ops_from_file_missing_required_fields(self):
         """Test extracting operations from file missing required fields."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 @api_tool(
     path="/test",
@@ -625,7 +625,7 @@ def test_function():
     def test_extract_ops_from_file_decorator_without_call(self):
         """Test extracting operations from decorator without call (no parentheses)."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 @api_tool  # No parentheses - should be skipped
 def test_function():
@@ -645,7 +645,7 @@ def test_function():
     def test_extract_ops_from_file_invalid_syntax(self):
         """Test extracting operations from file with invalid syntax."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 @api_tool(
     path="/test",
@@ -712,7 +712,7 @@ def regular_function():
         """Test extracting operations that trigger ast.Str handling in
         extract functions."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 @api_tool(
     path="/test",
@@ -731,7 +731,7 @@ def test_function():
             try:
                 # Mock isinstance to trigger ast.Str branch in
                 # extract_complex_dict
-                with patch("tools.ops.isinstance") as mock_isinstance:
+                with patch("pycommon.tools.ops.isinstance") as mock_isinstance:
 
                     def isinstance_side_effect(obj, cls):
                         # Return True for ast.Str checks to trigger that branch
@@ -747,7 +747,7 @@ def test_function():
             finally:
                 os.unlink(f.name)
 
-    @patch("tools.ops.dynamodb")
+    @patch("pycommon.tools.ops.dynamodb")
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"})
     def test_write_ops_validation_error(self, mock_dynamodb):
         """Test write_ops when ValidationError occurs during model_dump."""
@@ -779,7 +779,7 @@ def test_function():
     def test_extract_ops_from_file_set_op_type_no_args(self):
         """Test extracting operations when set_op_type has no arguments."""
         python_code = """
-from api.ops import api_tool, set_op_type
+from pycommon.api.ops import api_tool, set_op_type
 
 # This will be skipped due to no args
 set_op_type()
@@ -808,7 +808,7 @@ def test_function():
     def test_extract_ops_from_file_decorator_without_func_id(self):
         """Test extracting operations with decorator that has no func.id."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 # This creates a more complex decorator structure
 decorator_func = api_tool
@@ -1012,7 +1012,7 @@ class TestScanOperations:
     def test_scan_ops(self):
         """Test scanning operations from a directory."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 @api_tool(
     path="/test",
@@ -1035,7 +1035,7 @@ def test_function():
     def test_scan_and_print_ops(self, capsys):
         """Test scanning and printing operations."""
         python_code = """
-from api.ops import api_tool
+from pycommon.api.ops import api_tool
 
 @api_tool(
     path="/test",
@@ -1141,7 +1141,7 @@ class TestPrintOperations:
 class TestDynamoDBOperations:
     """Test DynamoDB-related operations."""
 
-    @patch("tools.ops.dynamodb")
+    @patch("pycommon.tools.ops.dynamodb")
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"})
     def test_write_ops_success(self, mock_dynamodb):
         """Test successful write operations to DynamoDB."""
@@ -1169,7 +1169,7 @@ class TestDynamoDBOperations:
         assert "Successfully associated operations" in result["message"]
         mock_table.put_item.assert_called()
 
-    @patch("tools.ops.dynamodb")
+    @patch("pycommon.tools.ops.dynamodb")
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"})
     def test_write_ops_update_existing(self, mock_dynamodb):
         """Test updating existing operations in DynamoDB."""
@@ -1233,7 +1233,7 @@ class TestDynamoDBOperations:
             assert result["success"] is False
             assert "Operations must be provided" in result["message"]
 
-    @patch("tools.ops.dynamodb")
+    @patch("pycommon.tools.ops.dynamodb")
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"})
     def test_write_ops_with_default_tags_corrected(self, mock_dynamodb, capsys):
         """Test write operations with operations that have no tags
@@ -1263,7 +1263,7 @@ class TestDynamoDBOperations:
         # (empty tags get ["default", "all"] but only "all" gets processed)
         assert mock_table.query.call_count == 1
 
-    @patch("tools.ops.dynamodb")
+    @patch("pycommon.tools.ops.dynamodb")
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"})
     def test_write_ops_add_to_existing_no_match(self, mock_dynamodb, capsys):
         """Test adding new operation when no existing operation matches ID."""
@@ -1295,7 +1295,7 @@ class TestDynamoDBOperations:
         captured = capsys.readouterr()
         assert "Updated item in table" in captured.out
 
-    @patch("tools.ops.dynamodb")
+    @patch("pycommon.tools.ops.dynamodb")
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"})
     def test_write_ops_update_existing_item(self, mock_dynamodb):
         """Test write_ops when updating an existing item."""
@@ -1324,7 +1324,7 @@ class TestDynamoDBOperations:
         assert result["success"] is True
         mock_table.update_item.assert_called()
 
-    @patch("tools.ops.dynamodb")
+    @patch("pycommon.tools.ops.dynamodb")
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"})
     def test_write_ops_create_new_item(self, mock_dynamodb):
         """Test write_ops when creating a new item."""
@@ -1407,7 +1407,7 @@ class TestResolveOpsTable:
 
         import yaml
 
-        from tools.ops import resolve_ops_table
+        from pycommon.tools.ops import resolve_ops_table
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a single level nested directory
@@ -1532,7 +1532,7 @@ class TestResolveOpsTable:
         test_args = ["tools/ops.py", "register", "--stage", "nonexistent"]
 
         with patch("sys.argv", test_args):
-            with patch("tools.ops.resolve_ops_table", return_value=None):
+            with patch("pycommon.tools.ops.resolve_ops_table", return_value=None):
                 with pytest.raises(SystemExit) as exc_info:
                     main()
 
@@ -1560,7 +1560,7 @@ class TestResolveOpsTable:
         import tempfile
 
         python_code = """
-from tools.ops import op
+from pycommon.tools.ops import op
 @op
 def test_function():
     pass
@@ -1582,7 +1582,7 @@ def test_function():
 
         import yaml
 
-        from tools.ops import resolve_ops_table
+        from pycommon.tools.ops import resolve_ops_table
 
         with tempfile.TemporaryDirectory() as temp_dir:
             var_dir = os.path.join(temp_dir, "var")
@@ -1634,7 +1634,7 @@ def test_function():
 
         # Run from the project root directory where tools/ops.py exists
         result = subprocess.run(
-            [sys.executable, "tools/ops.py", "register"],
+            [sys.executable, "src/pycommon/tools/ops.py", "register"],
             capture_output=True,
             text=True,
             env=env,
@@ -1664,7 +1664,7 @@ def test_function():
     def test_extract_ops_decorator_with_id_but_not_call(self):
         """Test decorator branch that has id attribute but is not ast.Call."""
         # Create a Python file with a decorator that is ast.Name (not ast.Call)
-        python_code = """ from tools.ops import op
+        python_code = """ from pycommon.tools.ops import op
 
             # This creates a decorator that is ast.Name, not ast.Call
             my_decorator = op
@@ -1732,7 +1732,7 @@ def test_function():
         test_args = ["tools/ops.py", "register", "--stage", "nonexistent"]
 
         with patch("sys.argv", test_args):
-            with patch("tools.ops.resolve_ops_table", return_value=None):
+            with patch("pycommon.tools.ops.resolve_ops_table", return_value=None):
                 with pytest.raises(SystemExit) as exc_info:
                     main()
                 # Should exit with code 1
@@ -1744,7 +1744,7 @@ def test_function():
         test_args = ["tools/ops.py", "register", "--stage", "nonexistent"]
 
         with patch("sys.argv", test_args):
-            with patch("tools.ops.resolve_ops_table", return_value=None):
+            with patch("pycommon.tools.ops.resolve_ops_table", return_value=None):
                 with patch("sys.exit"):  # Prevent actual exit
                     with patch("builtins.print") as mock_print:
                         main()
@@ -1762,8 +1762,10 @@ def test_function():
         test_args = ["tools/ops.py", "register", "--stage", "test"]
 
         with patch("sys.argv", test_args):
-            with patch("tools.ops.resolve_ops_table", return_value="test-table"):
-                with patch("tools.ops.scan_and_register_ops") as mock_scan:
+            with patch(
+                "pycommon.tools.ops.resolve_ops_table", return_value="test-table"
+            ):
+                with patch("pycommon.tools.ops.scan_and_register_ops") as mock_scan:
                     with patch.dict(os.environ, {}, clear=True):  # Clear environment
                         main()
                         # Should set the environment variable
@@ -1776,7 +1778,7 @@ def test_function():
         test_args = ["tools/ops.py", "ls"]
 
         with patch("sys.argv", test_args):
-            with patch("tools.ops.scan_and_print_ops") as mock_scan:
+            with patch("pycommon.tools.ops.scan_and_print_ops") as mock_scan:
                 main()
                 # Should call scan_and_print_ops with default directory
                 mock_scan.assert_called_once_with(".")
@@ -1786,18 +1788,20 @@ def test_function():
         test_args = ["tools/ops.py", "ls", "--dir", "/custom/path"]
 
         with patch("sys.argv", test_args):
-            with patch("tools.ops.scan_and_print_ops") as mock_scan:
+            with patch("pycommon.tools.ops.scan_and_print_ops") as mock_scan:
                 main()
                 # Should call scan_and_print_ops with custom directory
                 mock_scan.assert_called_once_with("/custom/path")
 
     def test_scan_and_register_ops_print_statements(self):
         """Test the print statements in scan_and_register_ops function."""
-        from tools.ops import scan_and_register_ops
+        from pycommon.tools.ops import scan_and_register_ops
 
         # Mock the scan_ops and write_ops functions
-        with patch("tools.ops.scan_ops", return_value=[]):
-            with patch("tools.ops.write_ops", return_value={"message": "Test message"}):
+        with patch("pycommon.tools.ops.scan_ops", return_value=[]):
+            with patch(
+                "pycommon.tools.ops.write_ops", return_value={"message": "Test message"}
+            ):
                 with patch("builtins.print") as mock_print:
                     scan_and_register_ops(".", current_user="test", tags=["test"])
                     # Should print the result message

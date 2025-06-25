@@ -5,7 +5,7 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from api.object_permissions import (
+from pycommon.api.object_permissions import (
     can_access_objects,
     simulate_can_access_objects,
     update_object_permissions,
@@ -13,7 +13,7 @@ from api.object_permissions import (
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_update_object_permissions_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -28,7 +28,7 @@ def test_update_object_permissions_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_update_object_permissions_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -43,7 +43,7 @@ def test_update_object_permissions_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_update_object_permissions_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -55,7 +55,7 @@ def test_update_object_permissions_exception(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_can_access_objects_empty_data_sources(mock_post):
     result = can_access_objects("test_token", [])
     assert result is True
@@ -63,7 +63,7 @@ def test_can_access_objects_empty_data_sources(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_can_access_objects_web_sources_only(mock_post):
     data_sources = [
         {"id": "http://example.com", "type": "website/url"},
@@ -75,7 +75,7 @@ def test_can_access_objects_web_sources_only(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_can_access_objects_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -89,7 +89,7 @@ def test_can_access_objects_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_can_access_objects_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -103,7 +103,7 @@ def test_can_access_objects_success_elif_branch(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_can_access_objects_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 403
@@ -117,7 +117,7 @@ def test_can_access_objects_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_simulate_can_access_objects_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -133,7 +133,7 @@ def test_simulate_can_access_objects_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_simulate_can_access_objects_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -149,7 +149,7 @@ def test_simulate_can_access_objects_success_elif_branch(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_simulate_can_access_objects_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -163,7 +163,7 @@ def test_simulate_can_access_objects_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_simulate_can_access_objects_json_decode_error(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -176,7 +176,7 @@ def test_simulate_can_access_objects_json_decode_error(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_simulate_can_access_objects_final_return_line_189(mock_post):
     # Mock a scenario where neither success nor exception paths are taken
     mock_response = MagicMock()
@@ -191,7 +191,7 @@ def test_simulate_can_access_objects_final_return_line_189(mock_post):
 
 # Additional coverage tests for object_permissions.py
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_can_access_objects_exception_lines_60_64(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -202,7 +202,7 @@ def test_can_access_objects_exception_lines_60_64(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.object_permissions.requests.post")
+@patch("pycommon.api.object_permissions.requests.post")
 def test_simulate_can_access_objects_final_return(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200

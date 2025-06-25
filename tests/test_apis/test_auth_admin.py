@@ -5,11 +5,11 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from api.auth_admin import verify_user_as_admin
+from pycommon.api.auth_admin import verify_user_as_admin
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.auth_admin.requests.post")
+@patch("pycommon.api.auth_admin.requests.post")
 def test_verify_user_as_admin_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -22,7 +22,7 @@ def test_verify_user_as_admin_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.auth_admin.requests.post")
+@patch("pycommon.api.auth_admin.requests.post")
 def test_verify_user_as_admin_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -35,7 +35,7 @@ def test_verify_user_as_admin_success_elif_branch(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.auth_admin.requests.post")
+@patch("pycommon.api.auth_admin.requests.post")
 def test_verify_user_as_admin_not_admin(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -48,7 +48,7 @@ def test_verify_user_as_admin_not_admin(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.auth_admin.requests.post")
+@patch("pycommon.api.auth_admin.requests.post")
 def test_verify_user_as_admin_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -61,7 +61,7 @@ def test_verify_user_as_admin_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.auth_admin.requests.post")
+@patch("pycommon.api.auth_admin.requests.post")
 def test_verify_user_as_admin_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 
