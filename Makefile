@@ -33,7 +33,8 @@ setup:
 	@echo "Setting up the environment..."
 	set -e; \
 	python3 -m venv venv; \
-	. venv/bin/activate && pip install -r requirements.txt; \
+	. venv/bin/activate && pip install -r requirements-dev.txt; \
+	pip install -e ".[dev]"; \
 	chmod +x scripts/*.sh && \
 	scripts/setup_precommit.sh
 	@echo "Setup complete."
