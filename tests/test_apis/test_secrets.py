@@ -28,6 +28,32 @@ def test_get_secret_value_success(mock_boto3_client):
 
 
 @patch("api.secrets.boto3.client")
+def test_get_secret_value_success_binary(mock_boto3_client):
+    """Test successful retrieval of binary secret."""
+    mock_client = MagicMock()
+    # Simulate binary secret (encoded as bytes)
+    mock_client.get_secret_value.return_value = {"SecretBinary": b"binary_secret_value"}
+    mock_boto3_client.return_value = mock_client
+
+    result = get_secret_value("test_binary_secret")
+
+    assert result == "binary_secret_value"
+
+
+@patch("api.secrets.boto3.client")
+def test_get_secret_value_unexpected_format(mock_boto3_client):
+    """Test handling of unexpected secret format
+    (neither SecretString nor SecretBinary).
+    """
+    mock_client = MagicMock()
+    mock_client.get_secret_value.return_value = {"SomeOtherField": "value"}
+    mock_boto3_client.return_value = mock_client
+
+    with pytest.raises(ValueError, match="Unexpected secret format for 'test_secret'"):
+        get_secret_value("test_secret")
+
+
+@patch("api.secrets.boto3.client")
 def test_get_secret_value_failure(mock_boto3_client):
     mock_client = MagicMock()
     mock_client.get_secret_value.side_effect = Exception("Secret not found")
