@@ -1479,7 +1479,7 @@ def test_setup_validated():
     setup_validated(test_rules, test_checker)
 
     # Import the globals to check they were set
-    import authz
+    import pycommon.authz as authz
 
     assert authz._validate_rules == test_rules
     assert authz._permission_checker == test_checker
@@ -1492,7 +1492,7 @@ def test_set_validate_rules():
     set_validate_rules(test_rules)
 
     # Import the globals to check they were set
-    import authz
+    import pycommon.authz as authz
 
     assert authz._validate_rules == test_rules
 
@@ -1506,6 +1506,6 @@ def test_set_permission_checker():
     set_permission_checker(test_checker)
 
     # Import the globals to check they were set
-    import authz
+    import pycommon.authz as authz
 
     assert authz._permission_checker == test_checker
