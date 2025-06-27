@@ -44,6 +44,52 @@ ALGORITHMS = ["RS256"]
 # Globals needed by this file
 load_dotenv(dotenv_path=".env.local")
 
+# Global state for validation (similar to ops.py pattern)
+_validate_rules: Optional[Dict[str, Any]] = None
+_permission_checker: Optional[Callable] = None
+
+
+def setup_validated(
+    validate_rules: Dict[str, Any],
+    permission_checker: Callable,
+):
+    """
+    Setup validation rules and permission checker for the validated decorator.
+
+    Args:
+        validate_rules: Dictionary containing validation rules for operations
+        permission_checker: Function to check permissions, should accept
+                          (user, type, op, data) and return a callable that
+                          accepts (user, data)
+    """
+    global _validate_rules, _permission_checker
+    _validate_rules = validate_rules
+    _permission_checker = permission_checker
+
+
+def set_validate_rules(validate_rules: Dict[str, Any]):
+    """
+    Set validation rules for the validated decorator.
+
+    Args:
+        validate_rules: Dictionary containing validation rules for operations
+    """
+    global _validate_rules
+    _validate_rules = validate_rules
+
+
+def set_permission_checker(permission_checker: Callable):
+    """
+    Set permission checker for the validated decorator.
+
+    Args:
+        permission_checker: Function to check permissions, should accept
+                          (user, type, op, data) and return a callable that
+                          accepts (user, data)
+    """
+    global _permission_checker
+    _permission_checker = permission_checker
+
 
 @required_env_vars("API_BASE_URL")
 def verify_user_as_admin(access_token: str, purpose: str) -> bool:
@@ -402,6 +448,7 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
         "allowed_access": access,
         "rate_limit": rate_limit,
         "api_key_id": item["api_owner_id"],
+        "purpose": item.get("purpose"),
     }
 
 
@@ -551,22 +598,20 @@ def _parse_token(event: Dict[str, Any]) -> str:
 
 def validated(
     op: str,
-    validate_rules: Dict[str, Any],
-    permission_checker: Callable,
     validate_body: bool = True,
 ) -> Callable:
     """Decorator to validate input data and permissions for an API operation.
 
     Args:
         op (str): The operation being performed.
-        validate_rules (dict): The validation rules.
         validate_body (bool): Whether to validate the request body.
-        permission_checker (Callable): Function to check permissions.
-        Should accept (user, type, op, data) and return a callable that accepts
-        (user, data).
 
     Returns:
         Callable: The decorated function.
+
+    Note:
+        Uses global _validate_rules and _permission_checker set
+        via setup_validated()
     """
 
     def decorator(f: Callable) -> Callable:
@@ -591,9 +636,9 @@ def validated(
                     event,
                     op,
                     api_accessed,
-                    validate_rules,
+                    _validate_rules or {},
                     validate_body,
-                    permission_checker,
+                    _permission_checker,
                 )
 
                 data["access_token"] = token
@@ -602,6 +647,9 @@ def validated(
                 data["rate_limit"] = claims["rate_limit"]
                 data["api_accessed"] = api_accessed
                 data["allowed_access"] = claims["allowed_access"]
+                data["purpose"] = claims.get(
+                    "purpose"
+                )  # helps identify group system users for ex.
 
                 result = f(event, context, current_user, name, data)
 

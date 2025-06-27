@@ -30,8 +30,12 @@ def get_secret_value(secret_name: str) -> str:
     try:
         # Retrieve the secret value
         response = client.get_secret_value(SecretId=secret_name)
-        secret_value = response["SecretString"]
-        return secret_value
+        if "SecretString" in response:
+            return response["SecretString"]
+        elif "SecretBinary" in response:
+            return response["SecretBinary"].decode("ascii")
+        else:
+            raise ValueError(f"Unexpected secret format for '{secret_name}'")
 
     except Exception as e:
         raise ValueError(f"Failed to retrieve secret '{secret_name}': {str(e)}")

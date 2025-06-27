@@ -8,9 +8,7 @@ from typing import Any, List
 import requests
 
 
-def embedding_permission(
-    access_token: str, data_sources: List[str]
-) -> tuple[bool, Any]:
+def delete_embeddings(access_token: str, data_sources: List[str]) -> tuple[bool, Any]:
     """
     Check embedding permissions and delete embeddings for specified data sources.
 
