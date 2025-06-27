@@ -47,6 +47,7 @@ load_dotenv(dotenv_path=".env.local")
 # Global state for validation (similar to ops.py pattern)
 _validate_rules: Optional[Dict[str, Any]] = None
 _permission_checker: Optional[Callable] = None
+_access_types: Optional[List[str]] = ["full_access"]
 
 
 def setup_validated(
@@ -89,6 +90,17 @@ def set_permission_checker(permission_checker: Callable):
     """
     global _permission_checker
     _permission_checker = permission_checker
+
+
+def add_api_access_types(access_types: List[str]):
+    """
+    Set the access types for the validated decorator.
+
+    Args:
+        access_types: List of access types to set.
+    """
+    global _access_types
+    _access_types += access_types
 
 
 @required_env_vars("API_BASE_URL")
@@ -415,10 +427,7 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
 
     # Check for access rights
     access = item.get("accessTypes", [])
-    if not any(
-        access_type in access
-        for access_type in ["file_upload", "share", "chat", "full_access"]
-    ):
+    if not any(access_type in access for access_type in _access_types):
         print("API key doesn't have access to the functionality.")
         raise PermissionError(
             "API key does not have access to the required functionality."
