@@ -8,6 +8,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from api.secrets import (
+    delete_secret_parameter,
     get_secret_parameter,
     get_secret_value,
     store_secret_parameter,
@@ -168,3 +169,59 @@ def test_store_secrets_in_dict_parameter_name_empty(mock_uuid, mock_store_secret
     expected = {"s_api_key": "secret_value", "regular_key": "regular_value"}
     assert result == expected
     mock_store_secret.assert_called_once_with("", "secret_value")
+
+
+@patch("api.secrets.boto3.client")
+def test_delete_secret_parameter_success(mock_boto3_client):
+    """Test successful deletion of a secret parameter."""
+    mock_client = MagicMock()
+    mock_client.delete_parameter.return_value = None
+    mock_boto3_client.return_value = mock_client
+
+    result = delete_secret_parameter("test_param")
+
+    assert result is True
+    mock_client.delete_parameter.assert_called_once_with(Name="/pdb/test_param")
+
+
+@patch("api.secrets.boto3.client")
+def test_delete_secret_parameter_success_custom_prefix(mock_boto3_client):
+    """Test successful deletion with custom prefix."""
+    mock_client = MagicMock()
+    mock_client.delete_parameter.return_value = None
+    mock_boto3_client.return_value = mock_client
+
+    result = delete_secret_parameter("test_param", prefix="/custom")
+
+    assert result is True
+    mock_client.delete_parameter.assert_called_once_with(Name="/custom/test_param")
+
+
+@patch("api.secrets.boto3.client")
+def test_delete_secret_parameter_failure(mock_boto3_client):
+    """Test deletion failure when parameter doesn't exist."""
+    mock_client = MagicMock()
+    mock_client.delete_parameter.side_effect = ClientError(
+        {"Error": {"Code": "ParameterNotFound"}}, "DeleteParameter"
+    )
+    mock_boto3_client.return_value = mock_client
+
+    result = delete_secret_parameter("nonexistent_param")
+
+    assert result is False
+    mock_client.delete_parameter.assert_called_once_with(Name="/pdb/nonexistent_param")
+
+
+@patch("api.secrets.boto3.client")
+def test_delete_secret_parameter_access_denied(mock_boto3_client):
+    """Test deletion failure due to access denied."""
+    mock_client = MagicMock()
+    mock_client.delete_parameter.side_effect = ClientError(
+        {"Error": {"Code": "AccessDenied"}}, "DeleteParameter"
+    )
+    mock_boto3_client.return_value = mock_client
+
+    result = delete_secret_parameter("test_param")
+
+    assert result is False
+    mock_client.delete_parameter.assert_called_once_with(Name="/pdb/test_param")
