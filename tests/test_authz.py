@@ -14,6 +14,7 @@ from authz import (
     _parse_and_validate,
     _parse_token,
     _validate_data,
+    add_api_access_types,
     api_claims,
     get_claims,
     set_permission_checker,
@@ -629,47 +630,60 @@ def test_parse_and_validate_valid_input():
 @patch("authz.boto3.resource")
 @patch("authz.os.getenv")
 def test_api_claims_success(mock_getenv, mock_boto3):
-    mock_getenv.side_effect = lambda key: {
-        "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-        "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
-    }.get(key)
-    mock_api_keys_table = MagicMock()
-    mock_api_keys_table.query.return_value = {
-        "Items": [
-            {
-                "apiKey": "mock_token",
-                "active": True,
-                "expirationDate": "2099-12-31",
-                "accessTypes": ["file_upload", "share"],
-                "account": {"id": "mock_account_id"},
-                "api_owner_id": "user/ownerKey/mock_owner",
-                "rateLimit": {"rate": 100, "period": "Hourly"},
-                "owner": "mock_owner",
-            }
-        ]
-    }
-    mock_cost_calculations_table = MagicMock()
-    mock_cost_calculations_table.query.return_value = {
-        "Items": [
-            {
-                "id": "mock_owner",
-                "hourlyCost": [0] * 24,  # Simulate no cost for all hours
-            }
-        ]
-    }
-    mock_boto3.return_value.Table.side_effect = lambda table_name: {
-        "mock_api_keys_table": mock_api_keys_table,
-        "mock_cost_calculations_table": mock_cost_calculations_table,
-    }[table_name]
-    event = {}
-    context = {}
-    token = "mock_token"
-    result = api_claims(event, context, token)
-    assert result["username"] == "mock_owner"
-    assert result["account"] == "mock_account_id"
-    assert result["allowed_access"] == ["file_upload", "share"]
-    assert result["rate_limit"] == {"period": "Hourly", "rate": 100}
-    assert result["api_key_id"] == "user/ownerKey/mock_owner"
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set access types to include the ones used in this test
+        authz._access_types = ["full_access", "file_upload", "share"]
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+        }.get(key)
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "expirationDate": "2099-12-31",
+                    "accessTypes": ["file_upload", "share"],
+                    "account": {"id": "mock_account_id"},
+                    "api_owner_id": "user/ownerKey/mock_owner",
+                    "rateLimit": {"rate": 100, "period": "Hourly"},
+                    "owner": "mock_owner",
+                }
+            ]
+        }
+        mock_cost_calculations_table = MagicMock()
+        mock_cost_calculations_table.query.return_value = {
+            "Items": [
+                {
+                    "id": "mock_owner",
+                    "hourlyCost": [0] * 24,  # Simulate no cost for all hours
+                }
+            ]
+        }
+        mock_boto3.return_value.Table.side_effect = lambda table_name: {
+            "mock_api_keys_table": mock_api_keys_table,
+            "mock_cost_calculations_table": mock_cost_calculations_table,
+        }[table_name]
+        event = {}
+        context = {}
+        token = "mock_token"
+        result = api_claims(event, context, token)
+        assert result["username"] == "mock_owner"
+        assert result["account"] == "mock_account_id"
+        assert result["allowed_access"] == ["file_upload", "share"]
+        assert result["rate_limit"] == {"period": "Hourly", "rate": 100}
+        assert result["api_key_id"] == "user/ownerKey/mock_owner"
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
 
 
 @patch("authz.boto3.resource")
@@ -1084,27 +1098,42 @@ def test_validated_http_exception(
 @patch("authz.boto3.resource")
 @patch("authz.os.getenv")
 def test_api_claims_rate_limit_exceeded(mock_getenv, mock_boto3):
-    mock_getenv.side_effect = lambda key: {
-        "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-        "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
-    }.get(key)
-    mock_table = MagicMock()
-    mock_table.query.return_value = {
-        "Items": [
-            {
-                "apiKey": "mock_token",
-                "active": True,
-                "rateLimit": {"rate": 0, "period": "Hourly"},
-                "api_owner_id": "header/ownerKey/mock_owner",
-                "owner": "mock_owner",
-                "accessTypes": ["file_upload", "share"],
-            }
-        ]
-    }
-    mock_boto3.return_value.Table.return_value = mock_table
-    with patch("authz._is_rate_limited", return_value=(True, "rate limit exceeded")):
-        with pytest.raises(HTTPUnauthorized, match="rate limit exceeded"):
-            api_claims({}, {}, "mock_token")
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set access types to include the ones used in this test
+        authz._access_types = ["full_access", "file_upload", "share"]
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+        }.get(key)
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "rateLimit": {"rate": 0, "period": "Hourly"},
+                    "api_owner_id": "header/ownerKey/mock_owner",
+                    "owner": "mock_owner",
+                    "accessTypes": ["file_upload", "share"],
+                }
+            ]
+        }
+        mock_boto3.return_value.Table.return_value = mock_table
+        with patch(
+            "authz._is_rate_limited", return_value=(True, "rate limit exceeded")
+        ):
+            with pytest.raises(HTTPUnauthorized, match="rate limit exceeded"):
+                api_claims({}, {}, "mock_token")
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
 
 
 @patch("authz.boto3.resource")
@@ -1507,3 +1536,180 @@ def test_set_permission_checker():
     import authz
 
     assert authz._permission_checker == test_checker
+
+
+def test_add_api_access_types():
+    """Test the add_api_access_types function adds access types to the global list."""
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Reset to known state
+        authz._access_types = ["full_access"]
+
+        # Add new access types
+        add_api_access_types(["chat", "file_upload"])
+
+        # Check that the access types were added
+        assert "full_access" in authz._access_types
+        assert "chat" in authz._access_types
+        assert "file_upload" in authz._access_types
+        assert len(authz._access_types) == 3
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
+
+
+@patch("authz.boto3.resource")
+@patch("authz.os.getenv")
+def test_api_claims_empty_access_types(mock_getenv, mock_boto3):
+    """Test api_claims when _access_types is empty - should raise PermissionError."""
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set _access_types to empty list
+        authz._access_types = []
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+        }.get(key)
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "accessTypes": ["chat", "file_upload"],  # API key has access types
+                    "account": {"id": "mock_account_id"},
+                    "api_owner_id": "user/ownerKey/mock_owner",
+                    "owner": "mock_owner",
+                }
+            ]
+        }
+        mock_boto3.return_value.Table.return_value = mock_table
+
+        # Should raise PermissionError because _access_types is empty
+        with pytest.raises(
+            PermissionError,
+            match="API key does not have access to the required functionality.",
+        ):
+            api_claims({}, {}, "mock_token")
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
+
+
+@patch("authz.boto3.resource")
+@patch("authz.os.getenv")
+def test_api_claims_partial_access_match(mock_getenv, mock_boto3):
+    """Test api_claims when API key has some matching access types."""
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set specific access types required
+        authz._access_types = ["chat", "assistants"]
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+        }.get(key)
+
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "expirationDate": "2099-12-31",
+                    "accessTypes": [
+                        "chat",
+                        "file_upload",
+                    ],  # Has "chat" but not "assistants"
+                    "account": {"id": "mock_account_id"},
+                    "api_owner_id": "user/ownerKey/mock_owner",
+                    "rateLimit": {"rate": 100, "period": "Hourly"},
+                    "owner": "mock_owner",
+                }
+            ]
+        }
+
+        mock_cost_calculations_table = MagicMock()
+        mock_cost_calculations_table.query.return_value = {
+            "Items": [
+                {
+                    "id": "mock_owner",
+                    "hourlyCost": [0] * 24,  # Simulate no cost for all hours
+                }
+            ]
+        }
+
+        mock_boto3.return_value.Table.side_effect = lambda table_name: {
+            "mock_api_keys_table": mock_api_keys_table,
+            "mock_cost_calculations_table": mock_cost_calculations_table,
+        }[table_name]
+
+        # Should succeed because API key has "chat" which matches
+        # one of the required access types
+        result = api_claims({}, {}, "mock_token")
+        assert result["username"] == "mock_owner"
+        assert result["account"] == "mock_account_id"
+        assert result["allowed_access"] == ["chat", "file_upload"]
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
+
+
+@patch("authz.boto3.resource")
+@patch("authz.os.getenv")
+def test_api_claims_no_matching_access_types(mock_getenv, mock_boto3):
+    """Test api_claims when API key has no matching access types."""
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set specific access types required
+        authz._access_types = ["assistants", "dual_embedding"]
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+        }.get(key)
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "accessTypes": ["chat", "file_upload"],  # No matching access types
+                    "account": {"id": "mock_account_id"},
+                    "api_owner_id": "user/ownerKey/mock_owner",
+                    "owner": "mock_owner",
+                }
+            ]
+        }
+        mock_boto3.return_value.Table.return_value = mock_table
+
+        # Should raise PermissionError because no access types match
+        with pytest.raises(
+            PermissionError,
+            match="API key does not have access to the required functionality.",
+        ):
+            api_claims({}, {}, "mock_token")
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
