@@ -28,7 +28,7 @@ from jsonschema import validate as json_validate
 from jsonschema.exceptions import ValidationError
 from requests import Response
 
-from const import NO_RATE_LIMIT
+from const import NO_RATE_LIMIT, UNLIMITED, APIAccessType
 from decorators import required_env_vars
 from encoders import CustomPydanticJSONEncoder
 from exceptions import (
@@ -47,7 +47,7 @@ load_dotenv(dotenv_path=".env.local")
 # Global state for validation (similar to ops.py pattern)
 _validate_rules: Optional[Dict[str, Any]] = None
 _permission_checker: Optional[Callable] = None
-_access_types: Optional[List[str]] = ["full_access"]
+_access_types: Optional[List[str]] = [APIAccessType.FULL_ACCESS.value]
 
 
 def setup_validated(
@@ -266,7 +266,7 @@ def get_claims(token: str) -> dict:
     # can do the operation upon entry of the validated function
     # current access types include: asssistants, share, dual_embedding,
     # chat, file_upload
-    payload["allowed_access"] = ["full_access"]
+    payload["allowed_access"] = [APIAccessType.FULL_ACCESS.value]
     return payload
 
 
@@ -439,7 +439,7 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
     # Check rate limits
     rate_limit = item.get("rateLimit", {})
 
-    limited, msg = _is_rate_limited(current_user, rate_limit)
+    limited, msg = is_rate_limited(current_user, rate_limit)
     if limited:
         raise HTTPUnauthorized(msg)
 
@@ -507,7 +507,7 @@ def _determine_api_user(data: Dict[str, Any]) -> str:
 
 
 @required_env_vars("COST_CALCULATIONS_DYNAMO_TABLE")
-def _is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
+def is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
     """
     Checks if the current user has exceeded their rate limit based on usage data stored in DynamoDB.
 
@@ -525,7 +525,7 @@ def _is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
     period: Optional[str] = rate_limit.get("period")
     if period is None:
         return False, "Rate limit period is not specified in the rate_limit data"
-    if period == "Unlimited":
+    if period == UNLIMITED:
         return False, "No rate limit set"
 
     cost_calc_table: str = os.getenv("COST_CALCULATIONS_DYNAMO_TABLE")  # type: ignore
