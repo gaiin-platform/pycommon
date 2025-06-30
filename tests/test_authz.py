@@ -10,13 +10,13 @@ from requests import ConnectionError, HTTPError
 
 from authz import (
     _determine_api_user,
-    _is_rate_limited,
     _parse_and_validate,
     _parse_token,
     _validate_data,
     add_api_access_types,
     api_claims,
     get_claims,
+    is_rate_limited,
     set_permission_checker,
     set_validate_rules,
     setup_validated,
@@ -1125,9 +1125,7 @@ def test_api_claims_rate_limit_exceeded(mock_getenv, mock_boto3):
             ]
         }
         mock_boto3.return_value.Table.return_value = mock_table
-        with patch(
-            "authz._is_rate_limited", return_value=(True, "rate limit exceeded")
-        ):
+        with patch("authz.is_rate_limited", return_value=(True, "rate limit exceeded")):
             with pytest.raises(HTTPUnauthorized, match="rate limit exceeded"):
                 api_claims({}, {}, "mock_token")
 
@@ -1140,7 +1138,7 @@ def test_api_claims_rate_limit_exceeded(mock_getenv, mock_boto3):
 @patch("authz.os.getenv")
 def test_is_rate_limited_unlimited_period(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
-    assert _is_rate_limited("user", {"period": "Unlimited", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Unlimited", "rate": 100}) == (
         False,
         "No rate limit set",
     )
@@ -1150,7 +1148,7 @@ def test_is_rate_limited_unlimited_period(mock_getenv, mock_boto3):
 @patch("authz.os.getenv")
 def test_is_rate_limited_no_period(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
-    assert _is_rate_limited("user", {"rate": 100}) == (
+    assert is_rate_limited("user", {"rate": 100}) == (
         False,
         "Rate limit period is not specified in the rate_limit data",
     )
@@ -1163,7 +1161,7 @@ def test_is_rate_limited_no_items(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": []}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
         False,
         "Table entry does not exist. Cannot verify if rate limited.",
     )
@@ -1176,7 +1174,7 @@ def test_is_rate_limited_missing_col_name(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"id": "user"}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
         False,
         "Column hourlyCost not found in rate data",
     )
@@ -1189,12 +1187,12 @@ def test_is_rate_limited_hourly_cost_missing_or_malformed(mock_getenv, mock_boto
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"hourlyCost": None}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
         False,
         "Column hourlyCost not found in rate data",
     )
     mock_table.query.return_value = {"Items": [{"hourlyCost": []}]}
-    assert _is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
         False,
         "Hourly cost data is missing or malformed.",
     )
@@ -1209,7 +1207,7 @@ def test_is_rate_limited_hourly_cost_exceeded(mock_getenv, mock_boto3):
     mock_boto3.return_value.Table.return_value = mock_table
     with patch("authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
-        assert _is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
+        assert is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
             True,
             "rate limit exceeded ($5.00/Hourly)",
         )
@@ -1224,7 +1222,7 @@ def test_is_rate_limited_hourly_cost_not_exceeded(mock_getenv, mock_boto3):
     mock_boto3.return_value.Table.return_value = mock_table
     with patch("authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
-        assert _is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
+        assert is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
             False,
             "Rate limit not exceeded",
         )
@@ -1237,7 +1235,7 @@ def test_is_rate_limited_daily_cost_exceeded(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"dailyCost": 15}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
+    assert is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
         True,
         "rate limit exceeded ($10.00/Daily)",
     )
@@ -1250,7 +1248,7 @@ def test_is_rate_limited_daily_cost_not_exceeded(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"dailyCost": 5}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
+    assert is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
         False,
         "Rate limit not exceeded",
     )
@@ -1263,7 +1261,7 @@ def test_is_rate_limited_missing_rate(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"dailyCost": 5}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Daily"}) == (
+    assert is_rate_limited("user", {"period": "Daily"}) == (
         False,
         "Rate value missing in rate_limit.",
     )
@@ -1276,7 +1274,7 @@ def test_is_rate_limited_boto3_error(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.side_effect = Exception("boto3 error")
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
+    assert is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
         False,
         "Unexpected error during rate limit check",
     )
@@ -1290,7 +1288,7 @@ def test_is_rate_limited_table_entry_missing(mock_getenv, mock_boto3):
     mock_table.query.return_value = {"Items": []}
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Table entry does not exist" in msg
 
@@ -1303,7 +1301,7 @@ def test_is_rate_limited_column_missing(mock_getenv, mock_boto3):
     mock_table.query.return_value = {"Items": [{"id": "mock_user"}]}
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Column hourlyCost not found" in msg
 
@@ -1316,7 +1314,7 @@ def test_is_rate_limited_hourly_cost_malformed(mock_getenv, mock_boto3):
     mock_table.query.return_value = {"Items": [{"id": "mock_user", "hourlyCost": None}]}
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Column hourlyCost not found in rate data" in msg
 
@@ -1331,7 +1329,7 @@ def test_is_rate_limited_rate_value_missing(mock_getenv, mock_boto3):
     }
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly"}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Rate value missing in rate_limit." in msg
 
@@ -1349,7 +1347,7 @@ def test_is_rate_limited_exceeded(mock_getenv, mock_boto3):
     rate_limit = {"period": "Hourly", "rate": 100}
     with patch("authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
-        limited, msg = _is_rate_limited("mock_user", rate_limit)
+        limited, msg = is_rate_limited("mock_user", rate_limit)
         assert limited is True
         assert "rate limit exceeded" in msg
 
@@ -1367,7 +1365,7 @@ def test_is_rate_limited_not_exceeded(mock_getenv, mock_boto3):
     rate_limit = {"period": "Hourly", "rate": 100}
     with patch("authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
-        limited, msg = _is_rate_limited("mock_user", rate_limit)
+        limited, msg = is_rate_limited("mock_user", rate_limit)
         assert limited is False
         assert "Rate limit not exceeded" in msg
 
@@ -1380,7 +1378,7 @@ def test_is_rate_limited_boto3_exception(mock_getenv, mock_boto3):
     mock_table.query.side_effect = boto3.exceptions.Boto3Error()
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Error accessing DynamoDB" in msg
 
@@ -1393,7 +1391,7 @@ def test_is_rate_limited_unexpected_exception(mock_getenv, mock_boto3):
     mock_table.query.side_effect = Exception("unexpected")
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Unexpected error during rate limit" in msg
 
