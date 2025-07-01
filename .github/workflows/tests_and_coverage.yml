@@ -25,7 +25,7 @@ jobs:
 
       - name: Run tests and enforce 100% coverage
         run: |
-          pytest --cov=. --cov-report=term-missing --cov-fail-under=100 -v --cov-report xml:cov.xml
+          pytest --cov=pycommon --cov-report=term-missing --cov-fail-under=100  -v --cov-report xml:cov.xml
 
       - name: Check if tests and coverage passed
         run: echo "🎉 Clean code, tests, and coverage confirmed!"
