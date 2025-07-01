@@ -5,14 +5,18 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from api.files import get_file_presigned_url, upload_file, upload_to_presigned_url
+from pycommon.api.files import (
+    get_file_presigned_url,
+    upload_file,
+    upload_to_presigned_url,
+)
 
 
 class TestUploadFile:
     """Test cases for the upload_file function."""
 
-    @patch("api.files.upload_to_presigned_url")
-    @patch("api.files.get_file_presigned_url")
+    @patch("pycommon.api.files.upload_to_presigned_url")
+    @patch("pycommon.api.files.get_file_presigned_url")
     def test_upload_file_success_string_content(
         self, mock_get_presigned_url, mock_upload_to_presigned_url
     ):
@@ -50,8 +54,8 @@ class TestUploadFile:
             "https://s3.amazonaws.com/bucket/key", "Hello, world!", "text/plain"
         )
 
-    @patch("api.files.upload_to_presigned_url")
-    @patch("api.files.get_file_presigned_url")
+    @patch("pycommon.api.files.upload_to_presigned_url")
+    @patch("pycommon.api.files.get_file_presigned_url")
     def test_upload_file_success_bytes_content(
         self, mock_get_presigned_url, mock_upload_to_presigned_url
     ):
@@ -82,7 +86,7 @@ class TestUploadFile:
             "https://s3.amazonaws.com/bucket/key", binary_content, "image/png"
         )
 
-    @patch("api.files.get_file_presigned_url")
+    @patch("pycommon.api.files.get_file_presigned_url")
     def test_upload_file_presigned_url_failure(self, mock_get_presigned_url):
         """Test upload_file when getting presigned URL fails."""
         mock_get_presigned_url.return_value = {"success": False}
@@ -97,8 +101,8 @@ class TestUploadFile:
 
         assert result is None
 
-    @patch("api.files.upload_to_presigned_url")
-    @patch("api.files.get_file_presigned_url")
+    @patch("pycommon.api.files.upload_to_presigned_url")
+    @patch("pycommon.api.files.get_file_presigned_url")
     def test_upload_file_upload_failure(
         self, mock_get_presigned_url, mock_upload_to_presigned_url
     ):
@@ -120,8 +124,8 @@ class TestUploadFile:
 
         assert result is None
 
-    @patch("api.files.upload_to_presigned_url")
-    @patch("api.files.get_file_presigned_url")
+    @patch("pycommon.api.files.upload_to_presigned_url")
+    @patch("pycommon.api.files.get_file_presigned_url")
     def test_upload_file_with_defaults(
         self, mock_get_presigned_url, mock_upload_to_presigned_url
     ):
@@ -151,7 +155,7 @@ class TestGetFilePresignedUrl:
     """Test cases for the get_file_presigned_url function."""
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.files.requests.post")
+    @patch("pycommon.api.files.requests.post")
     def test_get_file_presigned_url_success(self, mock_post):
         """Test successful presigned URL retrieval."""
         mock_response = MagicMock()
@@ -192,7 +196,7 @@ class TestGetFilePresignedUrl:
         )
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.files.requests.post")
+    @patch("pycommon.api.files.requests.post")
     def test_get_file_presigned_url_api_error(self, mock_post):
         """Test presigned URL retrieval with API error."""
         mock_response = MagicMock()
@@ -207,7 +211,7 @@ class TestGetFilePresignedUrl:
         assert result["success"] is False
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.files.requests.post")
+    @patch("pycommon.api.files.requests.post")
     def test_get_file_presigned_url_exception(self, mock_post):
         """Test presigned URL retrieval with exception."""
         mock_post.side_effect = Exception("Network error")
@@ -219,7 +223,7 @@ class TestGetFilePresignedUrl:
         assert result["success"] is False
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.files.requests.post")
+    @patch("pycommon.api.files.requests.post")
     def test_get_file_presigned_url_partial_response(self, mock_post):
         """Test presigned URL retrieval with partial response."""
         mock_response = MagicMock()
@@ -243,7 +247,7 @@ class TestGetFilePresignedUrl:
 class TestUploadToPresignedUrl:
     """Test cases for the upload_to_presigned_url function."""
 
-    @patch("api.files.requests.put")
+    @patch("pycommon.api.files.requests.put")
     def test_upload_to_presigned_url_success_string(self, mock_put):
         """Test successful upload with string content."""
         mock_response = MagicMock()
@@ -261,7 +265,7 @@ class TestUploadToPresignedUrl:
             headers={"Content-Type": "text/plain"},
         )
 
-    @patch("api.files.requests.put")
+    @patch("pycommon.api.files.requests.put")
     def test_upload_to_presigned_url_success_bytes(self, mock_put):
         """Test successful upload with bytes content."""
         mock_response = MagicMock()
@@ -281,7 +285,7 @@ class TestUploadToPresignedUrl:
             headers={"Content-Type": "image/png"},
         )
 
-    @patch("api.files.requests.put")
+    @patch("pycommon.api.files.requests.put")
     def test_upload_to_presigned_url_failure(self, mock_put):
         """Test upload failure with non-200 status code."""
         mock_response = MagicMock()
@@ -294,7 +298,7 @@ class TestUploadToPresignedUrl:
 
         assert result is False
 
-    @patch("api.files.requests.put")
+    @patch("pycommon.api.files.requests.put")
     def test_upload_to_presigned_url_exception(self, mock_put):
         """Test upload with exception."""
         mock_put.side_effect = Exception("Network error")
@@ -305,7 +309,7 @@ class TestUploadToPresignedUrl:
 
         assert result is False
 
-    @patch("api.files.requests.put")
+    @patch("pycommon.api.files.requests.put")
     def test_upload_to_presigned_url_empty_string(self, mock_put):
         """Test upload with empty string content."""
         mock_response = MagicMock()
@@ -323,7 +327,7 @@ class TestUploadToPresignedUrl:
             headers={"Content-Type": "text/plain"},
         )
 
-    @patch("api.files.requests.put")
+    @patch("pycommon.api.files.requests.put")
     def test_upload_to_presigned_url_empty_bytes(self, mock_put):
         """Test upload with empty bytes content."""
         mock_response = MagicMock()
@@ -341,7 +345,7 @@ class TestUploadToPresignedUrl:
             headers={"Content-Type": "application/octet-stream"},
         )
 
-    @patch("api.files.requests.put")
+    @patch("pycommon.api.files.requests.put")
     def test_upload_to_presigned_url_unicode_string(self, mock_put):
         """Test upload with unicode string content."""
         mock_response = MagicMock()

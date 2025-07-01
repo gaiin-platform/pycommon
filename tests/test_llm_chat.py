@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from llm.chat import chat, chat_streaming
+from pycommon.llm.chat import chat, chat_streaming
 
 
 class TestChat:
@@ -19,7 +19,7 @@ class TestChat:
             b'data: {"s": "meta", "type": "usage", "tokens": 10}',
         ]
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             result, meta_events = chat(
                 "https://api.example.com/chat",
                 "test_token",
@@ -33,7 +33,9 @@ class TestChat:
 
     def test_chat_with_exception_in_streaming(self):
         """Test chat function when chat_streaming raises an exception."""
-        with patch("llm.chat.chat_streaming", side_effect=Exception("Network error")):
+        with patch(
+            "pycommon.llm.chat.chat_streaming", side_effect=Exception("Network error")
+        ):
             with patch("builtins.print") as mock_print:
                 result, meta_events = chat(
                     "https://api.example.com/chat", "test_token", {"messages": []}
@@ -49,7 +51,7 @@ class TestChat:
         mock_response.status_code = 200
         mock_response.iter_lines.return_value = []
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             result, meta_events = chat(
                 "https://api.example.com/chat", "test_token", {"messages": []}
             )
@@ -66,7 +68,7 @@ class TestChat:
             b'data: {"s": "meta", "type": "end"}',
         ]
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             result, meta_events = chat(
                 "https://api.example.com/chat", "test_token", {"messages": []}
             )
@@ -99,7 +101,7 @@ class TestChatStreaming:
         def meta_handler(data):
             meta_events.append(data)
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             chat_streaming(
                 "https://api.example.com/chat",
                 "test_token",
@@ -120,7 +122,7 @@ class TestChatStreaming:
         mock_response.status_code = 400
         mock_response.json.return_value = {"error": "Invalid request format"}
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             with patch("builtins.print") as mock_print:
                 with pytest.raises(Exception) as exc_info:
                     chat_streaming(
@@ -146,7 +148,7 @@ class TestChatStreaming:
             "500 Internal Server Error"
         )
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             with pytest.raises(Exception) as exc_info:
                 chat_streaming(
                     "https://api.example.com/chat",
@@ -164,7 +166,7 @@ class TestChatStreaming:
         mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
         mock_response.raise_for_status.side_effect = Exception("400 Bad Request")
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             with pytest.raises(Exception) as exc_info:
                 chat_streaming(
                     "https://api.example.com/chat",
@@ -184,7 +186,7 @@ class TestChatStreaming:
             b'data: {"error": "Service temporarily unavailable"}',
         ]
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             with patch("builtins.print") as mock_print:
                 with pytest.raises(Exception) as exc_info:
                     chat_streaming(
@@ -214,7 +216,7 @@ class TestChatStreaming:
         def content_handler(data):
             content_events.append(data)
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             with patch("builtins.print") as mock_print:
                 chat_streaming(
                     "https://api.example.com/chat",
@@ -249,7 +251,7 @@ class TestChatStreaming:
         def content_handler(data):
             content_events.append(data)
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             chat_streaming(
                 "https://api.example.com/chat",
                 "test_token",
@@ -275,7 +277,7 @@ class TestChatStreaming:
         def content_handler(data):
             content_events.append(data)
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             chat_streaming(
                 "https://api.example.com/chat",
                 "test_token",
@@ -301,7 +303,7 @@ class TestChatStreaming:
         def content_handler(data):
             content_events.append(data)
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             # Test with default meta_handler parameter
             chat_streaming(
                 "https://api.example.com/chat",
@@ -319,7 +321,9 @@ class TestChatStreaming:
         mock_response.status_code = 200
         mock_response.iter_lines.return_value = []
 
-        with patch("llm.chat.requests.post", return_value=mock_response) as mock_post:
+        with patch(
+            "pycommon.llm.chat.requests.post", return_value=mock_response
+        ) as mock_post:
             chat_streaming(
                 "https://api.example.com/chat",
                 "test_access_token",
@@ -351,7 +355,7 @@ class TestChatStreaming:
         def content_handler(data):
             content_events.append(data)
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             chat_streaming(
                 "https://api.example.com/chat",
                 "test_token",
@@ -379,7 +383,7 @@ class TestChatIntegration:
             b'data: {"d": " third", "s": "content"}',
         ]
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             result, meta_events = chat(
                 "https://api.example.com/chat", "test_token", {"messages": []}
             )
@@ -401,7 +405,7 @@ class TestChatIntegration:
             b'data: {"s": "content"}',  # Missing 'd' key
         ]
 
-        with patch("llm.chat.requests.post", return_value=mock_response):
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
             result, meta_events = chat(
                 "https://api.example.com/chat", "test_token", {"messages": []}
             )

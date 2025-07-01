@@ -6,7 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from api.ops import (
+from pycommon.api import ops
+from pycommon.api.ops import (
     PermissionChecker,
     api_tool,
     set_op_type,
@@ -41,24 +42,21 @@ def test_permission_checker_protocol():
 def test_set_route_data():
     test_data = {"/test": {"method": "POST"}}
     set_route_data(test_data)
-    from api.ops import _route_data
 
-    assert _route_data == test_data
+    assert ops._route_data == test_data
 
 
 def test_set_permissions_by_state():
     test_permissions = {"/test": {"read": lambda user, data: True}}
     set_permissions_by_state(test_permissions)
-    from api.ops import _permissions_by_state
 
-    assert _permissions_by_state == test_permissions
+    assert ops._permissions_by_state == test_permissions
 
 
 def test_set_op_type():
     set_op_type("custom")
-    from api.ops import _op_type
 
-    assert _op_type == "custom"
+    assert ops._op_type == "custom"
 
 
 def test_api_tool_decorator():
@@ -68,8 +66,6 @@ def test_api_tool_decorator():
     set_route_data({"dummy": {}})
     set_op_type("test")
     # Reset permissions_by_state to None to avoid the AttributeError
-    from api.ops import set_permissions_by_state
-
     set_permissions_by_state(None)
 
     @api_tool(
@@ -85,11 +81,9 @@ def test_api_tool_decorator():
     result = test_function()
     assert result == {"result": "success"}
 
-    from api.ops import _route_data
-
-    assert "/test" in _route_data
-    assert _route_data["/test"]["name"] == "Test Tool"
-    assert _route_data["/test"]["method"] == "GET"
+    assert "/test" in ops._route_data
+    assert ops._route_data["/test"]["name"] == "Test Tool"
+    assert ops._route_data["/test"]["method"] == "GET"
 
 
 def test_api_tool_decorator_without_route_data():
@@ -111,14 +105,10 @@ def test_api_tool_decorator_without_route_data():
     assert result == {"result": "success"}
 
     # Since _route_data was empty, it shouldn't be populated
-    from api.ops import _route_data
-
-    assert _route_data == {}
+    assert ops._route_data == {}
 
 
 def test_api_tool_decorator_permissions_by_state_lines_71_72():
-    from api.ops import api_tool, set_permissions_by_state, set_route_data
-
     # Create a mock permissions object with permissions_by_state_type attribute
     mock_permissions = MagicMock()
     mock_permissions.permissions_by_state_type = {}
@@ -145,8 +135,6 @@ def test_api_tool_decorator_permissions_by_state_lines_71_72():
 
 # NEW TEST: Cover branch 10->exit (early return when permissions already exist)
 def test_api_tool_decorator_permissions_already_exist():
-    from api.ops import api_tool, set_permissions_by_state, set_route_data
-
     # Create a mock permissions object with pre-existing path
     mock_permissions = MagicMock()
     mock_permissions.permissions_by_state_type = {
@@ -195,10 +183,8 @@ def test_api_tool_decorator_method_validation():
     result = test_function_get()
     assert result == {"result": "success"}
 
-    from api.ops import _route_data
-
-    assert "/test_get" in _route_data
-    assert _route_data["/test_get"]["method"] == "GET"
+    assert "/test_get" in ops._route_data
+    assert ops._route_data["/test_get"]["method"] == "GET"
 
     # Test valid methods: POST
     @api_tool(
@@ -213,8 +199,8 @@ def test_api_tool_decorator_method_validation():
 
     result_post = test_function_post()
     assert result_post == {"result": "success"}
-    assert "/test_post" in _route_data
-    assert _route_data["/test_post"]["method"] == "POST"
+    assert "/test_post" in ops._route_data
+    assert ops._route_data["/test_post"]["method"] == "POST"
 
 
 def test_api_tool_decorator_invalid_method():
@@ -254,7 +240,7 @@ def test_api_tool_decorator_invalid_method():
         def test_function_invalid2():
             return {"result": "success"}
 
-    # Test case-sensitive validation
+    # Test lowercase method (should also be invalid)
     with pytest.raises(
         ValueError, match="Method must be either 'GET' or 'POST', got 'get'"
     ):

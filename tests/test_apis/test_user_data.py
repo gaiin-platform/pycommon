@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
-from api.user_data import load_user_data
+from pycommon.api.user_data import load_user_data
 
 
 class TestLoadUserData:
@@ -20,7 +20,7 @@ class TestLoadUserData:
         self.api_base_url = "https://api.example.com"
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     def test_load_user_data_success(self, mock_post):
         """Test successful user data loading."""
         # Mock successful response
@@ -63,7 +63,7 @@ class TestLoadUserData:
         assert result == {"user_id": "123", "name": "Test User"}
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     def test_load_user_data_success_false(self, mock_post):
         """Test response with success=False."""
         mock_response = Mock()
@@ -79,7 +79,7 @@ class TestLoadUserData:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     def test_load_user_data_non_200_status(self, mock_post):
         """Test response with non-200 status code."""
         mock_response = Mock()
@@ -95,7 +95,7 @@ class TestLoadUserData:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     def test_load_user_data_success_no_data(self, mock_post):
         """Test successful response but no data field."""
         mock_response = Mock()
@@ -111,7 +111,7 @@ class TestLoadUserData:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     def test_load_user_data_request_exception(self, mock_post):
         """Test handling of request exceptions."""
         mock_post.side_effect = requests.exceptions.RequestException("Network error")
@@ -123,7 +123,7 @@ class TestLoadUserData:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     def test_load_user_data_json_decode_error(self, mock_post):
         """Test handling of JSON decode errors."""
         mock_response = Mock()
@@ -139,7 +139,7 @@ class TestLoadUserData:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     def test_load_user_data_generic_exception(self, mock_post):
         """Test handling of generic exceptions."""
         mock_post.side_effect = Exception("Unexpected error")
@@ -151,7 +151,7 @@ class TestLoadUserData:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     @patch("builtins.print")
     def test_load_user_data_prints_messages(self, mock_print, mock_post):
         """Test that appropriate messages are printed."""
@@ -169,7 +169,7 @@ class TestLoadUserData:
         assert any("Response: " in call for call in print_calls)
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     @patch("builtins.print")
     def test_load_user_data_prints_error(self, mock_print, mock_post):
         """Test that error messages are printed on exception."""
@@ -192,7 +192,7 @@ class TestLoadUserData:
                 )
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
-    @patch("api.user_data.requests.post")
+    @patch("pycommon.api.user_data.requests.post")
     def test_load_user_data_with_empty_parameters(self, mock_post):
         """Test function with empty string parameters."""
         mock_response = Mock()

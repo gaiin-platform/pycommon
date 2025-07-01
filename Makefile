@@ -23,7 +23,7 @@ lint:
 
 # Run tests with coverage report
 coverage:
-	pytest --cov=. --cov-report=term-missing --cov-fail-under=100  -v --cov-report xml:cov.xml
+	pytest --cov=pycommon --cov-report=term-missing --cov-fail-under=100  -v --cov-report xml:cov.xml
 
 # Clean up coverage files
 clean:

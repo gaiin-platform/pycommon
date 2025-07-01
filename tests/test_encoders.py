@@ -3,7 +3,7 @@ import json
 
 from pydantic import BaseModel
 
-from encoders import (
+from pycommon.encoders import (
     CustomPydanticJSONEncoder,
     LossyDecimalEncoder,
     SafeDecimalEncoder,
@@ -92,7 +92,7 @@ def test_dumps_smart():
 def test_dumps_lossy():
     obj = {"value": decimal.Decimal("123.456")}
     result = dumps_lossy(obj)
-    assert result == '{"value": 123}'  # Decimal is truncated to an integerimport json
+    assert result == '{"value": 123}'  # Decimal is truncated to an integer
 
 
 def test_custom_pydantic_json_encoder_with_pydantic_model():

@@ -8,7 +8,7 @@ from jose.exceptions import JWTClaimsError
 from jsonschema.exceptions import ValidationError
 from requests import ConnectionError, HTTPError
 
-from authz import (
+from pycommon.authz import (
     _determine_api_user,
     _parse_and_validate,
     _parse_token,
@@ -23,7 +23,7 @@ from authz import (
     validated,
     verify_user_as_admin,
 )
-from exceptions import (
+from pycommon.exceptions import (
     ClaimException,
     EnvVarError,
     HTTPBadRequest,
@@ -63,8 +63,8 @@ def always_allow_permission_checker(user, type, op, data):
 always_allow_permission_checker(None, None, None, None)
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_success(mock_get_env, mock_post):
     mock_get_env.return_value = "http://mock-api.com"
 
@@ -86,8 +86,8 @@ def test_verify_user_as_admin_success(mock_get_env, mock_post):
     )
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_failure(mock_get_env, mock_post):
     mock_get_env.return_value = "http://mock-api.com"
 
@@ -101,8 +101,8 @@ def test_verify_user_as_admin_failure(mock_get_env, mock_post):
     assert result is False
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_http_error(mock_get_env, mock_post):
     mock_get_env.return_value = "http://mock-api.com"
 
@@ -113,8 +113,8 @@ def test_verify_user_as_admin_http_error(mock_get_env, mock_post):
     assert result is False
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_connection_error(mock_get_env, mock_post):
     mock_get_env.return_value = "http://mock-api.com"
 
@@ -125,8 +125,8 @@ def test_verify_user_as_admin_connection_error(mock_get_env, mock_post):
     assert result is False
 
 
-@patch("authz.requests.post")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.post")
+@patch("pycommon.authz.os.environ.get")
 def test_verify_user_as_admin_json_decode_error(mock_get_env, mock_post):
     mock_get_env.return_value = "http://mock-api.com"
 
@@ -140,11 +140,11 @@ def test_verify_user_as_admin_json_decode_error(mock_get_env, mock_post):
     assert result is False
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.boto3.resource")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_success(
     mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
 ):
@@ -185,8 +185,8 @@ def test_get_claims_success(
     assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
 def test_get_claims_missing_env(mock_get_env, mock_requests_get):
     required_env_vars = [
         "OAUTH_ISSUER_BASE_URL",
@@ -203,7 +203,7 @@ def test_get_claims_missing_env(mock_get_env, mock_requests_get):
             get_claims("mock_token")
 
 
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.os.environ.get")
 def test_get_claims_token_is_none(mock_get_env):
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
@@ -215,8 +215,8 @@ def test_get_claims_token_is_none(mock_get_env):
         get_claims(None)
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
 def test_get_claims_invalid_jwks(mock_get_env, mock_requests_get):
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
@@ -233,9 +233,9 @@ def test_get_claims_invalid_jwks(mock_get_env, mock_requests_get):
         get_claims("mock_token")
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.jwt.get_unverified_header")
 def test_get_claims_missing_rsa_key(mock_get_header, mock_get_env, mock_requests_get):
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
@@ -253,11 +253,11 @@ def test_get_claims_missing_rsa_key(mock_get_header, mock_get_env, mock_requests
         get_claims("mock_token")
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.boto3.resource")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_with_rsa_key(
     mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
 ):
@@ -295,10 +295,10 @@ def test_get_claims_with_rsa_key(
     assert x["rate_limit"] == {"period": "Unlimited", "rate": None}
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_with_no_kid_found(
     mock_decode, mock_get_header, mock_get_env, mock_requests_get
 ):
@@ -319,11 +319,11 @@ def test_get_claims_with_no_kid_found(
         get_claims("mock_token")
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.boto3.resource")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_no_dynamodb_item(
     mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
 ):
@@ -349,8 +349,8 @@ def test_get_claims_no_dynamodb_item(
         get_claims("mock_token")
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
 def test_get_claims_jwks_request_failed(mock_get_env, mock_requests_get):
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
@@ -367,11 +367,11 @@ def test_get_claims_jwks_request_failed(mock_get_env, mock_requests_get):
         get_claims("mock_token")
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.boto3.resource")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_default_account(
     mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
 ):
@@ -403,11 +403,11 @@ def test_get_claims_default_account(
     assert result["rate_limit"] == {"period": "Unlimited", "rate": None}
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.boto3.resource")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_no_default_account(
     mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
 ):
@@ -439,11 +439,11 @@ def test_get_claims_no_default_account(
     assert result["rate_limit"] == {"period": "Unlimited", "rate": None}
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.boto3.resource")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_no_accounts_list(
     mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
 ):
@@ -550,7 +550,7 @@ def test_parse_and_validate_missing_path():
         _parse_and_validate(current_user, event, op, api_accessed, rules)
 
 
-@patch("authz._validate_data")
+@patch("pycommon.authz._validate_data")
 def test_parse_and_validate_validation_error(mock_validate_data):
     mock_validate_data.side_effect = ValidationError("Invalid data")
 
@@ -586,7 +586,7 @@ def test_parse_and_validate_permission_denied():
         )
 
 
-@patch("authz._validate_data")
+@patch("pycommon.authz._validate_data")
 def test_parse_and_validate_no_body(mock_validate_data):
     def mock_permission_checker(user, type, op, data):
         return lambda user, data: True
@@ -627,17 +627,17 @@ def test_parse_and_validate_valid_input():
     assert result == ["/state/share", {"key": "test", "value": 123}]
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_success(mock_getenv, mock_boto3):
-    import authz
+    import pycommon.authz
 
     # Store original access types to restore later
-    original_access_types = authz._access_types.copy()
+    original_access_types = pycommon.authz._access_types.copy()
 
     try:
         # Set access types to include the ones used in this test
-        authz._access_types = ["full_access", "file_upload", "share"]
+        pycommon.authz._access_types = ["full_access", "file_upload", "share"]
 
         mock_getenv.side_effect = lambda key: {
             "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
@@ -683,11 +683,11 @@ def test_api_claims_success(mock_getenv, mock_boto3):
 
     finally:
         # Restore original state
-        authz._access_types = original_access_types
+        pycommon.authz._access_types = original_access_types
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_key_not_found(mock_getenv, mock_boto3):
     mock_getenv.side_effect = lambda key: {
         "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
@@ -701,8 +701,8 @@ def test_api_claims_key_not_found(mock_getenv, mock_boto3):
         api_claims({}, {}, "mock_token")
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_inactive_key(mock_getenv, mock_boto3):
     mock_getenv.side_effect = lambda key: {
         "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
@@ -716,8 +716,8 @@ def test_api_claims_inactive_key(mock_getenv, mock_boto3):
         api_claims({}, {}, "mock_token")
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_expired_key(mock_getenv, mock_boto3):
     mock_getenv.side_effect = lambda key: {
         "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
@@ -733,8 +733,8 @@ def test_api_claims_expired_key(mock_getenv, mock_boto3):
         api_claims({}, {}, "mock_token")
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_no_access_rights(mock_getenv, mock_boto3):
     mock_getenv.side_effect = lambda key: {
         "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
@@ -939,12 +939,12 @@ def test_parse_token_extra_spaces():
         _parse_token(event)
 
 
-@patch("authz._parse_token")
-@patch("authz.api_claims")
-@patch("authz._parse_and_validate")
-@patch("authz.get_claims")
-@patch("authz.os.environ.get")
-@patch("authz.requests.get")
+@patch("pycommon.authz._parse_token")
+@patch("pycommon.authz.api_claims")
+@patch("pycommon.authz._parse_and_validate")
+@patch("pycommon.authz.get_claims")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.requests.get")
 def test_validated_api_access_success(
     mock_requests_get,
     mock_get_env,
@@ -996,9 +996,9 @@ def test_validated_api_access_success(
     assert resp["body"] == '{"ok": true}'
 
 
-@patch("authz._parse_token")
-@patch("authz.get_claims")
-@patch("authz._parse_and_validate")
+@patch("pycommon.authz._parse_token")
+@patch("pycommon.authz.get_claims")
+@patch("pycommon.authz._parse_and_validate")
 def test_validated_user_access_success(
     mock_parse_and_validate, mock_get_claims, mock_parse_token
 ):
@@ -1029,9 +1029,9 @@ def test_validated_user_access_success(
     assert resp["body"] == '{"ok": true}'
 
 
-@patch("authz._parse_token")
-@patch("authz.get_claims")
-@patch("authz._parse_and_validate")
+@patch("pycommon.authz._parse_token")
+@patch("pycommon.authz.get_claims")
+@patch("pycommon.authz._parse_and_validate")
 def test_validated_user_not_found(
     mock_parse_and_validate, mock_get_claims, mock_parse_token
 ):
@@ -1062,9 +1062,9 @@ def test_validated_user_not_found(
     assert "User not found" in json.loads(resp["body"])["error"]
 
 
-@patch("authz._parse_token")
-@patch("authz.get_claims")
-@patch("authz._parse_and_validate")
+@patch("pycommon.authz._parse_token")
+@patch("pycommon.authz.get_claims")
+@patch("pycommon.authz._parse_and_validate")
 def test_validated_http_exception(
     mock_parse_and_validate, mock_get_claims, mock_parse_token
 ):
@@ -1095,17 +1095,17 @@ def test_validated_http_exception(
     assert "bad input" in json.loads(resp["body"])["error"]
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_rate_limit_exceeded(mock_getenv, mock_boto3):
-    import authz
+    import pycommon.authz
 
     # Store original access types to restore later
-    original_access_types = authz._access_types.copy()
+    original_access_types = pycommon.authz._access_types.copy()
 
     try:
         # Set access types to include the ones used in this test
-        authz._access_types = ["full_access", "file_upload", "share"]
+        pycommon.authz._access_types = ["full_access", "file_upload", "share"]
 
         mock_getenv.side_effect = lambda key: {
             "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
@@ -1125,17 +1125,19 @@ def test_api_claims_rate_limit_exceeded(mock_getenv, mock_boto3):
             ]
         }
         mock_boto3.return_value.Table.return_value = mock_table
-        with patch("authz.is_rate_limited", return_value=(True, "rate limit exceeded")):
+        with patch(
+            "pycommon.authz.is_rate_limited", return_value=(True, "rate limit exceeded")
+        ):
             with pytest.raises(HTTPUnauthorized, match="rate limit exceeded"):
                 api_claims({}, {}, "mock_token")
 
     finally:
         # Restore original state
-        authz._access_types = original_access_types
+        pycommon.authz._access_types = original_access_types
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_unlimited_period(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     assert is_rate_limited("user", {"period": "Unlimited", "rate": 100}) == (
@@ -1144,8 +1146,8 @@ def test_is_rate_limited_unlimited_period(mock_getenv, mock_boto3):
     )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_no_period(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     assert is_rate_limited("user", {"rate": 100}) == (
@@ -1154,8 +1156,8 @@ def test_is_rate_limited_no_period(mock_getenv, mock_boto3):
     )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_no_items(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     mock_table = MagicMock()
@@ -1167,8 +1169,8 @@ def test_is_rate_limited_no_items(mock_getenv, mock_boto3):
     )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_missing_col_name(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     mock_table = MagicMock()
@@ -1180,8 +1182,8 @@ def test_is_rate_limited_missing_col_name(mock_getenv, mock_boto3):
     )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_hourly_cost_missing_or_malformed(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     mock_table = MagicMock()
@@ -1198,14 +1200,14 @@ def test_is_rate_limited_hourly_cost_missing_or_malformed(mock_getenv, mock_boto
     )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_hourly_cost_exceeded(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"hourlyCost": [10] + [0] * 23}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    with patch("authz.datetime") as mock_datetime:
+    with patch("pycommon.authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
         assert is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
             True,
@@ -1213,14 +1215,14 @@ def test_is_rate_limited_hourly_cost_exceeded(mock_getenv, mock_boto3):
         )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_hourly_cost_not_exceeded(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"hourlyCost": [2] + [0] * 23}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    with patch("authz.datetime") as mock_datetime:
+    with patch("pycommon.authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
         assert is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
             False,
@@ -1228,8 +1230,8 @@ def test_is_rate_limited_hourly_cost_not_exceeded(mock_getenv, mock_boto3):
         )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_daily_cost_exceeded(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     mock_table = MagicMock()
@@ -1241,8 +1243,8 @@ def test_is_rate_limited_daily_cost_exceeded(mock_getenv, mock_boto3):
     )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_daily_cost_not_exceeded(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     mock_table = MagicMock()
@@ -1254,8 +1256,8 @@ def test_is_rate_limited_daily_cost_not_exceeded(mock_getenv, mock_boto3):
     )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_missing_rate(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     mock_table = MagicMock()
@@ -1267,8 +1269,8 @@ def test_is_rate_limited_missing_rate(mock_getenv, mock_boto3):
     )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_boto3_error(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
     mock_table = MagicMock()
@@ -1280,8 +1282,8 @@ def test_is_rate_limited_boto3_error(mock_getenv, mock_boto3):
     )
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_table_entry_missing(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_table"
     mock_table = MagicMock()
@@ -1293,8 +1295,8 @@ def test_is_rate_limited_table_entry_missing(mock_getenv, mock_boto3):
     assert "Table entry does not exist" in msg
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_column_missing(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_table"
     mock_table = MagicMock()
@@ -1306,8 +1308,8 @@ def test_is_rate_limited_column_missing(mock_getenv, mock_boto3):
     assert "Column hourlyCost not found" in msg
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_hourly_cost_malformed(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_table"
     mock_table = MagicMock()
@@ -1319,8 +1321,8 @@ def test_is_rate_limited_hourly_cost_malformed(mock_getenv, mock_boto3):
     assert "Column hourlyCost not found in rate data" in msg
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_rate_value_missing(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_table"
     mock_table = MagicMock()
@@ -1334,8 +1336,8 @@ def test_is_rate_limited_rate_value_missing(mock_getenv, mock_boto3):
     assert "Rate value missing in rate_limit." in msg
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_exceeded(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_table"
     mock_table = MagicMock()
@@ -1345,15 +1347,15 @@ def test_is_rate_limited_exceeded(mock_getenv, mock_boto3):
     }
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    with patch("authz.datetime") as mock_datetime:
+    with patch("pycommon.authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
         limited, msg = is_rate_limited("mock_user", rate_limit)
         assert limited is True
         assert "rate limit exceeded" in msg
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_not_exceeded(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_table"
     mock_table = MagicMock()
@@ -1363,15 +1365,15 @@ def test_is_rate_limited_not_exceeded(mock_getenv, mock_boto3):
     }
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    with patch("authz.datetime") as mock_datetime:
+    with patch("pycommon.authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
         limited, msg = is_rate_limited("mock_user", rate_limit)
         assert limited is False
         assert "Rate limit not exceeded" in msg
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_boto3_exception(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_table"
     mock_table = MagicMock()
@@ -1383,8 +1385,8 @@ def test_is_rate_limited_boto3_exception(mock_getenv, mock_boto3):
     assert "Error accessing DynamoDB" in msg
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_is_rate_limited_unexpected_exception(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_table"
     mock_table = MagicMock()
@@ -1396,8 +1398,8 @@ def test_is_rate_limited_unexpected_exception(mock_getenv, mock_boto3):
     assert "Unexpected error during rate limit" in msg
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
 def test_get_claims_missing_env_vars(mock_get_env, _):
     required_vars = ["OAUTH_ISSUER_BASE_URL", "OAUTH_AUDIENCE", "ACCOUNTS_DYNAMO_TABLE"]
     mock_get_env.side_effect = lambda key, default=None: (
@@ -1410,8 +1412,8 @@ def test_get_claims_missing_env_vars(mock_get_env, _):
         assert f"Env Var: '{missing}' is not set" in str(exc.value)
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
 def test_get_claims_jwks_invalid_json(mock_get_env, mock_requests_get):
     mock_get_env.side_effect = lambda key, default=None: (
         "issuer"
@@ -1426,10 +1428,10 @@ def test_get_claims_jwks_invalid_json(mock_get_env, mock_requests_get):
         get_claims("sometoken")
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_jwt_decode_error(
     mock_decode, mock_get_header, mock_get_env, mock_requests_get
 ):
@@ -1448,10 +1450,10 @@ def test_get_claims_jwt_decode_error(
         get_claims("sometoken")
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_jwt_expired_sigs_error(
     mock_decode, mock_get_header, mock_get_env, mock_requests_get
 ):
@@ -1470,10 +1472,10 @@ def test_get_claims_jwt_expired_sigs_error(
         get_claims("sometoken")
 
 
-@patch("authz.requests.get")
-@patch("authz.os.environ.get")
-@patch("authz.jwt.get_unverified_header")
-@patch("authz.jwt.decode")
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_jwt_expired_claims_error(
     mock_decode, mock_get_header, mock_get_env, mock_requests_get
 ):
@@ -1504,10 +1506,10 @@ def test_setup_validated():
     setup_validated(test_rules, test_checker)
 
     # Import the globals to check they were set
-    import authz
+    import pycommon.authz
 
-    assert authz._validate_rules == test_rules
-    assert authz._permission_checker == test_checker
+    assert pycommon.authz._validate_rules == test_rules
+    assert pycommon.authz._permission_checker == test_checker
 
 
 def test_set_validate_rules():
@@ -1517,9 +1519,9 @@ def test_set_validate_rules():
     set_validate_rules(test_rules)
 
     # Import the globals to check they were set
-    import authz
+    import pycommon.authz
 
-    assert authz._validate_rules == test_rules
+    assert pycommon.authz._validate_rules == test_rules
 
 
 def test_set_permission_checker():
@@ -1531,48 +1533,48 @@ def test_set_permission_checker():
     set_permission_checker(test_checker)
 
     # Import the globals to check they were set
-    import authz
+    import pycommon.authz
 
-    assert authz._permission_checker == test_checker
+    assert pycommon.authz._permission_checker == test_checker
 
 
 def test_add_api_access_types():
     """Test the add_api_access_types function adds access types to the global list."""
-    import authz
+    import pycommon.authz
 
     # Store original access types to restore later
-    original_access_types = authz._access_types.copy()
+    original_access_types = pycommon.authz._access_types.copy()
 
     try:
         # Reset to known state
-        authz._access_types = ["full_access"]
+        pycommon.authz._access_types = ["full_access"]
 
         # Add new access types
         add_api_access_types(["chat", "file_upload"])
 
         # Check that the access types were added
-        assert "full_access" in authz._access_types
-        assert "chat" in authz._access_types
-        assert "file_upload" in authz._access_types
-        assert len(authz._access_types) == 3
+        assert "full_access" in pycommon.authz._access_types
+        assert "chat" in pycommon.authz._access_types
+        assert "file_upload" in pycommon.authz._access_types
+        assert len(pycommon.authz._access_types) == 3
 
     finally:
         # Restore original state
-        authz._access_types = original_access_types
+        pycommon.authz._access_types = original_access_types
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_empty_access_types(mock_getenv, mock_boto3):
     """Test api_claims when _access_types is empty - should raise PermissionError."""
-    import authz
+    import pycommon.authz
 
     # Store original access types to restore later
-    original_access_types = authz._access_types.copy()
+    original_access_types = pycommon.authz._access_types.copy()
 
     try:
         # Set _access_types to empty list
-        authz._access_types = []
+        pycommon.authz._access_types = []
 
         mock_getenv.side_effect = lambda key: {
             "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
@@ -1602,21 +1604,21 @@ def test_api_claims_empty_access_types(mock_getenv, mock_boto3):
 
     finally:
         # Restore original state
-        authz._access_types = original_access_types
+        pycommon.authz._access_types = original_access_types
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_partial_access_match(mock_getenv, mock_boto3):
     """Test api_claims when API key has some matching access types."""
-    import authz
+    import pycommon.authz
 
     # Store original access types to restore later
-    original_access_types = authz._access_types.copy()
+    original_access_types = pycommon.authz._access_types.copy()
 
     try:
         # Set specific access types required
-        authz._access_types = ["chat", "assistants"]
+        pycommon.authz._access_types = ["chat", "assistants"]
 
         mock_getenv.side_effect = lambda key: {
             "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
@@ -1666,21 +1668,21 @@ def test_api_claims_partial_access_match(mock_getenv, mock_boto3):
 
     finally:
         # Restore original state
-        authz._access_types = original_access_types
+        pycommon.authz._access_types = original_access_types
 
 
-@patch("authz.boto3.resource")
-@patch("authz.os.getenv")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_no_matching_access_types(mock_getenv, mock_boto3):
     """Test api_claims when API key has no matching access types."""
-    import authz
+    import pycommon.authz
 
     # Store original access types to restore later
-    original_access_types = authz._access_types.copy()
+    original_access_types = pycommon.authz._access_types.copy()
 
     try:
         # Set specific access types required
-        authz._access_types = ["assistants", "dual_embedding"]
+        pycommon.authz._access_types = ["assistants", "dual_embedding"]
 
         mock_getenv.side_effect = lambda key: {
             "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
@@ -1710,4 +1712,4 @@ def test_api_claims_no_matching_access_types(mock_getenv, mock_boto3):
 
     finally:
         # Restore original state
-        authz._access_types = original_access_types
+        pycommon.authz._access_types = original_access_types

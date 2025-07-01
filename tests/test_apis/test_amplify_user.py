@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from api.amplify_users import (
+from pycommon.api.amplify_users import (
     get_email_suggestions,
     get_system_ids,
     is_valid_amplify_user,
@@ -19,7 +19,7 @@ class TestGetEmailSuggestions:
     """Test cases for get_email_suggestions function."""
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_success_default_prefix(self, mock_get):
         """Test successful email suggestions retrieval with default prefix."""
         mock_response = MagicMock()
@@ -42,7 +42,7 @@ class TestGetEmailSuggestions:
         )
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_success_custom_prefix(self, mock_get):
         """Test successful email suggestions retrieval with custom prefix."""
         mock_response = MagicMock()
@@ -65,7 +65,7 @@ class TestGetEmailSuggestions:
         )
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_empty_response(self, mock_get):
         """Test handling of empty email list in response."""
         mock_response = MagicMock()
@@ -78,7 +78,7 @@ class TestGetEmailSuggestions:
         assert result == []
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_missing_emails_key(self, mock_get):
         """Test handling of response missing 'emails' key."""
         mock_response = MagicMock()
@@ -91,7 +91,7 @@ class TestGetEmailSuggestions:
         assert result == []
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_http_error(self, mock_get):
         """Test handling of HTTP error responses."""
         mock_response = MagicMock()
@@ -104,7 +104,7 @@ class TestGetEmailSuggestions:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_network_error(self, mock_get):
         """Test handling of network errors."""
         mock_get.side_effect = requests.RequestException("Network error")
@@ -114,7 +114,7 @@ class TestGetEmailSuggestions:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_json_decode_error(self, mock_get):
         """Test handling of JSON decode errors."""
         mock_response = MagicMock()
@@ -127,7 +127,7 @@ class TestGetEmailSuggestions:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_unexpected_error(self, mock_get):
         """Test handling of unexpected errors."""
         mock_get.side_effect = Exception("Unexpected error")
@@ -141,7 +141,7 @@ class TestGetSystemIds:
     """Test cases for get_system_ids function."""
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_system_ids_success(self, mock_get):
         """Test successful system IDs retrieval."""
         mock_response = MagicMock()
@@ -187,7 +187,7 @@ class TestGetSystemIds:
         )
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_system_ids_success_false(self, mock_get):
         """Test handling when API returns success=False."""
         mock_response = MagicMock()
@@ -203,7 +203,7 @@ class TestGetSystemIds:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_system_ids_empty_data(self, mock_get):
         """Test handling of empty data array."""
         mock_response = MagicMock()
@@ -216,7 +216,7 @@ class TestGetSystemIds:
         assert result == []
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_system_ids_missing_data_key(self, mock_get):
         """Test handling of response missing 'data' key."""
         mock_response = MagicMock()
@@ -229,7 +229,7 @@ class TestGetSystemIds:
         assert result == []
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_system_ids_http_error(self, mock_get):
         """Test handling of HTTP error responses."""
         mock_response = MagicMock()
@@ -242,7 +242,7 @@ class TestGetSystemIds:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_system_ids_network_error(self, mock_get):
         """Test handling of network errors."""
         mock_get.side_effect = requests.RequestException("Network error")
@@ -252,7 +252,7 @@ class TestGetSystemIds:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_system_ids_json_decode_error(self, mock_get):
         """Test handling of JSON decode errors."""
         mock_response = MagicMock()
@@ -265,7 +265,7 @@ class TestGetSystemIds:
         assert result is None
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-    @patch("api.amplify_users.requests.get")
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_system_ids_unexpected_error(self, mock_get):
         """Test handling of unexpected errors."""
         mock_get.side_effect = Exception("Unexpected error")
@@ -278,8 +278,8 @@ class TestGetSystemIds:
 class TestIsValidAmplifyUser:
     """Test cases for is_valid_amplify_user function."""
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_valid_email_in_emails(
         self, mock_get_emails, mock_get_systems
     ):
@@ -299,8 +299,8 @@ class TestIsValidAmplifyUser:
         mock_get_emails.assert_called_once_with("test_token", "*")
         mock_get_systems.assert_called_once_with("test_token")
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_valid_email_in_systems(
         self, mock_get_emails, mock_get_systems
     ):
@@ -315,8 +315,8 @@ class TestIsValidAmplifyUser:
 
         assert result is True
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_case_insensitive(
         self, mock_get_emails, mock_get_systems
     ):
@@ -331,8 +331,8 @@ class TestIsValidAmplifyUser:
         # Test system user case insensitive
         assert is_valid_amplify_user("test_token", "system1@example.com") is True
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_invalid_email(
         self, mock_get_emails, mock_get_systems
     ):
@@ -346,8 +346,8 @@ class TestIsValidAmplifyUser:
 
         assert result is False
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_both_lists_empty(
         self, mock_get_emails, mock_get_systems
     ):
@@ -359,8 +359,8 @@ class TestIsValidAmplifyUser:
 
         assert result is False
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_emails_fail_systems_work(
         self, mock_get_emails, mock_get_systems
     ):
@@ -374,8 +374,8 @@ class TestIsValidAmplifyUser:
 
         assert result is True
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_systems_fail_emails_work(
         self, mock_get_emails, mock_get_systems
     ):
@@ -387,8 +387,8 @@ class TestIsValidAmplifyUser:
 
         assert result is True
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_both_fail(self, mock_get_emails, mock_get_systems):
         """Test validation when both API calls fail."""
         mock_get_emails.return_value = None
@@ -398,8 +398,8 @@ class TestIsValidAmplifyUser:
 
         assert result is False
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_system_data_without_owner(
         self, mock_get_emails, mock_get_systems
     ):
@@ -417,8 +417,8 @@ class TestIsValidAmplifyUser:
         assert is_valid_amplify_user("test_token", "system2@example.com") is True
         assert is_valid_amplify_user("test_token", "nonexistent@example.com") is False
 
-    @patch("api.amplify_users.get_system_ids")
-    @patch("api.amplify_users.get_email_suggestions")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_is_valid_amplify_user_duplicate_emails(
         self, mock_get_emails, mock_get_systems
     ):

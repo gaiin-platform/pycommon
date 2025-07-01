@@ -91,7 +91,7 @@ class TokenV1(Token):
     _salt: str = ""
     _raw_key: str
     _key: str
-    _identifier: str = "ampv1-"
+    _identifier: str = "amp-"
 
     def __init__(self, key: str = ""):
 
@@ -104,7 +104,7 @@ class TokenV1(Token):
             self._raw_key = key
             self._key = self._key_generator(self._raw_key, self._salt)
         else:
-            self._raw_key = f"{self._identifier}{secrets.token_urlsafe(32)}"
+            self._raw_key = f"{self._identifier}v1-{secrets.token_urlsafe(32)}"
             self._key = self._key_generator(self._raw_key, self._salt)
 
         super().__init__(self._key, self._salt)

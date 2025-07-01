@@ -15,7 +15,7 @@ Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas, Sam Hays
 import os
 from typing import Any, Callable
 
-from exceptions import EnvVarError
+from pycommon.exceptions import EnvVarError
 
 
 def required_env_vars(*vars: str) -> Callable:

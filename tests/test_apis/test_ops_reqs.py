@@ -5,11 +5,11 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from api.ops_reqs import get_all_op, register_ops
+from pycommon.api.ops_reqs import get_all_op, register_ops
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ops_reqs.requests.get")
+@patch("pycommon.api.ops_reqs.requests.get")
 def test_get_all_op_success(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -22,7 +22,7 @@ def test_get_all_op_success(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ops_reqs.requests.get")
+@patch("pycommon.api.ops_reqs.requests.get")
 def test_get_all_op_success_elif_branch(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -35,7 +35,7 @@ def test_get_all_op_success_elif_branch(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ops_reqs.requests.get")
+@patch("pycommon.api.ops_reqs.requests.get")
 def test_get_all_op_failure(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -48,7 +48,7 @@ def test_get_all_op_failure(mock_get):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ops_reqs.requests.post")
+@patch("pycommon.api.ops_reqs.requests.post")
 def test_register_ops_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -61,7 +61,7 @@ def test_register_ops_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ops_reqs.requests.post")
+@patch("pycommon.api.ops_reqs.requests.post")
 def test_register_ops_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -74,7 +74,7 @@ def test_register_ops_success_elif_branch(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ops_reqs.requests.post")
+@patch("pycommon.api.ops_reqs.requests.post")
 def test_register_ops_exception_lines_64_70(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -84,7 +84,7 @@ def test_register_ops_exception_lines_64_70(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ops_reqs.requests.get")
+@patch("pycommon.api.ops_reqs.requests.get")
 def test_get_all_op_json_decode_error(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -97,7 +97,7 @@ def test_get_all_op_json_decode_error(mock_get):
 
 # Additional coverage tests for ops_reqs.py
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ops_reqs.requests.post")
+@patch("pycommon.api.ops_reqs.requests.post")
 def test_register_ops_exception_lines_64_70_new(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -107,7 +107,7 @@ def test_register_ops_exception_lines_64_70_new(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.ops_reqs.requests.post")
+@patch("pycommon.api.ops_reqs.requests.post")
 def test_register_ops_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400

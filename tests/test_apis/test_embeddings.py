@@ -6,14 +6,14 @@ import json
 import os
 from unittest.mock import MagicMock, patch
 
-from api.embeddings import (
+from pycommon.api.embeddings import (
     check_embedding_completion,
     delete_embeddings,
 )
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.embeddings.requests.post")
+@patch("pycommon.api.embeddings.requests.post")
 def test_delete_embeddings_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -27,7 +27,7 @@ def test_delete_embeddings_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.embeddings.requests.post")
+@patch("pycommon.api.embeddings.requests.post")
 def test_delete_embeddings_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -41,7 +41,7 @@ def test_delete_embeddings_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.embeddings.requests.post")
+@patch("pycommon.api.embeddings.requests.post")
 def test_delete_embeddings_string_input(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -58,7 +58,7 @@ def test_delete_embeddings_string_input(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.embeddings.requests.post")
+@patch("pycommon.api.embeddings.requests.post")
 def test_check_embedding_completion_success(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -71,7 +71,7 @@ def test_check_embedding_completion_success(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.embeddings.requests.post")
+@patch("pycommon.api.embeddings.requests.post")
 def test_check_embedding_completion_failure(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 400
@@ -84,7 +84,7 @@ def test_check_embedding_completion_failure(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.embeddings.requests.post")
+@patch("pycommon.api.embeddings.requests.post")
 def test_check_embedding_completion_exception_lines_68_74(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -95,7 +95,7 @@ def test_check_embedding_completion_exception_lines_68_74(mock_post):
 
 # Additional coverage tests for embeddings.py
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.embeddings.requests.post")
+@patch("pycommon.api.embeddings.requests.post")
 def test_delete_embeddings_exception_lines_41_43(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -106,7 +106,7 @@ def test_delete_embeddings_exception_lines_41_43(mock_post):
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.embeddings.requests.post")
+@patch("pycommon.api.embeddings.requests.post")
 def test_check_embedding_completion_exception(mock_post):
     mock_post.side_effect = Exception("Network error")
 
@@ -117,7 +117,7 @@ def test_check_embedding_completion_exception(mock_post):
 
 # NEW TEST: Cover elif branch 68->74 (status_code == 200 AND success == True)
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
-@patch("api.embeddings.requests.post")
+@patch("pycommon.api.embeddings.requests.post")
 def test_check_embedding_completion_success_elif_branch(mock_post):
     mock_response = MagicMock()
     mock_response.status_code = 200
