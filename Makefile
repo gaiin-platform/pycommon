@@ -1,4 +1,4 @@
-.PHONY: help test coverage clean format
+.PHONY: help test coverage clean format lint
 
 help:
 	@echo "Available commands:"
@@ -6,6 +6,7 @@ help:
 	@echo "  make coverage   - Run tests with coverage report"
 	@echo "  make clean      - Clean up coverage files"
 	@echo "  make format     - Format code with black"
+	@echo "  make lint       - Run flake8 for code linting"
 
 
 # Run tests with pytest
@@ -16,9 +17,13 @@ test:
 format:
 	black .
 
+# Run flake8 for code linting
+lint:
+	flake8 --exclude=venv .
+
 # Run tests with coverage report
 coverage:
-	pytest --cov --cov-report=term-missing --cov-fail-under=100  -v --cov-report xml:cov.xml
+	pytest --cov=. --cov-report=term-missing --cov-fail-under=100  -v --cov-report xml:cov.xml
 
 # Clean up coverage files
 clean:

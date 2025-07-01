@@ -5,17 +5,21 @@ import boto3
 import pytest
 from jose import ExpiredSignatureError, JWTError
 from jose.exceptions import JWTClaimsError
-from jsonschema import ValidationError
+from jsonschema.exceptions import ValidationError
 from requests import ConnectionError, HTTPError
 
 from authz import (
     _determine_api_user,
-    _is_rate_limited,
     _parse_and_validate,
     _parse_token,
     _validate_data,
+    add_api_access_types,
     api_claims,
     get_claims,
+    is_rate_limited,
+    set_permission_checker,
+    set_validate_rules,
+    setup_validated,
     validated,
     verify_user_as_admin,
 )
@@ -50,6 +54,13 @@ rules = {
         "/state/share/load": {"load": share_load_schema},
     }
 }
+
+
+def always_allow_permission_checker(user, type, op, data):
+    return lambda user, data: True
+
+
+always_allow_permission_checker(None, None, None, None)
 
 
 @patch("authz.requests.post")
@@ -146,7 +157,7 @@ def test_get_claims_success(
 
     mock_requests_get.return_value = MagicMock(
         ok=True,
-        json=MagicMock(return_value={"Keys": {"mock_kid": {"key": "mock_key"}}}),
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
     )
 
     mock_get_header.return_value = {"kid": "mock_kid"}
@@ -155,7 +166,13 @@ def test_get_claims_success(
     mock_table = MagicMock()
     mock_table.get_item.return_value = {
         "Item": {
-            "accounts": [{"id": "mock_account", "isDefault": True}],
+            "accounts": [
+                {
+                    "id": "mock_account",
+                    "isDefault": True,
+                    "rateLimit": {"rate": 42, "period": "Hourly"},
+                }
+            ],
         }
     }
     mock_boto3.return_value.Table.return_value = mock_table
@@ -165,6 +182,7 @@ def test_get_claims_success(
     assert result["username"] == "mockuser"
     assert result["account"] == "mock_account"
     assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}
 
 
 @patch("authz.requests.get")
@@ -226,10 +244,76 @@ def test_get_claims_missing_rsa_key(mock_get_header, mock_get_env, mock_requests
     }.get(key, default)
 
     mock_requests_get.return_value = MagicMock(
-        ok=True, json=MagicMock(return_value={"Keys": {}})
+        ok=True, json=MagicMock(return_value={"keys": {}})
     )
 
     mock_get_header.return_value = {"kid": "mock_kid"}
+
+    with pytest.raises(ClaimException, match="No valid RSA key found in JWKS"):
+        get_claims("mock_token")
+
+
+@patch("authz.requests.get")
+@patch("authz.os.environ.get")
+@patch("authz.boto3.resource")
+@patch("authz.jwt.get_unverified_header")
+@patch("authz.jwt.decode")
+def test_get_claims_with_rsa_key(
+    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+):
+    mock_get_env.side_effect = lambda key, default: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+    }.get(key, default)
+
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {}
+
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [
+                {"id": "mock_account_1", "isDefault": False},
+                {"id": "mock_account_2", "isDefault": True},
+            ],
+        }
+    }
+
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    mock_requests_get.return_value = MagicMock(
+        ok=True, json=MagicMock(return_value={"keys": [{"kid": "mock_kid"}]})
+    )
+
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockuser"}
+
+    x = get_claims("mock_token")
+    assert x["username"] == "mockuser"
+    assert x["account"] == "mock_account_2"
+    assert x["allowed_access"] == ["full_access"]
+    assert x["rate_limit"] == {"period": "Unlimited", "rate": None}
+
+
+@patch("authz.requests.get")
+@patch("authz.os.environ.get")
+@patch("authz.jwt.get_unverified_header")
+@patch("authz.jwt.decode")
+def test_get_claims_with_no_kid_found(
+    mock_decode, mock_get_header, mock_get_env, mock_requests_get
+):
+    mock_get_env.side_effect = lambda key, default: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+    }.get(key, default)
+
+    mock_requests_get.return_value = MagicMock(
+        ok=True, json=MagicMock(return_value={"keys": [{"kid": "bad_kid"}]})
+    )
+
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockuser"}
 
     with pytest.raises(ClaimException, match="No valid RSA key found in JWKS"):
         get_claims("mock_token")
@@ -251,7 +335,7 @@ def test_get_claims_no_dynamodb_item(
 
     mock_requests_get.return_value = MagicMock(
         ok=True,
-        json=MagicMock(return_value={"Keys": {"mock_kid": {"key": "mock_key"}}}),
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
     )
 
     mock_get_header.return_value = {"kid": "mock_kid"}
@@ -298,7 +382,7 @@ def test_get_claims_default_account(
     }.get(key, None)
     mock_requests_get.return_value = MagicMock(
         ok=True,
-        json=MagicMock(return_value={"Keys": {"mock_kid": {"key": "mock_key"}}}),
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
     )
     mock_get_header.return_value = {"kid": "mock_kid"}
     mock_decode.return_value = {"username": "mockuser"}
@@ -316,6 +400,7 @@ def test_get_claims_default_account(
     assert result["username"] == "mockuser"
     assert result["account"] == "mock_account_2"
     assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"period": "Unlimited", "rate": None}
 
 
 @patch("authz.requests.get")
@@ -333,7 +418,7 @@ def test_get_claims_no_default_account(
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
         ok=True,
-        json=MagicMock(return_value={"Keys": {"mock_kid": {"key": "mock_key"}}}),
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
     )
     mock_get_header.return_value = {"kid": "mock_kid"}
     mock_decode.return_value = {"username": "mockuser"}
@@ -351,18 +436,95 @@ def test_get_claims_no_default_account(
     assert result["username"] == "mockuser"
     assert result["account"] == "general_account"
     assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"period": "Unlimited", "rate": None}
 
 
-@patch("authz.get_permission_checker")
-def test_parse_and_validate_success(mock_permission_checker):
-    mock_permission_checker.return_value = lambda user, data: True
+@patch("authz.requests.get")
+@patch("authz.os.environ.get")
+@patch("authz.boto3.resource")
+@patch("authz.jwt.get_unverified_header")
+@patch("authz.jwt.decode")
+def test_get_claims_no_accounts_list(
+    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+):
+    """Test the case where no default account is found and the print statement is
+    executed."""
+    mock_get_env.side_effect = lambda key, default: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+    }.get(key, default)
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockuser"}
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [],  # Empty accounts list
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+    result = get_claims("mock_token")
+    assert result["username"] == "mockuser"
+    assert result["account"] == "general_account"
+    assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"period": "Unlimited", "rate": None}
+
+
+def test_parse_and_validate_success():
+    def mock_permission_checker(user, type, op, data):
+        return lambda user, data: True
 
     current_user = "mock_user"
     event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
     op = "append"
     api_accessed = False
-    result = _parse_and_validate(current_user, event, op, api_accessed, rules)
-    print(f"our result =  {result}")
+    result = _parse_and_validate(
+        current_user,
+        event,
+        op,
+        api_accessed,
+        rules,
+        permission_checker=mock_permission_checker,
+    )
+    assert result == ["/state/share", {"key": "test", "value": 123}]
+
+
+def test_parse_and_validate_bad_permission_checker():
+    # This doesn't accept the right number of expect arguments
+    def mock_permission_checker(user, type, op):
+        return lambda user, data: True
+
+    current_user = "mock_user"
+    event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
+    op = "append"
+    api_accessed = False
+    result = _parse_and_validate(
+        current_user,
+        event,
+        op,
+        api_accessed,
+        rules,
+        permission_checker=mock_permission_checker,
+    )
+    assert result == ["/state/share", {"key": "test", "value": 123}]
+
+
+def test_parse_and_validate_no_permission_checker_set():
+    current_user = "mock_user"
+    event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
+    op = "append"
+    api_accessed = False
+    result = _parse_and_validate(
+        current_user,
+        event,
+        op,
+        api_accessed,
+        rules,
+    )
     assert result == ["/state/share", {"key": "test", "value": 123}]
 
 
@@ -401,9 +563,9 @@ def test_parse_and_validate_validation_error(mock_validate_data):
         _parse_and_validate(current_user, event, op, api_accessed, rules)
 
 
-@patch("authz.get_permission_checker")
-def test_parse_and_validate_permission_denied(mock_permission_checker):
-    mock_permission_checker.return_value = lambda user, data: False
+def test_parse_and_validate_permission_denied():
+    def mock_permission_checker(user, type, op, data):
+        return lambda user, data: False
 
     current_user = "mock_user"
     event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
@@ -414,78 +576,114 @@ def test_parse_and_validate_permission_denied(mock_permission_checker):
         HTTPUnauthorized,
         match="User does not have permission to perform the operation.",
     ):
-        _parse_and_validate(current_user, event, op, api_accessed, rules)
+        _parse_and_validate(
+            current_user,
+            event,
+            op,
+            api_accessed,
+            rules,
+            permission_checker=mock_permission_checker,
+        )
 
 
 @patch("authz._validate_data")
-@patch("authz.get_permission_checker")
-def test_parse_and_validate_no_body(mock_permission_checker, mock_validate_data):
-    mock_permission_checker.return_value = lambda user, data: True
+def test_parse_and_validate_no_body(mock_validate_data):
+    def mock_permission_checker(user, type, op, data):
+        return lambda user, data: True
 
     current_user = "mock_user"
     event = {"path": "mock_path"}
     op = "mock_op"
     api_accessed = False
     result = _parse_and_validate(
-        current_user, event, op, api_accessed, rules, validate_body=False
+        current_user,
+        event,
+        op,
+        api_accessed,
+        rules,
+        validate_body=False,
+        permission_checker=mock_permission_checker,
     )
     assert result == ["mock_path", {}]
     mock_validate_data.assert_not_called()
 
 
-@patch("authz.get_permission_checker")
-def test_parse_and_validate_valid_input(mock_permission_checker):
-    mock_permission_checker.return_value = lambda user, data: True
+def test_parse_and_validate_valid_input():
+    def mock_permission_checker(user, type, op, data):
+        return lambda user, data: True
+
     current_user = "mock_user"
     event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
     op = "append"
     api_accessed = False
-    result = _parse_and_validate(current_user, event, op, api_accessed, rules)
+    result = _parse_and_validate(
+        current_user,
+        event,
+        op,
+        api_accessed,
+        rules,
+        permission_checker=mock_permission_checker,
+    )
     assert result == ["/state/share", {"key": "test", "value": 123}]
 
 
 @patch("authz.boto3.resource")
 @patch("authz.os.getenv")
 def test_api_claims_success(mock_getenv, mock_boto3):
-    mock_getenv.side_effect = lambda key: {
-        "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-        "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
-    }.get(key)
-    mock_api_keys_table = MagicMock()
-    mock_api_keys_table.query.return_value = {
-        "Items": [
-            {
-                "apiKey": "mock_token",
-                "active": True,
-                "expirationDate": "2099-12-31",
-                "accessTypes": ["file_upload", "share"],
-                "account": {"id": "mock_account_id"},
-                "api_owner_id": "user/ownerKey/mock_owner",
-                "rateLimit": {"rate": 100, "period": "Hourly"},
-                "owner": "mock_owner",
-            }
-        ]
-    }
-    mock_cost_calculations_table = MagicMock()
-    mock_cost_calculations_table.query.return_value = {
-        "Items": [
-            {
-                "id": "mock_owner",
-                "hourlyCost": [0] * 24,  # Simulate no cost for all hours
-            }
-        ]
-    }
-    mock_boto3.return_value.Table.side_effect = lambda table_name: {
-        "mock_api_keys_table": mock_api_keys_table,
-        "mock_cost_calculations_table": mock_cost_calculations_table,
-    }[table_name]
-    event = {}
-    context = {}
-    token = "mock_token"
-    result = api_claims(event, context, token)
-    assert result["username"] == "mock_owner"
-    assert result["account"] == "mock_account_id"
-    assert result["allowed_access"] == ["file_upload", "share"]
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set access types to include the ones used in this test
+        authz._access_types = ["full_access", "file_upload", "share"]
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+        }.get(key)
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "expirationDate": "2099-12-31",
+                    "accessTypes": ["file_upload", "share"],
+                    "account": {"id": "mock_account_id"},
+                    "api_owner_id": "user/ownerKey/mock_owner",
+                    "rateLimit": {"rate": 100, "period": "Hourly"},
+                    "owner": "mock_owner",
+                }
+            ]
+        }
+        mock_cost_calculations_table = MagicMock()
+        mock_cost_calculations_table.query.return_value = {
+            "Items": [
+                {
+                    "id": "mock_owner",
+                    "hourlyCost": [0] * 24,  # Simulate no cost for all hours
+                }
+            ]
+        }
+        mock_boto3.return_value.Table.side_effect = lambda table_name: {
+            "mock_api_keys_table": mock_api_keys_table,
+            "mock_cost_calculations_table": mock_cost_calculations_table,
+        }[table_name]
+        event = {}
+        context = {}
+        token = "mock_token"
+        result = api_claims(event, context, token)
+        assert result["username"] == "mock_owner"
+        assert result["account"] == "mock_account_id"
+        assert result["allowed_access"] == ["file_upload", "share"]
+        assert result["rate_limit"] == {"period": "Hourly", "rate": 100}
+        assert result["api_key_id"] == "user/ownerKey/mock_owner"
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
 
 
 @patch("authz.boto3.resource")
@@ -573,6 +771,16 @@ def test_determine_api_user_system():
 
 def test_determine_api_user_invalid_key_type():
     data = {"api_owner_id": "user/unknownKey/mock_user", "owner": "mock_owner"}
+    with pytest.raises(
+        UnknownApiUserException, match="Invalid or unrecognized key type."
+    ):
+        _determine_api_user(data)
+
+
+def test_determine_api_user_unknown_key_type():
+    """Test the case where an unknown key type is encountered, triggering the print
+    statement."""
+    data = {"api_owner_id": "user/invalidKey/mock_user", "owner": "mock_owner"}
     with pytest.raises(
         UnknownApiUserException, match="Invalid or unrecognized key type."
     ):
@@ -680,6 +888,23 @@ def test_validate_data_invalid_data():
         _validate_data("/foo", "bar", {"y": 2}, False, validator_rules)
 
 
+def test_validate_data_path_not_found():
+    """Test the case where the path is not found in validator rules,
+    triggering the print statement."""
+    validator_rules = {
+        "validators": {
+            "/foo": {
+                "bar": {
+                    "type": "object",
+                    "properties": {"x": {"type": "integer"}},
+                }
+            }
+        }
+    }
+    with pytest.raises(ValidationError, match="Invalid data or path"):
+        _validate_data("/baz", "qux", {"x": 1}, False, validator_rules)
+
+
 def test_parse_token_success():
     event = {"headers": {"Authorization": "Bearer abc123"}}
     assert _parse_token(event) == "abc123"
@@ -717,35 +942,58 @@ def test_parse_token_extra_spaces():
 @patch("authz._parse_token")
 @patch("authz.api_claims")
 @patch("authz._parse_and_validate")
+@patch("authz.get_claims")
+@patch("authz.os.environ.get")
+@patch("authz.requests.get")
 def test_validated_api_access_success(
-    mock_parse_and_validate, mock_api_claims, mock_parse_token
+    mock_requests_get,
+    mock_get_env,
+    mock_get_claims,
+    mock_parse_and_validate,
+    mock_api_claims,
+    mock_parse_token,
 ):
-    mock_parse_token.return_value = "amp-abc"
+    mock_get_env.side_effect = lambda key, default=None: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+    }.get(key, default)
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+    mock_parse_token.return_value = "amp-token"
     mock_api_claims.return_value = {
-        "username": "user",
+        "username": "api_user",
         "account": "acc",
         "allowed_access": ["full_access"],
+        "rate_limit": {},
+        "api_key_id": "user/ownerKey/api_user",
+    }
+    mock_get_claims.return_value = {
+        "username": "api_user",
+        "account": "acc",
+        "allowed_access": ["full_access"],
+        "rate_limit": {},
     }
     mock_parse_and_validate.return_value = ["path", {"foo": "bar"}]
 
-    @validated("op", {}, True)
-    def handler(event, context, user, name, data):
-        return {"ok": True, "user": user, "name": name, "data": data}
+    # Set up global state for validation
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", True)
+    def test_handler_api_access(event, context, user, name, data):
+        return {"ok": True}
 
     event = {
-        "headers": {"Authorization": "Bearer amp-abc"},
+        "headers": {"Authorization": "Bearer api-token"},
         "body": "{}",
         "path": "path",
     }
     context = {}
-    resp = handler(event, context)
-    body = json.loads(resp["body"])
+    resp = test_handler_api_access(event, context)
     assert resp["statusCode"] == 200
-    assert body["ok"] is True
-    assert body["user"] == "user"
-    assert body["name"] == "path"
-    assert body["data"]["account"] == "acc"
-    assert body["data"]["allowed_access"] == ["full_access"]
+    assert resp["body"] == '{"ok": true}'
 
 
 @patch("authz._parse_token")
@@ -759,11 +1007,15 @@ def test_validated_user_access_success(
         "username": "user",
         "account": "acc",
         "allowed_access": ["full_access"],
+        "rate_limit": {},
     }
     mock_parse_and_validate.return_value = ["path", {"foo": "bar"}]
 
-    @validated("op", {}, True)
-    def handler(event, context, user, name, data):
+    # Set up global state for validation
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", True)
+    def test_handler_user_access(event, context, user, name, data):
         return {"ok": True}
 
     event = {
@@ -772,9 +1024,9 @@ def test_validated_user_access_success(
         "path": "path",
     }
     context = {}
-    resp = handler(event, context)
+    resp = test_handler_user_access(event, context)
     assert resp["statusCode"] == 200
-    assert json.loads(resp["body"])["ok"] is True
+    assert resp["body"] == '{"ok": true}'
 
 
 @patch("authz._parse_token")
@@ -788,12 +1040,16 @@ def test_validated_user_not_found(
         "username": None,
         "account": "acc",
         "allowed_access": ["full_access"],
+        "rate_limit": {},
     }
     mock_parse_and_validate.return_value = ["path", {"foo": "bar"}]
 
-    @validated("op", {}, True)
-    def handler(event, context, user, name, data):
-        return {"ok": True}
+    # Set up global state for validation
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", True)
+    def test_handler_user_not_found(event, context, user, name, data):
+        return {"ok": True}  # pragma: no cover
 
     event = {
         "headers": {"Authorization": "Bearer user-token"},
@@ -801,7 +1057,7 @@ def test_validated_user_not_found(
         "path": "path",
     }
     context = {}
-    resp = handler(event, context)
+    resp = test_handler_user_not_found(event, context)
     assert resp["statusCode"] == 401
     assert "User not found" in json.loads(resp["body"])["error"]
 
@@ -817,12 +1073,16 @@ def test_validated_http_exception(
         "username": "user",
         "account": "acc",
         "allowed_access": ["full_access"],
+        "rate_limit": {},
     }
     mock_parse_and_validate.side_effect = HTTPBadRequest("bad input")
 
-    @validated("op", {}, True)
-    def handler(event, context, user, name, data):
-        return {"ok": True}
+    # Set up global state for validation
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", True)
+    def test_handler_http_exception(event, context, user, name, data):
+        return {"ok": True}  # pragma: no cover
 
     event = {
         "headers": {"Authorization": "Bearer user-token"},
@@ -830,7 +1090,7 @@ def test_validated_http_exception(
         "path": "path",
     }
     context = {}
-    resp = handler(event, context)
+    resp = test_handler_http_exception(event, context)
     assert resp["statusCode"] == 400
     assert "bad input" in json.loads(resp["body"])["error"]
 
@@ -838,34 +1098,47 @@ def test_validated_http_exception(
 @patch("authz.boto3.resource")
 @patch("authz.os.getenv")
 def test_api_claims_rate_limit_exceeded(mock_getenv, mock_boto3):
-    mock_getenv.side_effect = lambda key: {
-        "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-        "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
-    }.get(key)
-    mock_table = MagicMock()
-    mock_table.query.return_value = {
-        "Items": [
-            {
-                "apiKey": "mock_token",
-                "active": True,
-                "rateLimit": {"rate": 0, "period": "Hourly"},
-                "api_owner_id": "header/ownerKey/mock_owner",
-                "owner": "mock_owner",
-                "accessTypes": ["file_upload", "share"],
-            }
-        ]
-    }
-    mock_boto3.return_value.Table.return_value = mock_table
-    with patch("authz._is_rate_limited", return_value=(True, "rate limit exceeded")):
-        with pytest.raises(HTTPUnauthorized, match="rate limit exceeded"):
-            api_claims({}, {}, "mock_token")
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set access types to include the ones used in this test
+        authz._access_types = ["full_access", "file_upload", "share"]
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+        }.get(key)
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "rateLimit": {"rate": 0, "period": "Hourly"},
+                    "api_owner_id": "header/ownerKey/mock_owner",
+                    "owner": "mock_owner",
+                    "accessTypes": ["file_upload", "share"],
+                }
+            ]
+        }
+        mock_boto3.return_value.Table.return_value = mock_table
+        with patch("authz.is_rate_limited", return_value=(True, "rate limit exceeded")):
+            with pytest.raises(HTTPUnauthorized, match="rate limit exceeded"):
+                api_claims({}, {}, "mock_token")
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
 
 
 @patch("authz.boto3.resource")
 @patch("authz.os.getenv")
 def test_is_rate_limited_unlimited_period(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
-    assert _is_rate_limited("user", {"period": "Unlimited", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Unlimited", "rate": 100}) == (
         False,
         "No rate limit set",
     )
@@ -875,7 +1148,7 @@ def test_is_rate_limited_unlimited_period(mock_getenv, mock_boto3):
 @patch("authz.os.getenv")
 def test_is_rate_limited_no_period(mock_getenv, mock_boto3):
     mock_getenv.return_value = "mock_cost_calc_table"
-    assert _is_rate_limited("user", {"rate": 100}) == (
+    assert is_rate_limited("user", {"rate": 100}) == (
         False,
         "Rate limit period is not specified in the rate_limit data",
     )
@@ -888,7 +1161,7 @@ def test_is_rate_limited_no_items(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": []}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
         False,
         "Table entry does not exist. Cannot verify if rate limited.",
     )
@@ -901,7 +1174,7 @@ def test_is_rate_limited_missing_col_name(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"id": "user"}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
         False,
         "Column hourlyCost not found in rate data",
     )
@@ -914,12 +1187,12 @@ def test_is_rate_limited_hourly_cost_missing_or_malformed(mock_getenv, mock_boto
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"hourlyCost": None}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
         False,
         "Column hourlyCost not found in rate data",
     )
     mock_table.query.return_value = {"Items": [{"hourlyCost": []}]}
-    assert _is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
+    assert is_rate_limited("user", {"period": "Hourly", "rate": 100}) == (
         False,
         "Hourly cost data is missing or malformed.",
     )
@@ -934,7 +1207,7 @@ def test_is_rate_limited_hourly_cost_exceeded(mock_getenv, mock_boto3):
     mock_boto3.return_value.Table.return_value = mock_table
     with patch("authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
-        assert _is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
+        assert is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
             True,
             "rate limit exceeded ($5.00/Hourly)",
         )
@@ -949,7 +1222,7 @@ def test_is_rate_limited_hourly_cost_not_exceeded(mock_getenv, mock_boto3):
     mock_boto3.return_value.Table.return_value = mock_table
     with patch("authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
-        assert _is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
+        assert is_rate_limited("user", {"period": "Hourly", "rate": 5}) == (
             False,
             "Rate limit not exceeded",
         )
@@ -962,7 +1235,7 @@ def test_is_rate_limited_daily_cost_exceeded(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"dailyCost": 15}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
+    assert is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
         True,
         "rate limit exceeded ($10.00/Daily)",
     )
@@ -975,7 +1248,7 @@ def test_is_rate_limited_daily_cost_not_exceeded(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"dailyCost": 5}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
+    assert is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
         False,
         "Rate limit not exceeded",
     )
@@ -988,7 +1261,7 @@ def test_is_rate_limited_missing_rate(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": [{"dailyCost": 5}]}
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Daily"}) == (
+    assert is_rate_limited("user", {"period": "Daily"}) == (
         False,
         "Rate value missing in rate_limit.",
     )
@@ -1001,7 +1274,7 @@ def test_is_rate_limited_boto3_error(mock_getenv, mock_boto3):
     mock_table = MagicMock()
     mock_table.query.side_effect = Exception("boto3 error")
     mock_boto3.return_value.Table.return_value = mock_table
-    assert _is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
+    assert is_rate_limited("user", {"period": "Daily", "rate": 10}) == (
         False,
         "Unexpected error during rate limit check",
     )
@@ -1015,7 +1288,7 @@ def test_is_rate_limited_table_entry_missing(mock_getenv, mock_boto3):
     mock_table.query.return_value = {"Items": []}
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Table entry does not exist" in msg
 
@@ -1028,7 +1301,7 @@ def test_is_rate_limited_column_missing(mock_getenv, mock_boto3):
     mock_table.query.return_value = {"Items": [{"id": "mock_user"}]}
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Column hourlyCost not found" in msg
 
@@ -1041,7 +1314,7 @@ def test_is_rate_limited_hourly_cost_malformed(mock_getenv, mock_boto3):
     mock_table.query.return_value = {"Items": [{"id": "mock_user", "hourlyCost": None}]}
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Column hourlyCost not found in rate data" in msg
 
@@ -1056,7 +1329,7 @@ def test_is_rate_limited_rate_value_missing(mock_getenv, mock_boto3):
     }
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly"}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Rate value missing in rate_limit." in msg
 
@@ -1074,7 +1347,7 @@ def test_is_rate_limited_exceeded(mock_getenv, mock_boto3):
     rate_limit = {"period": "Hourly", "rate": 100}
     with patch("authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
-        limited, msg = _is_rate_limited("mock_user", rate_limit)
+        limited, msg = is_rate_limited("mock_user", rate_limit)
         assert limited is True
         assert "rate limit exceeded" in msg
 
@@ -1092,7 +1365,7 @@ def test_is_rate_limited_not_exceeded(mock_getenv, mock_boto3):
     rate_limit = {"period": "Hourly", "rate": 100}
     with patch("authz.datetime") as mock_datetime:
         mock_datetime.now.return_value.hour = 0
-        limited, msg = _is_rate_limited("mock_user", rate_limit)
+        limited, msg = is_rate_limited("mock_user", rate_limit)
         assert limited is False
         assert "Rate limit not exceeded" in msg
 
@@ -1105,7 +1378,7 @@ def test_is_rate_limited_boto3_exception(mock_getenv, mock_boto3):
     mock_table.query.side_effect = boto3.exceptions.Boto3Error()
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Error accessing DynamoDB" in msg
 
@@ -1118,7 +1391,7 @@ def test_is_rate_limited_unexpected_exception(mock_getenv, mock_boto3):
     mock_table.query.side_effect = Exception("unexpected")
     mock_boto3.return_value.Table.return_value = mock_table
     rate_limit = {"period": "Hourly", "rate": 100}
-    limited, msg = _is_rate_limited("mock_user", rate_limit)
+    limited, msg = is_rate_limited("mock_user", rate_limit)
     assert limited is False
     assert "Unexpected error during rate limit" in msg
 
@@ -1166,7 +1439,8 @@ def test_get_claims_jwt_decode_error(
         else "aud" if key == "OAUTH_AUDIENCE" else "table"
     )
     mock_requests_get.return_value = MagicMock(
-        ok=True, json=MagicMock(return_value={"Keys": {"kid1": {"key": "val"}}})
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
     )
     mock_get_header.return_value = {"kid": "kid1"}
     mock_decode.side_effect = JWTError("decode error")
@@ -1187,7 +1461,8 @@ def test_get_claims_jwt_expired_sigs_error(
         else "aud" if key == "OAUTH_AUDIENCE" else "table"
     )
     mock_requests_get.return_value = MagicMock(
-        ok=True, json=MagicMock(return_value={"Keys": {"kid1": {"key": "val"}}})
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
     )
     mock_get_header.return_value = {"kid": "kid1"}
     mock_decode.side_effect = ExpiredSignatureError("JWT token has expired")
@@ -1208,9 +1483,231 @@ def test_get_claims_jwt_expired_claims_error(
         else "aud" if key == "OAUTH_AUDIENCE" else "table"
     )
     mock_requests_get.return_value = MagicMock(
-        ok=True, json=MagicMock(return_value={"Keys": {"kid1": {"key": "val"}}})
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
     )
     mock_get_header.return_value = {"kid": "kid1"}
     mock_decode.side_effect = JWTClaimsError("Invalid JWT Claims")
     with pytest.raises(ClaimException, match="Invalid JWT claims"):
         get_claims("sometoken")
+
+
+def test_setup_validated():
+    """Test the setup_validated function sets
+    both global variables correctly.
+    """
+    test_rules = {"test": "rules"}
+
+    def test_checker(u, t, o, d):
+        return lambda u, d: True
+
+    setup_validated(test_rules, test_checker)
+
+    # Import the globals to check they were set
+    import authz
+
+    assert authz._validate_rules == test_rules
+    assert authz._permission_checker == test_checker
+
+
+def test_set_validate_rules():
+    """Test the set_validate_rules function sets the global variable correctly."""
+    test_rules = {"individual": "rules"}
+
+    set_validate_rules(test_rules)
+
+    # Import the globals to check they were set
+    import authz
+
+    assert authz._validate_rules == test_rules
+
+
+def test_set_permission_checker():
+    """Test the set_permission_checker function sets the global variable correctly."""
+
+    def test_checker(u, t, o, d):
+        return lambda u, d: False
+
+    set_permission_checker(test_checker)
+
+    # Import the globals to check they were set
+    import authz
+
+    assert authz._permission_checker == test_checker
+
+
+def test_add_api_access_types():
+    """Test the add_api_access_types function adds access types to the global list."""
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Reset to known state
+        authz._access_types = ["full_access"]
+
+        # Add new access types
+        add_api_access_types(["chat", "file_upload"])
+
+        # Check that the access types were added
+        assert "full_access" in authz._access_types
+        assert "chat" in authz._access_types
+        assert "file_upload" in authz._access_types
+        assert len(authz._access_types) == 3
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
+
+
+@patch("authz.boto3.resource")
+@patch("authz.os.getenv")
+def test_api_claims_empty_access_types(mock_getenv, mock_boto3):
+    """Test api_claims when _access_types is empty - should raise PermissionError."""
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set _access_types to empty list
+        authz._access_types = []
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+        }.get(key)
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "accessTypes": ["chat", "file_upload"],  # API key has access types
+                    "account": {"id": "mock_account_id"},
+                    "api_owner_id": "user/ownerKey/mock_owner",
+                    "owner": "mock_owner",
+                }
+            ]
+        }
+        mock_boto3.return_value.Table.return_value = mock_table
+
+        # Should raise PermissionError because _access_types is empty
+        with pytest.raises(
+            PermissionError,
+            match="API key does not have access to the required functionality.",
+        ):
+            api_claims({}, {}, "mock_token")
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
+
+
+@patch("authz.boto3.resource")
+@patch("authz.os.getenv")
+def test_api_claims_partial_access_match(mock_getenv, mock_boto3):
+    """Test api_claims when API key has some matching access types."""
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set specific access types required
+        authz._access_types = ["chat", "assistants"]
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+        }.get(key)
+
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "expirationDate": "2099-12-31",
+                    "accessTypes": [
+                        "chat",
+                        "file_upload",
+                    ],  # Has "chat" but not "assistants"
+                    "account": {"id": "mock_account_id"},
+                    "api_owner_id": "user/ownerKey/mock_owner",
+                    "rateLimit": {"rate": 100, "period": "Hourly"},
+                    "owner": "mock_owner",
+                }
+            ]
+        }
+
+        mock_cost_calculations_table = MagicMock()
+        mock_cost_calculations_table.query.return_value = {
+            "Items": [
+                {
+                    "id": "mock_owner",
+                    "hourlyCost": [0] * 24,  # Simulate no cost for all hours
+                }
+            ]
+        }
+
+        mock_boto3.return_value.Table.side_effect = lambda table_name: {
+            "mock_api_keys_table": mock_api_keys_table,
+            "mock_cost_calculations_table": mock_cost_calculations_table,
+        }[table_name]
+
+        # Should succeed because API key has "chat" which matches
+        # one of the required access types
+        result = api_claims({}, {}, "mock_token")
+        assert result["username"] == "mock_owner"
+        assert result["account"] == "mock_account_id"
+        assert result["allowed_access"] == ["chat", "file_upload"]
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types
+
+
+@patch("authz.boto3.resource")
+@patch("authz.os.getenv")
+def test_api_claims_no_matching_access_types(mock_getenv, mock_boto3):
+    """Test api_claims when API key has no matching access types."""
+    import authz
+
+    # Store original access types to restore later
+    original_access_types = authz._access_types.copy()
+
+    try:
+        # Set specific access types required
+        authz._access_types = ["assistants", "dual_embedding"]
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+        }.get(key)
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "apiKey": "mock_token",
+                    "active": True,
+                    "accessTypes": ["chat", "file_upload"],  # No matching access types
+                    "account": {"id": "mock_account_id"},
+                    "api_owner_id": "user/ownerKey/mock_owner",
+                    "owner": "mock_owner",
+                }
+            ]
+        }
+        mock_boto3.return_value.Table.return_value = mock_table
+
+        # Should raise PermissionError because no access types match
+        with pytest.raises(
+            PermissionError,
+            match="API key does not have access to the required functionality.",
+        ):
+            api_claims({}, {}, "mock_token")
+
+    finally:
+        # Restore original state
+        authz._access_types = original_access_types

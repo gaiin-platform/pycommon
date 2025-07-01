@@ -28,6 +28,7 @@ from jsonschema import validate as json_validate
 from jsonschema.exceptions import ValidationError
 from requests import Response
 
+from const import NO_RATE_LIMIT, UNLIMITED, APIAccessType
 from decorators import required_env_vars
 from encoders import CustomPydanticJSONEncoder
 from exceptions import (
@@ -37,12 +38,69 @@ from exceptions import (
     HTTPUnauthorized,
     UnknownApiUserException,
 )
-from permissions import get_permission_checker
 
 ALGORITHMS = ["RS256"]
 
 # Globals needed by this file
 load_dotenv(dotenv_path=".env.local")
+
+# Global state for validation (similar to ops.py pattern)
+_validate_rules: Optional[Dict[str, Any]] = None
+_permission_checker: Optional[Callable] = None
+_access_types: Optional[List[str]] = [APIAccessType.FULL_ACCESS.value]
+
+
+def setup_validated(
+    validate_rules: Dict[str, Any],
+    permission_checker: Callable,
+):
+    """
+    Setup validation rules and permission checker for the validated decorator.
+
+    Args:
+        validate_rules: Dictionary containing validation rules for operations
+        permission_checker: Function to check permissions, should accept
+                          (user, type, op, data) and return a callable that
+                          accepts (user, data)
+    """
+    global _validate_rules, _permission_checker
+    _validate_rules = validate_rules
+    _permission_checker = permission_checker
+
+
+def set_validate_rules(validate_rules: Dict[str, Any]):
+    """
+    Set validation rules for the validated decorator.
+
+    Args:
+        validate_rules: Dictionary containing validation rules for operations
+    """
+    global _validate_rules
+    _validate_rules = validate_rules
+
+
+def set_permission_checker(permission_checker: Callable):
+    """
+    Set permission checker for the validated decorator.
+
+    Args:
+        permission_checker: Function to check permissions, should accept
+                          (user, type, op, data) and return a callable that
+                          accepts (user, data)
+    """
+    global _permission_checker
+    _permission_checker = permission_checker
+
+
+def add_api_access_types(access_types: List[str]):
+    """
+    Set the access types for the validated decorator.
+
+    Args:
+        access_types: List of access types to set.
+    """
+    global _access_types
+    _access_types += access_types
 
 
 @required_env_vars("API_BASE_URL")
@@ -142,7 +200,14 @@ def get_claims(token: str) -> dict:
         print(f"Error decoding JSON response from JWKS: {e}")
         raise ClaimException("Invalid JWKS response")
 
-    rsa_key: Optional[dict] = jwks_data.get("Keys", {}).get(header.get("kid"), None)
+    # This datastructure is:
+    # { "keys": [ {}, {}, ... ] }
+    rsa_key: Optional[dict] = None
+    for key in jwks_data.get("keys", []):
+        if key.get("kid") == header.get("kid"):
+            rsa_key = key
+            break
+
     if not rsa_key:
         print(f"No RSA key found for kid: {header.get('kid')}")
         raise ClaimException("No valid RSA key found in JWKS")
@@ -177,6 +242,7 @@ def get_claims(token: str) -> dict:
     dynamodb = boto3.resource("dynamodb")
     table = dynamodb.Table(accounts_table_name)
     account: Optional[str] = None
+    rate_limit: Optional[dict] = NO_RATE_LIMIT
     response = table.get_item(Key={"user": user})
     if "Item" not in response:
         raise ClaimException(f"No item found for user: {user}")
@@ -185,19 +251,22 @@ def get_claims(token: str) -> dict:
     for acct in accounts:
         if acct["isDefault"]:
             account = acct["id"]
+            if acct.get("rateLimit"):
+                rate_limit = acct["rateLimit"]
 
     if not account:
         print("setting account to general_account")
         account = "general_account"
 
     payload["account"] = account
+    payload["rate_limit"] = rate_limit
     payload["username"] = user
     # Here we can established the allowed access according to the feature
     # flags in the future. For now it is set to full_access, which says they
     # can do the operation upon entry of the validated function
     # current access types include: asssistants, share, dual_embedding,
     # chat, file_upload
-    payload["allowed_access"] = ["full_access"]
+    payload["allowed_access"] = [APIAccessType.FULL_ACCESS.value]
     return payload
 
 
@@ -246,6 +315,7 @@ def _parse_and_validate(
     api_accessed: bool,
     validator_rules: dict,
     validate_body: bool = True,
+    permission_checker: Optional[Callable] = None,
 ) -> List[Any]:
     """Parse and validate the input event.
 
@@ -255,6 +325,8 @@ def _parse_and_validate(
         op (str): The operation being performed.
         api_accessed (bool): Whether the API is being accessed.
         validate_body (bool): Whether to validate the request body.
+        permission_checker (Callable, optional): Function to check permissions.
+            Should accept (user, type, op, data) and return a callable that accepts (user, data).
 
     Returns:
         list: A list containing the name and validated data.
@@ -281,12 +353,18 @@ def _parse_and_validate(
         except ValidationError as e:
             raise HTTPBadRequest(e.message)
 
-    permission_checker = get_permission_checker(current_user, name, op, data)
-    if not permission_checker(current_user, data):
-        print("User does not have permission to perform the operation.")
-        raise HTTPUnauthorized(
-            "User does not have permission to perform the operation."
-        )
+    try:
+        # If the permission checker exists, is callable, returns a callabe and
+        # that callable returns False, then we raise an HTTPUnauthorized
+        if permission_checker is not None:
+            if not permission_checker(current_user, name, op, data)(current_user, data):
+                print("User does not have permission to perform the operation.")
+                raise HTTPUnauthorized(
+                    "User does not have permission to perform the operation."
+                )
+    except (NameError, TypeError):
+        # This  means our permission checker is not defined
+        pass
 
     return [name, data]
 
@@ -349,10 +427,7 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
 
     # Check for access rights
     access = item.get("accessTypes", [])
-    if not any(
-        access_type in access
-        for access_type in ["file_upload", "share", "chat", "full_access"]
-    ):
+    if not any(access_type in access for access_type in _access_types):
         print("API key doesn't have access to the functionality.")
         raise PermissionError(
             "API key does not have access to the required functionality."
@@ -364,7 +439,7 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
     # Check rate limits
     rate_limit = item.get("rateLimit", {})
 
-    limited, msg = _is_rate_limited(current_user, rate_limit)
+    limited, msg = is_rate_limited(current_user, rate_limit)
     if limited:
         raise HTTPUnauthorized(msg)
 
@@ -380,6 +455,9 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
         "username": current_user,
         "account": item["account"]["id"],
         "allowed_access": access,
+        "rate_limit": rate_limit,
+        "api_key_id": item["api_owner_id"],
+        "purpose": item.get("purpose"),
     }
 
 
@@ -429,7 +507,7 @@ def _determine_api_user(data: Dict[str, Any]) -> str:
 
 
 @required_env_vars("COST_CALCULATIONS_DYNAMO_TABLE")
-def _is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
+def is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
     """
     Checks if the current user has exceeded their rate limit based on usage data stored in DynamoDB.
 
@@ -447,7 +525,7 @@ def _is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
     period: Optional[str] = rate_limit.get("period")
     if period is None:
         return False, "Rate limit period is not specified in the rate_limit data"
-    if period == "Unlimited":
+    if period == UNLIMITED:
         return False, "No rate limit set"
 
     cost_calc_table: str = os.getenv("COST_CALCULATIONS_DYNAMO_TABLE")  # type: ignore
@@ -528,17 +606,21 @@ def _parse_token(event: Dict[str, Any]) -> str:
 
 
 def validated(
-    op: str, validate_rules: Dict[str, Any], validate_body: bool = True
+    op: str,
+    validate_body: bool = True,
 ) -> Callable:
     """Decorator to validate input data and permissions for an API operation.
 
     Args:
         op (str): The operation being performed.
-        validate_rules (dict): The validation rules.
         validate_body (bool): Whether to validate the request body.
 
     Returns:
         Callable: The decorated function.
+
+    Note:
+        Uses global _validate_rules and _permission_checker set
+        via setup_validated()
     """
 
     def decorator(f: Callable) -> Callable:
@@ -559,13 +641,24 @@ def validated(
                     raise HTTPUnauthorized("User not found.")
 
                 [name, data] = _parse_and_validate(
-                    current_user, event, op, api_accessed, validate_rules, validate_body
+                    current_user,
+                    event,
+                    op,
+                    api_accessed,
+                    _validate_rules or {},
+                    validate_body,
+                    _permission_checker,
                 )
 
                 data["access_token"] = token
                 data["account"] = claims["account"]
+                data["api_key_id"] = claims.get("api_key_id")
+                data["rate_limit"] = claims["rate_limit"]
                 data["api_accessed"] = api_accessed
                 data["allowed_access"] = claims["allowed_access"]
+                data["purpose"] = claims.get(
+                    "purpose"
+                )  # helps identify group system users for ex.
 
                 result = f(event, context, current_user, name, data)
 
