@@ -306,10 +306,12 @@ def _validate_data(
         print(f"Found validator for {name}/{op}")
         schema: dict = validator[name][op]
         try:
-            json_validate(instance=data, schema=schema)
+            json_validate(instance=data["data"], schema=schema)
             print("JSON validation passed")
         except ValidationError as e:
             print(f"JSON validation failed: {e.message}")
+            print(f"Schema Expected: {schema}")
+            print(f"Data Provided: {data['data']}")
             raise ValidationError(f"Invalid data: {e.message}")
         except SchemaError as e:
             print(f"Schema error: {e.message}")

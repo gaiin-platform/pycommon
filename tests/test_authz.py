@@ -479,7 +479,7 @@ def test_parse_and_validate_success():
         return lambda user, data: True
 
     current_user = "mock_user"
-    event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
+    event = {"path": "/state/share", "body": '{"data": {"key": "test", "value": 123}}'}
     op = "append"
     api_accessed = False
     result = _parse_and_validate(
@@ -490,7 +490,7 @@ def test_parse_and_validate_success():
         rules,
         permission_checker=mock_permission_checker,
     )
-    assert result == ["/state/share", {"key": "test", "value": 123}]
+    assert result == ["/state/share", {"data": {"key": "test", "value": 123}}]
 
 
 def test_parse_and_validate_bad_permission_checker():
@@ -499,7 +499,7 @@ def test_parse_and_validate_bad_permission_checker():
         return lambda user, data: True
 
     current_user = "mock_user"
-    event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
+    event = {"path": "/state/share", "body": '{"data": {"key": "test", "value": 123}}'}
     op = "append"
     api_accessed = False
     result = _parse_and_validate(
@@ -510,12 +510,12 @@ def test_parse_and_validate_bad_permission_checker():
         rules,
         permission_checker=mock_permission_checker,
     )
-    assert result == ["/state/share", {"key": "test", "value": 123}]
+    assert result == ["/state/share", {"data": {"key": "test", "value": 123}}]
 
 
 def test_parse_and_validate_no_permission_checker_set():
     current_user = "mock_user"
-    event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
+    event = {"path": "/state/share", "body": '{"data": {"key": "test", "value": 123}}'}
     op = "append"
     api_accessed = False
     result = _parse_and_validate(
@@ -525,7 +525,7 @@ def test_parse_and_validate_no_permission_checker_set():
         api_accessed,
         rules,
     )
-    assert result == ["/state/share", {"key": "test", "value": 123}]
+    assert result == ["/state/share", {"data": {"key": "test", "value": 123}}]
 
 
 def test_parse_and_validate_invalid_json_body():
@@ -568,7 +568,7 @@ def test_parse_and_validate_permission_denied():
         return lambda user, data: False
 
     current_user = "mock_user"
-    event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
+    event = {"path": "/state/share", "body": '{"data": {"key": "test", "value": 123}}'}
     op = "append"
     api_accessed = False
 
@@ -613,7 +613,7 @@ def test_parse_and_validate_valid_input():
         return lambda user, data: True
 
     current_user = "mock_user"
-    event = {"path": "/state/share", "body": '{"key": "test", "value": 123}'}
+    event = {"path": "/state/share", "body": '{"data": {"key": "test", "value": 123}}'}
     op = "append"
     api_accessed = False
     result = _parse_and_validate(
@@ -624,7 +624,7 @@ def test_parse_and_validate_valid_input():
         rules,
         permission_checker=mock_permission_checker,
     )
-    assert result == ["/state/share", {"key": "test", "value": 123}]
+    assert result == ["/state/share", {"data": {"key": "test", "value": 123}}]
 
 
 @patch("pycommon.authz.boto3.resource")
@@ -843,18 +843,18 @@ def test_validate_data_success():
             }
         }
     }
-    _validate_data("/foo", "bar", {"x": 1}, False, validator_rules)
+    _validate_data("/foo", "bar", {"data": {"x": 1}}, False, validator_rules)
 
 
 def test_validate_data_no_validator():
     with pytest.raises(ValidationError, match="No validator found for the operation"):
-        _validate_data("/foo", "bar", {"x": 1}, False, {})
+        _validate_data("/foo", "bar", {"data": {"x": 1}}, False, {})
 
 
 def test_validate_data_invalid_path():
     validator_rules = {"validators": {}}
     with pytest.raises(ValidationError, match="No validator found for the operation"):
-        _validate_data("/foo", "bar", {"x": 1}, False, validator_rules)
+        _validate_data("/foo", "bar", {"data": {"x": 1}}, False, validator_rules)
 
 
 def test_validate_data_invalid_schema():
@@ -869,7 +869,7 @@ def test_validate_data_invalid_schema():
         }
     }
     with pytest.raises(ValidationError, match="Invalid schema"):
-        _validate_data("/foo", "bar", {"x": 1}, False, validator_rules)
+        _validate_data("/foo", "bar", {"data": {"x": 1}}, False, validator_rules)
 
 
 def test_validate_data_invalid_data():
@@ -885,7 +885,7 @@ def test_validate_data_invalid_data():
         }
     }
     with pytest.raises(ValidationError, match="Invalid data"):
-        _validate_data("/foo", "bar", {"y": 2}, False, validator_rules)
+        _validate_data("/foo", "bar", {"data": {"y": 2}}, False, validator_rules)
 
 
 def test_validate_data_path_not_found():
@@ -902,7 +902,7 @@ def test_validate_data_path_not_found():
         }
     }
     with pytest.raises(ValidationError, match="Invalid data or path"):
-        _validate_data("/baz", "qux", {"x": 1}, False, validator_rules)
+        _validate_data("/baz", "qux", {"data": {"x": 1}}, False, validator_rules)
 
 
 def test_parse_token_success():
