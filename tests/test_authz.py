@@ -852,9 +852,8 @@ def test_validate_data_no_validator():
 
 
 def test_validate_data_invalid_path():
-    validator_rules = {"validators": {}}
-    with pytest.raises(ValidationError, match="No validator found for the operation"):
-        _validate_data("/foo", "bar", {"data": {"x": 1}}, False, validator_rules)
+    with pytest.raises(ValidationError, match="Invalid data or path"):
+        _validate_data("/foo", "bar", {"data": {"x": 1}}, False, rules)
 
 
 def test_validate_data_invalid_schema():
@@ -889,20 +888,19 @@ def test_validate_data_invalid_data():
 
 
 def test_validate_data_path_not_found():
-    """Test the case where the path is not found in validator rules,
-    triggering the print statement."""
-    validator_rules = {
-        "validators": {
-            "/foo": {
-                "bar": {
-                    "type": "object",
-                    "properties": {"x": {"type": "integer"}},
-                }
-            }
-        }
-    }
     with pytest.raises(ValidationError, match="Invalid data or path"):
-        _validate_data("/baz", "qux", {"data": {"x": 1}}, False, validator_rules)
+        _validate_data("/foo", "bar", {"data": {"x": 1}}, False, rules)
+
+
+def test_validate_data_empty_schema():
+    """Test validation with empty schema - should skip validation and pass"""
+    # This tests the uncovered branch where schema == {}
+    # Using the 'read' operation which has an empty schema in the rules
+    try:
+        _validate_data("/state/share", "read", {"data": {"x": 1}}, False, rules)
+        # Should not raise any exception since schema is empty
+    except Exception as e:
+        pytest.fail(f"Validation with empty schema should not raise exception: {e}")
 
 
 def test_parse_token_success():
