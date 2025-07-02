@@ -39,7 +39,14 @@ def get_email_suggestions(
 
         if response.status_code == 200:
             response_content = response.json()
-            return response_content.get("emails", [])
+            # Handle nested JSON structure where actual data is in "body" field
+            if "body" in response_content:
+                # Parse the body field as JSON
+                body_data = json.loads(response_content["body"])
+                return body_data.get("emails", [])
+            else:
+                # Fallback for direct structure
+                return response_content.get("emails", [])
 
         print(f"Request failed with status code: {response.status_code}")
 

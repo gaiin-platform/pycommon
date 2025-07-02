@@ -66,6 +66,65 @@ class TestGetEmailSuggestions:
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
     @patch("pycommon.api.amplify_users.requests.get")
+    def test_get_email_suggestions_success_nested_structure(self, mock_get):
+        """Test successful email suggestions retrieval
+        with nested JSON structure."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "statusCode": 200,
+            "body": '{"emails": ["user1@example.com", "user2@example.com"]}',
+        }
+        mock_get.return_value = mock_response
+
+        result = get_email_suggestions("test_token")
+
+        assert result == ["user1@example.com", "user2@example.com"]
+
+    @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
+    @patch("pycommon.api.amplify_users.requests.get")
+    def test_get_email_suggestions_nested_structure_empty_emails(self, mock_get):
+        """Test nested JSON structure with empty emails list."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"statusCode": 200, "body": '{"emails": []}'}
+        mock_get.return_value = mock_response
+
+        result = get_email_suggestions("test_token")
+
+        assert result == []
+
+    @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
+    @patch("pycommon.api.amplify_users.requests.get")
+    def test_get_email_suggestions_nested_structure_missing_emails(self, mock_get):
+        """Test nested JSON structure with missing emails key."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "statusCode": 200,
+            "body": '{"other_key": "value"}',
+        }
+        mock_get.return_value = mock_response
+
+        result = get_email_suggestions("test_token")
+
+        assert result == []
+
+    @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
+    @patch("pycommon.api.amplify_users.requests.get")
+    def test_get_email_suggestions_nested_structure_invalid_json_body(self, mock_get):
+        """Test nested JSON structure with invalid JSON in body field."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"statusCode": 200, "body": "invalid json"}
+        mock_get.return_value = mock_response
+
+        result = get_email_suggestions("test_token")
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
+    @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_empty_response(self, mock_get):
         """Test handling of empty email list in response."""
         mock_response = MagicMock()
