@@ -1095,6 +1095,43 @@ def test_validated_http_exception(
     assert "bad input" in json.loads(resp["body"])["error"]
 
 
+@patch("pycommon.authz._parse_token")
+@patch("pycommon.authz.get_claims")
+@patch("pycommon.authz._parse_and_validate")
+def test_validated_unexpected_exception(
+    mock_parse_and_validate, mock_get_claims, mock_parse_token
+):
+    """Test the validated decorator handling unexpected exceptions
+    (not HTTPException)."""
+    mock_parse_token.return_value = "user-token"
+    mock_get_claims.return_value = {
+        "username": "user",
+        "account": "acc",
+        "allowed_access": ["full_access"],
+        "rate_limit": {},
+    }
+    mock_parse_and_validate.return_value = ["path", {"foo": "bar"}]
+
+    # Set up global state for validation
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", True)
+    def test_handler_unexpected_exception(event, context, user, name, data):
+        # Raise a non-HTTPException to trigger the Exception handler
+        raise ValueError("Unexpected error occurred")
+
+    event = {
+        "headers": {"Authorization": "Bearer user-token"},
+        "body": "{}",
+        "path": "path",
+    }
+    context = {}
+
+    # This should re-raise the ValueError after printing debug info
+    with pytest.raises(ValueError, match="Unexpected error occurred"):
+        test_handler_unexpected_exception(event, context)
+
+
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.os.getenv")
 def test_api_claims_rate_limit_exceeded(mock_getenv, mock_boto3):

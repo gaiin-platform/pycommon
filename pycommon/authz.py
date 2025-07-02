@@ -289,19 +289,30 @@ def _validate_data(
     Raises:
         ValidationError: If the data does not conform to the schema.
     """
+    print(
+        f"_validate_data called with name={name}, op={op}, api_accessed={api_accessed}"
+    )
+
     validator: dict = validator_rules.get(
         "api_validators" if api_accessed else "validators", None
     )
+    print(f"Using {'api_validators' if api_accessed else 'validators'} from rules")
+
     if not validator:
+        print("No validator found, raising ValidationError")
         raise ValidationError("No validator found for the operation")
 
     if name in validator and op in validator[name]:
+        print(f"Found validator for {name}/{op}")
         schema: dict = validator[name][op]
         try:
             json_validate(instance=data, schema=schema)
+            print("JSON validation passed")
         except ValidationError as e:
+            print(f"JSON validation failed: {e.message}")
             raise ValidationError(f"Invalid data: {e.message}")
         except SchemaError as e:
+            print(f"Schema error: {e.message}")
             raise ValidationError(f"Invalid schema: {e.message}")
     else:
         print(f"Invalid data or path: {name} - op:{op} - data: {data}")
@@ -336,36 +347,57 @@ def _parse_and_validate(
         HTTPUnauthorized: If the user does not have permission to perform the operation.
     """  # noqa: E501
 
+    print(f"_parse_and_validate started for user: {current_user}, op: {op}")
+    print(f"api_accessed: {api_accessed}, validate_body: {validate_body}")
+
     data: dict = {}
     if validate_body:
+        print("Parsing request body...")
         try:
             data = json.loads(event["body"]) if event.get("body") else {}
+            print("Body parsed successfully")
         except json.decoder.JSONDecodeError:
+            print("JSON decode error in body parsing")
             raise HTTPBadRequest("Unable to parse JSON body.")
 
+    print("Getting path from event...")
     name: Optional[str] = event.get("path")
+    print(f"Path extracted: {name}")
     if not name:
+        print("No path found in event")
         raise HTTPBadRequest("Unable to perform the operation, invalid request.")
 
     if validate_body:
+        print("Validating data...")
         try:
             _validate_data(name, op, data, api_accessed, validator_rules)
+            print("Data validation completed successfully")
         except ValidationError as e:
+            print(f"Validation error: {e}")
             raise HTTPBadRequest(e.message)
 
+    print("Checking permissions...")
     try:
         # If the permission checker exists, is callable, returns a callabe and
         # that callable returns False, then we raise an HTTPUnauthorized
         if permission_checker is not None:
-            if not permission_checker(current_user, name, op, data)(current_user, data):
+            print("Permission checker exists, calling it...")
+            permission_result = permission_checker(current_user, name, op, data)
+            print("Permission checker returned, calling result function...")
+            if not permission_result(current_user, data):
                 print("User does not have permission to perform the operation.")
                 raise HTTPUnauthorized(
                     "User does not have permission to perform the operation."
                 )
-    except (NameError, TypeError):
+            print("Permission check passed")
+        else:
+            print("No permission checker set")
+    except (NameError, TypeError) as e:
         # This  means our permission checker is not defined
+        print(f"Permission checker error (expected): {e}")
         pass
 
+    print(f"_parse_and_validate completed successfully, returning name={name}")
     return [name, data]
 
 
@@ -640,6 +672,12 @@ def validated(
                 if current_user is None:
                     raise HTTPUnauthorized("User not found.")
 
+                print("Prior to call _parse_and_validate...")
+                print(f"Validation rules available: {_validate_rules is not None}")
+                print(
+                    f"Permission checker available: {_permission_checker is not None}"
+                )
+
                 [name, data] = _parse_and_validate(
                     current_user,
                     event,
@@ -649,7 +687,9 @@ def validated(
                     validate_body,
                     _permission_checker,
                 )
+                print(f"_parse_and_validate completed successfully. name={name}")
 
+                print("Setting up data dictionary...")
                 data["access_token"] = token
                 data["account"] = claims["account"]
                 data["api_key_id"] = claims.get("api_key_id")
@@ -659,18 +699,27 @@ def validated(
                 data["purpose"] = claims.get(
                     "purpose"
                 )  # helps identify group system users for ex.
+                print("Data dictionary setup complete, calling main function...")
 
                 result = f(event, context, current_user, name, data)
+                print("Main function completed successfully")
 
                 return {
                     "statusCode": 200,
                     "body": json.dumps(result, cls=CustomPydanticJSONEncoder),
                 }
             except HTTPException as e:
+                print(f"HTTPException caught: {e.status_code} - {e}")
                 return {
                     "statusCode": e.status_code,
                     "body": json.dumps({"error": f"Error: {e.status_code} - {e}"}),
                 }
+            except Exception as e:
+                print(f"Unexpected exception caught: {type(e).__name__} - {e}")
+                import traceback
+
+                print(f"Traceback: {traceback.format_exc()}")
+                raise
 
         return wrapper
 
