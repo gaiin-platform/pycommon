@@ -99,19 +99,22 @@ def get_system_ids(access_token: str) -> Optional[List[dict]]:
     return None
 
 
-def is_valid_amplify_user(access_token: str, user_email: str) -> bool:
+def are_valid_amplify_users(
+    access_token: str, user_emails: List[str]
+) -> tuple[List[str], List[str]]:
     """
-    Check if a given email is a valid Amplify user.
+    Check if given emails are valid Amplify users.
 
     Args:
         access_token: Bearer token for authentication
-        user_email: Email address to validate
+        user_emails: Email addresses to validate
 
     Returns:
-        bool: True if the user email exists in the system
-        or system users, False otherwise
+        tuple[List[str], List[str]]: A tuple containing
+        (valid_users, invalid_users) where each list
+        contains lowercase email addresses
     """
-    print(f"Checking if {user_email} is a valid Amplify user")
+    print(f"Checking if {user_emails} are valid Amplify users")
 
     # Get all emails from the system
     all_emails = get_email_suggestions(access_token, "*")
@@ -132,7 +135,16 @@ def is_valid_amplify_user(access_token: str, user_email: str) -> bool:
 
     # Combine both lists and check if the user email exists
     all_valid_emails = all_emails + system_users
-    is_valid = user_email.lower() in [email.lower() for email in all_valid_emails]
+    valid = []
+    invalid = []
+    for user in user_emails:
+        lower_user = user.lower()
+        is_valid = lower_user in [email.lower() for email in all_valid_emails]
+        if is_valid:
+            valid.append(lower_user)
+        else:
+            invalid.append(lower_user)
 
-    print(f"User {user_email} is {'valid' if is_valid else 'not valid'}")
-    return is_valid
+    print(f"Valid Users: {valid}")
+    print(f"Invalid Users: {invalid}")
+    return valid, invalid

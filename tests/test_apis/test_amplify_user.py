@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 import requests
 
 from pycommon.api.amplify_users import (
+    are_valid_amplify_users,
     get_email_suggestions,
     get_system_ids,
-    is_valid_amplify_user,
 )
 
 
@@ -116,7 +116,7 @@ class TestGetEmailSuggestions:
         """Test nested JSON structure with invalid JSON in body field."""
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"statusCode": 200, "body": "invalid json"}
+        mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
         mock_get.return_value = mock_response
 
         result = get_email_suggestions("test_token")
@@ -334,12 +334,12 @@ class TestGetSystemIds:
         assert result is None
 
 
-class TestIsValidAmplifyUser:
-    """Test cases for is_valid_amplify_user function."""
+class TestAreValidAmplifyUsersOld:
+    """Test cases for are_valid_amplify_users function - legacy single email tests."""
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_valid_email_in_emails(
+    def test_are_valid_amplify_users_valid_email_in_emails(
         self, mock_get_emails, mock_get_systems
     ):
         """Test validation of a valid user email from email suggestions."""
@@ -352,15 +352,16 @@ class TestIsValidAmplifyUser:
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
 
-        result = is_valid_amplify_user("test_token", "user1@example.com")
+        valid, invalid = are_valid_amplify_users("test_token", ["user1@example.com"])
 
-        assert result is True
+        assert valid == ["user1@example.com"]
+        assert invalid == []
         mock_get_emails.assert_called_once_with("test_token", "*")
         mock_get_systems.assert_called_once_with("test_token")
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_valid_email_in_systems(
+    def test_are_valid_amplify_users_valid_email_in_systems(
         self, mock_get_emails, mock_get_systems
     ):
         """Test validation of a valid user email from system users."""
@@ -370,13 +371,14 @@ class TestIsValidAmplifyUser:
             {"owner": "system2@example.com", "systemId": "sys2"},
         ]
 
-        result = is_valid_amplify_user("test_token", "system1@example.com")
+        valid, invalid = are_valid_amplify_users("test_token", ["system1@example.com"])
 
-        assert result is True
+        assert valid == ["system1@example.com"]
+        assert invalid == []
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_case_insensitive(
+    def test_are_valid_amplify_users_case_insensitive(
         self, mock_get_emails, mock_get_systems
     ):
         """Test validation with case-insensitive matching."""
@@ -386,13 +388,18 @@ class TestIsValidAmplifyUser:
         ]
 
         # Test email case insensitive
-        assert is_valid_amplify_user("test_token", "user1@example.com") is True
+        valid, invalid = are_valid_amplify_users("test_token", ["user1@example.com"])
+        assert valid == ["user1@example.com"]
+        assert invalid == []
+
         # Test system user case insensitive
-        assert is_valid_amplify_user("test_token", "system1@example.com") is True
+        valid, invalid = are_valid_amplify_users("test_token", ["system1@example.com"])
+        assert valid == ["system1@example.com"]
+        assert invalid == []
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_invalid_email(
+    def test_are_valid_amplify_users_invalid_email(
         self, mock_get_emails, mock_get_systems
     ):
         """Test validation of an invalid user email."""
@@ -401,26 +408,30 @@ class TestIsValidAmplifyUser:
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
 
-        result = is_valid_amplify_user("test_token", "nonexistent@example.com")
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["nonexistent@example.com"]
+        )
 
-        assert result is False
+        assert valid == []
+        assert invalid == ["nonexistent@example.com"]
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_both_lists_empty(
+    def test_are_valid_amplify_users_both_lists_empty(
         self, mock_get_emails, mock_get_systems
     ):
         """Test validation when both email and system lists are empty."""
         mock_get_emails.return_value = []
         mock_get_systems.return_value = []
 
-        result = is_valid_amplify_user("test_token", "user@example.com")
+        valid, invalid = are_valid_amplify_users("test_token", ["user@example.com"])
 
-        assert result is False
+        assert valid == []
+        assert invalid == ["user@example.com"]
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_emails_fail_systems_work(
+    def test_are_valid_amplify_users_emails_fail_systems_work(
         self, mock_get_emails, mock_get_systems
     ):
         """Test validation when get_email_suggestions fails but get_system_ids works."""
@@ -429,37 +440,40 @@ class TestIsValidAmplifyUser:
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
 
-        result = is_valid_amplify_user("test_token", "system1@example.com")
+        valid, invalid = are_valid_amplify_users("test_token", ["system1@example.com"])
 
-        assert result is True
+        assert valid == ["system1@example.com"]
+        assert invalid == []
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_systems_fail_emails_work(
+    def test_are_valid_amplify_users_systems_fail_emails_work(
         self, mock_get_emails, mock_get_systems
     ):
         """Test validation when get_system_ids fails but get_email_suggestions works."""
         mock_get_emails.return_value = ["user1@example.com"]
         mock_get_systems.return_value = None
 
-        result = is_valid_amplify_user("test_token", "user1@example.com")
+        valid, invalid = are_valid_amplify_users("test_token", ["user1@example.com"])
 
-        assert result is True
+        assert valid == ["user1@example.com"]
+        assert invalid == []
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_both_fail(self, mock_get_emails, mock_get_systems):
+    def test_are_valid_amplify_users_both_fail(self, mock_get_emails, mock_get_systems):
         """Test validation when both API calls fail."""
         mock_get_emails.return_value = None
         mock_get_systems.return_value = None
 
-        result = is_valid_amplify_user("test_token", "user@example.com")
+        valid, invalid = are_valid_amplify_users("test_token", ["user@example.com"])
 
-        assert result is False
+        assert valid == []
+        assert invalid == ["user@example.com"]
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_system_data_without_owner(
+    def test_are_valid_amplify_users_system_data_without_owner(
         self, mock_get_emails, mock_get_systems
     ):
         """Test validation with system data that has missing or empty owner fields."""
@@ -472,13 +486,23 @@ class TestIsValidAmplifyUser:
         ]
 
         # Should find system1@example.com and system2@example.com but ignore the others
-        assert is_valid_amplify_user("test_token", "system1@example.com") is True
-        assert is_valid_amplify_user("test_token", "system2@example.com") is True
-        assert is_valid_amplify_user("test_token", "nonexistent@example.com") is False
+        valid, invalid = are_valid_amplify_users("test_token", ["system1@example.com"])
+        assert valid == ["system1@example.com"]
+        assert invalid == []
+
+        valid, invalid = are_valid_amplify_users("test_token", ["system2@example.com"])
+        assert valid == ["system2@example.com"]
+        assert invalid == []
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["nonexistent@example.com"]
+        )
+        assert valid == []
+        assert invalid == ["nonexistent@example.com"]
 
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_is_valid_amplify_user_duplicate_emails(
+    def test_are_valid_amplify_users_duplicate_emails(
         self, mock_get_emails, mock_get_systems
     ):
         """Test validation with duplicate emails across both sources."""
@@ -489,6 +513,254 @@ class TestIsValidAmplifyUser:
         ]
 
         # Should still work even with duplicates
-        assert is_valid_amplify_user("test_token", "duplicate@example.com") is True
-        assert is_valid_amplify_user("test_token", "user1@example.com") is True
-        assert is_valid_amplify_user("test_token", "system1@example.com") is True
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["duplicate@example.com"]
+        )
+        assert valid == ["duplicate@example.com"]
+        assert invalid == []
+
+        valid, invalid = are_valid_amplify_users("test_token", ["user1@example.com"])
+        assert valid == ["user1@example.com"]
+        assert invalid == []
+
+        valid, invalid = are_valid_amplify_users("test_token", ["system1@example.com"])
+        assert valid == ["system1@example.com"]
+        assert invalid == []
+
+
+class TestAreValidAmplifyUsers:
+    """Test cases for are_valid_amplify_users function."""
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_all_valid_emails(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation when all emails are valid."""
+        mock_get_emails.return_value = [
+            "user1@example.com",
+            "user2@example.com",
+            "admin@example.com",
+        ]
+        mock_get_systems.return_value = [
+            {"owner": "system1@example.com", "systemId": "sys1"},
+        ]
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["user1@example.com", "system1@example.com"]
+        )
+
+        assert valid == ["user1@example.com", "system1@example.com"]
+        assert invalid == []
+        mock_get_emails.assert_called_once_with("test_token", "*")
+        mock_get_systems.assert_called_once_with("test_token")
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_all_invalid_emails(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation when all emails are invalid."""
+        mock_get_emails.return_value = ["user1@example.com", "user2@example.com"]
+        mock_get_systems.return_value = [
+            {"owner": "system1@example.com", "systemId": "sys1"},
+        ]
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["invalid1@example.com", "invalid2@example.com"]
+        )
+
+        assert valid == []
+        assert invalid == ["invalid1@example.com", "invalid2@example.com"]
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_mixed_validity(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation with mix of valid and invalid emails."""
+        mock_get_emails.return_value = ["user1@example.com", "user2@example.com"]
+        mock_get_systems.return_value = [
+            {"owner": "system1@example.com", "systemId": "sys1"},
+        ]
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token",
+            ["user1@example.com", "invalid@example.com", "system1@example.com"],
+        )
+
+        assert valid == ["user1@example.com", "system1@example.com"]
+        assert invalid == ["invalid@example.com"]
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_case_insensitive(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation with case-insensitive matching."""
+        mock_get_emails.return_value = ["User1@Example.com"]
+        mock_get_systems.return_value = [
+            {"owner": "System1@Example.com", "systemId": "sys1"},
+        ]
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["user1@example.com", "SYSTEM1@EXAMPLE.COM"]
+        )
+
+        assert valid == ["user1@example.com", "system1@example.com"]
+        assert invalid == []
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_empty_input(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation with empty email list."""
+        mock_get_emails.return_value = ["user1@example.com"]
+        mock_get_systems.return_value = [
+            {"owner": "system1@example.com", "systemId": "sys1"},
+        ]
+
+        valid, invalid = are_valid_amplify_users("test_token", [])
+
+        assert valid == []
+        assert invalid == []
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_emails_fail_systems_work(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation when get_email_suggestions fails but get_system_ids works."""
+        mock_get_emails.return_value = None
+        mock_get_systems.return_value = [
+            {"owner": "system1@example.com", "systemId": "sys1"},
+        ]
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["system1@example.com", "invalid@example.com"]
+        )
+
+        assert valid == ["system1@example.com"]
+        assert invalid == ["invalid@example.com"]
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_systems_fail_emails_work(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation when get_system_ids fails but get_email_suggestions works."""
+        mock_get_emails.return_value = ["user1@example.com"]
+        mock_get_systems.return_value = None
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["user1@example.com", "invalid@example.com"]
+        )
+
+        assert valid == ["user1@example.com"]
+        assert invalid == ["invalid@example.com"]
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_both_fail(self, mock_get_emails, mock_get_systems):
+        """Test validation when both API calls fail."""
+        mock_get_emails.return_value = None
+        mock_get_systems.return_value = None
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["user@example.com", "another@example.com"]
+        )
+
+        assert valid == []
+        assert invalid == ["user@example.com", "another@example.com"]
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_system_data_without_owner(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation with system data that has missing or empty owner fields."""
+        mock_get_emails.return_value = ["user1@example.com"]
+        mock_get_systems.return_value = [
+            {"owner": "system1@example.com", "systemId": "sys1"},
+            {"systemId": "sys2"},  # Missing owner
+            {"owner": "", "systemId": "sys3"},  # Empty owner
+            {"owner": "system2@example.com", "systemId": "sys4"},
+        ]
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token",
+            [
+                "user1@example.com",
+                "system1@example.com",
+                "system2@example.com",
+                "invalid@example.com",
+            ],
+        )
+
+        assert valid == [
+            "user1@example.com",
+            "system1@example.com",
+            "system2@example.com",
+        ]
+        assert invalid == ["invalid@example.com"]
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_duplicate_emails_in_input(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation with duplicate emails in input."""
+        mock_get_emails.return_value = ["user1@example.com"]
+        mock_get_systems.return_value = [
+            {"owner": "system1@example.com", "systemId": "sys1"},
+        ]
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token",
+            [
+                "user1@example.com",
+                "user1@example.com",
+                "system1@example.com",
+                "system1@example.com",
+            ],
+        )
+
+        # Should handle duplicates by including them in results
+        assert valid == [
+            "user1@example.com",
+            "user1@example.com",
+            "system1@example.com",
+            "system1@example.com",
+        ]
+        assert invalid == []
+
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    @patch("pycommon.api.amplify_users.get_email_suggestions")
+    def test_are_valid_amplify_users_duplicate_emails_across_sources(
+        self, mock_get_emails, mock_get_systems
+    ):
+        """Test validation with duplicate emails across
+        email suggestions and system users."""
+        mock_get_emails.return_value = ["duplicate@example.com", "user1@example.com"]
+        mock_get_systems.return_value = [
+            {"owner": "duplicate@example.com", "systemId": "sys1"},
+            {"owner": "system1@example.com", "systemId": "sys2"},
+        ]
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token",
+            [
+                "duplicate@example.com",
+                "user1@example.com",
+                "system1@example.com",
+                "invalid@example.com",
+            ],
+        )
+
+        assert valid == [
+            "duplicate@example.com",
+            "user1@example.com",
+            "system1@example.com",
+        ]
+        assert invalid == ["invalid@example.com"]
