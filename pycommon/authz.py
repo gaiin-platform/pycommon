@@ -247,7 +247,7 @@ def get_claims(token: str) -> dict:
     if "Item" not in response:
         print(f"Note: User {user} has no accounts")
 
-    accounts: List[dict] = response["Item"].get("accounts", [])
+    accounts: List[dict] = response.get("Item", {}).get("accounts", [])
     for acct in accounts:
         if acct["isDefault"]:
             account = acct["id"]

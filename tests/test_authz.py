@@ -345,8 +345,12 @@ def test_get_claims_no_dynamodb_item(
     mock_table.get_item.return_value = {}
     mock_boto3.return_value.Table.return_value = mock_table
 
-    with pytest.raises(KeyError):
-        get_claims("mock_token")
+    # Should no longer raise KeyError, but should handle gracefully
+    result = get_claims("mock_token")
+    assert result["username"] == "mockuser"
+    assert result["account"] == "general_account"
+    assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"period": "Unlimited", "rate": None}
 
 
 @patch("pycommon.authz.requests.get")
