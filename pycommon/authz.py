@@ -245,7 +245,7 @@ def get_claims(token: str) -> dict:
     rate_limit: Optional[dict] = NO_RATE_LIMIT
     response = table.get_item(Key={"user": user})
     if "Item" not in response:
-        raise ClaimException(f"No item found for user: {user}")
+        print(f"Note: User {user} has no accounts")
 
     accounts: List[dict] = response["Item"].get("accounts", [])
     for acct in accounts:

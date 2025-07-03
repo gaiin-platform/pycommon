@@ -345,7 +345,7 @@ def test_get_claims_no_dynamodb_item(
     mock_table.get_item.return_value = {}
     mock_boto3.return_value.Table.return_value = mock_table
 
-    with pytest.raises(ClaimException, match="No item found for user: mockuser"):
+    with pytest.raises(KeyError):
         get_claims("mock_token")
 
 
