@@ -692,6 +692,83 @@ def test_api_claims_success(mock_getenv, mock_boto3):
 
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.os.getenv")
+@patch("pycommon.authz.TokenV1")
+def test_api_claims_success_with_v1_token(mock_token_v1, mock_getenv, mock_boto3):
+    """Test api_claims with new amp-v1- token format"""
+    import pycommon.authz
+
+    # Store original access types to restore later
+    original_access_types = pycommon.authz._access_types.copy()
+
+    try:
+        # Set access types to include the ones used in this test
+        pycommon.authz._access_types = ["full_access", "file_upload", "share"]
+
+        # Mock TokenV1 to return a hash
+        mock_token_v1_instance = MagicMock()
+        mock_token_v1_instance.key = "hashed_token_value"
+        mock_token_v1.return_value = mock_token_v1_instance
+
+        mock_getenv.side_effect = lambda key: {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+        }.get(key)
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.query.return_value = {
+            "Items": [
+                {  # This should match the hash from TokenV1
+                    "apiKey": "hashed_token_value",
+                    "active": True,
+                    "expirationDate": "2099-12-31",
+                    "accessTypes": ["file_upload", "share"],
+                    "account": {"id": "mock_account_id"},
+                    "api_owner_id": "user/ownerKey/mock_owner",
+                    "rateLimit": {"rate": 100, "period": "Hourly"},
+                    "owner": "mock_owner",
+                }
+            ]
+        }
+        mock_cost_calculations_table = MagicMock()
+        mock_cost_calculations_table.query.return_value = {
+            "Items": [
+                {
+                    "id": "mock_owner",
+                    "hourlyCost": [0] * 24,  # Simulate no cost for all hours
+                }
+            ]
+        }
+        mock_boto3.return_value.Table.side_effect = lambda table_name: {
+            "mock_api_keys_table": mock_api_keys_table,
+            "mock_cost_calculations_table": mock_cost_calculations_table,
+        }[table_name]
+        event = {}
+        context = {}
+        token = "amp-v1-some_token_value"  # New format token
+        result = api_claims(event, context, token)
+
+        # Verify TokenV1 was called with the original token
+        mock_token_v1.assert_called_once_with("amp-v1-some_token_value")
+
+        # Verify the query used the hashed value
+        mock_api_keys_table.query.assert_called_once_with(
+            IndexName="ApiKeyIndex",
+            KeyConditionExpression="apiKey = :apiKeyVal",
+            ExpressionAttributeValues={":apiKeyVal": "hashed_token_value"},
+        )
+
+        assert result["username"] == "mock_owner"
+        assert result["account"] == "mock_account_id"
+        assert result["allowed_access"] == ["file_upload", "share"]
+        assert result["rate_limit"] == {"period": "Hourly", "rate": 100}
+        assert result["api_key_id"] == "user/ownerKey/mock_owner"
+
+    finally:
+        # Restore original state
+        pycommon.authz._access_types = original_access_types
+
+
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.os.getenv")
 def test_api_claims_key_not_found(mock_getenv, mock_boto3):
     mock_getenv.side_effect = lambda key: {
         "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",

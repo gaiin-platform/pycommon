@@ -28,6 +28,7 @@ from jsonschema import validate as json_validate
 from jsonschema.exceptions import ValidationError
 from requests import Response
 
+from pycommon.api_utils import TokenV1
 from pycommon.const import NO_RATE_LIMIT, UNLIMITED, APIAccessType
 from pycommon.decorators import required_env_vars
 from pycommon.encoders import CustomPydanticJSONEncoder
@@ -434,11 +435,18 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
 
     table = dynamodb.Table(api_keys_table_name)
 
+    # determine if we have a new or old key type
+    lookup_value: str = token
+    if lookup_value[:7] == "amp-v1-":
+        # this is a new key, we need to look up the hash
+        token_v1 = TokenV1(lookup_value)
+        lookup_value = token_v1.key  # hash
+
     # Retrieve item from DynamoDB
     response = table.query(
         IndexName="ApiKeyIndex",
         KeyConditionExpression="apiKey = :apiKeyVal",
-        ExpressionAttributeValues={":apiKeyVal": token},
+        ExpressionAttributeValues={":apiKeyVal": lookup_value},
     )
     items = response.get("Items", [])
 
