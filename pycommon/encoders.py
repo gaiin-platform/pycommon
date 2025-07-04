@@ -115,8 +115,8 @@ class CustomPydanticJSONEncoder(json.JSONEncoder):
         elif isinstance(obj, set):
             # Convert sets to lists for JSON compatibility
             return list(obj)
-        # Fallback to SafeDecimalEncoder for Decimal and other types
-        return SafeDecimalEncoder().default(obj)
+        # Fallback to SmartDecimalEncoder for Decimal and other types
+        return SmartDecimalEncoder().default(obj)
 
 
 def dumps_safe(obj: Any, **kwargs) -> str:
