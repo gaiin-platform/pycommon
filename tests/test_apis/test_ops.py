@@ -87,8 +87,8 @@ def test_api_tool_decorator():
 
 
 def test_api_tool_decorator_without_route_data():
-    # Reset global state to empty dict to test the condition where _route_data is falsy
-    set_route_data({})
+    # Reset global state to None to test the condition where _route_data is None
+    set_route_data(None)
     set_op_type("test")
 
     @api_tool(
@@ -104,8 +104,8 @@ def test_api_tool_decorator_without_route_data():
     result = test_function()
     assert result == {"result": "success"}
 
-    # Since _route_data was empty, it shouldn't be populated
-    assert ops._route_data == {}
+    # Since _route_data was None, it shouldn't be populated
+    assert ops._route_data is None
 
 
 def test_api_tool_decorator_permissions_by_state_lines_71_72():

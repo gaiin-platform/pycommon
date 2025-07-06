@@ -1,7 +1,7 @@
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Protocol
 
-_route_data: Dict[str, Dict[str, Any]] = {}
+_route_data: Dict[str, Dict[str, Any]] = None
 _permissions_by_state = None
 _op_type: str = "built_in"
 
@@ -89,7 +89,7 @@ def api_tool(
         def wrapper(*args, **kwargs):
 
             if (
-                _permissions_by_state
+                _permissions_by_state is not None
                 and not _permissions_by_state.permissions_by_state_type.get(path, None)
             ):
                 operation = path.split("/")[-1]
@@ -101,7 +101,7 @@ def api_tool(
             result = func(*args, **kwargs)
             return result
 
-        if _route_data:
+        if _route_data is not None:
             _route_data[path] = {
                 "method": method,
                 "parameters": parameters,  # Input schema
