@@ -173,3 +173,61 @@ def upload_to_presigned_url(
     except Exception as e:
         print(f"[✗] Upload failed: {e}")
         return False
+
+
+def delete_file(access_token: str, key: str):
+    """Delete a file from the cloud storage service.
+
+    This function makes an API call to delete a file using its key identifier.
+    The file will be permanently removed from the storage service.
+
+    Args:
+        access_token (str): Bearer token for API authentication.
+        key (str): The unique identifier key of the file to delete.
+
+    Returns:
+        dict: Dictionary containing the response status and message.
+            Success response: {"success": True, "message": str}
+            Failure response: {"success": False, "message": str}
+
+    Raises:
+        Exception: Any network or API errors are caught and logged, returning
+            failure response.
+    """
+    delete_endpoint = os.environ["API_BASE_URL"] + "/files/delete"
+
+    payload = {"key": key}
+
+    try:
+        response = requests.post(
+            url=delete_endpoint,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+
+        if response.status_code != 200:
+            print(f"[✗] Delete API call failed: {response.status_code} {response.text}")
+            return {
+                "success": False,
+                "message": f"API call failed with status {response.status_code}",
+            }
+
+        response_data = response.json()
+
+        success = response_data.get("success", False)
+        message = response_data.get("message", "")
+
+        if success:
+            print(f"[✓] Successfully deleted file with key: {key}")
+        else:
+            print(f"[✗] Failed to delete file with key: {key} - {message}")
+
+        return {"success": success, "message": message}
+
+    except Exception as e:
+        print(f"[✗] Error calling delete file API: {e}")
+
+    return {"success": False, "message": f"Failed to delete file with key: {key}"}

@@ -6,6 +6,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 from pycommon.api.files import (
+    delete_file,
     get_file_presigned_url,
     upload_file,
     upload_to_presigned_url,
@@ -363,4 +364,149 @@ class TestUploadToPresignedUrl:
             "https://s3.amazonaws.com/bucket/key",
             data=unicode_content.encode("utf-8"),
             headers={"Content-Type": "text/plain"},
+        )
+
+
+class TestDeleteFile:
+    """Test cases for the delete_file function."""
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.files.requests.post")
+    def test_delete_file_success(self, mock_post):
+        """Test successful file deletion."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True,
+            "message": "File deleted successfully",
+        }
+        mock_post.return_value = mock_response
+
+        result = delete_file("test_token", "file_key_123")
+
+        assert result["success"] is True
+        assert result["message"] == "File deleted successfully"
+
+        mock_post.assert_called_once_with(
+            url="https://api.example.com/files/delete",
+            headers={
+                "Authorization": "Bearer test_token",
+                "Content-Type": "application/json",
+            },
+            json={"key": "file_key_123"},
+        )
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.files.requests.post")
+    def test_delete_file_api_failure(self, mock_post):
+        """Test file deletion when API returns failure."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": False,
+            "message": "File not found",
+        }
+        mock_post.return_value = mock_response
+
+        result = delete_file("test_token", "nonexistent_key")
+
+        assert result["success"] is False
+        assert result["message"] == "File not found"
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.files.requests.post")
+    def test_delete_file_http_error(self, mock_post):
+        """Test file deletion with HTTP error status."""
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.text = "Not Found"
+        mock_post.return_value = mock_response
+
+        result = delete_file("test_token", "file_key_123")
+
+        assert result["success"] is False
+        assert "API call failed with status 404" in result["message"]
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.files.requests.post")
+    def test_delete_file_network_exception(self, mock_post):
+        """Test file deletion with network exception."""
+        mock_post.side_effect = Exception("Network error")
+
+        result = delete_file("test_token", "file_key_123")
+
+        assert result["success"] is False
+        assert "Failed to delete file with key: file_key_123" in result["message"]
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.files.requests.post")
+    def test_delete_file_partial_response(self, mock_post):
+        """Test file deletion with partial response (missing message)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True
+            # Missing message field
+        }
+        mock_post.return_value = mock_response
+
+        result = delete_file("test_token", "file_key_123")
+
+        assert result["success"] is True
+        assert result["message"] == ""
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.files.requests.post")
+    def test_delete_file_missing_success_field(self, mock_post):
+        """Test file deletion with missing success field in response."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "message": "Some message"
+            # Missing success field
+        }
+        mock_post.return_value = mock_response
+
+        result = delete_file("test_token", "file_key_123")
+
+        assert result["success"] is False
+        assert result["message"] == "Some message"
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.files.requests.post")
+    def test_delete_file_empty_response(self, mock_post):
+        """Test file deletion with empty response."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        mock_post.return_value = mock_response
+
+        result = delete_file("test_token", "file_key_123")
+
+        assert result["success"] is False
+        assert result["message"] == ""
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.files.requests.post")
+    def test_delete_file_with_special_characters_in_key(self, mock_post):
+        """Test file deletion with special characters in key."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True,
+            "message": "File deleted successfully",
+        }
+        mock_post.return_value = mock_response
+
+        special_key = "file_key_with-special.chars_123"
+        result = delete_file("test_token", special_key)
+
+        assert result["success"] is True
+        mock_post.assert_called_once_with(
+            url="https://api.example.com/files/delete",
+            headers={
+                "Authorization": "Bearer test_token",
+                "Content-Type": "application/json",
+            },
+            json={"key": special_key},
         )
