@@ -393,7 +393,7 @@ class TestDeleteFile:
                 "Authorization": "Bearer test_token",
                 "Content-Type": "application/json",
             },
-            json={"key": "file_key_123"},
+            json={"data": {"key": "file_key_123"}},
         )
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
@@ -508,5 +508,5 @@ class TestDeleteFile:
                 "Authorization": "Bearer test_token",
                 "Content-Type": "application/json",
             },
-            json={"key": special_key},
+            json={"data": {"key": special_key}},
         )

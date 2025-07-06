@@ -196,7 +196,7 @@ def delete_file(access_token: str, key: str):
     """
     delete_endpoint = os.environ["API_BASE_URL"] + "/files/delete"
 
-    payload = {"key": key}
+    payload = {"data": {"key": key}}
 
     try:
         response = requests.post(
