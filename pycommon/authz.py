@@ -357,14 +357,13 @@ def _parse_and_validate(
     print(f"api_accessed: {api_accessed}, validate_body: {validate_body}")
 
     data: dict = {}
-    if validate_body:
-        print("Parsing request body...")
-        try:
-            data = json.loads(event["body"]) if event.get("body") else {}
-            print("Body parsed successfully")
-        except json.decoder.JSONDecodeError:
-            print("JSON decode error in body parsing")
-            raise HTTPBadRequest("Unable to parse JSON body.")
+    print("Parsing request body...")
+    try:
+        data = json.loads(event["body"]) if event.get("body") else {}
+        print("Body parsed successfully")
+    except json.decoder.JSONDecodeError:
+        print("JSON decode error in body parsing")
+        raise HTTPBadRequest("Unable to parse JSON body.")
 
     print("Getting path from event...")
     name: Optional[str] = event.get("path")
