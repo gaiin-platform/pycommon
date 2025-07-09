@@ -39,5 +39,5 @@ def get_default_models(access_token):
         }
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching ops: {str(e)}")
+        print(f"Error fetching default models: {str(e)}")
     return {}

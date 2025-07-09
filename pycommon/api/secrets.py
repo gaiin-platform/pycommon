@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-DEFAULT_PREFIX = os.getenv("DEFAULT_SECRET_PARAMETER_PREFIX", "/pdb")
+DEFAULT_PREFIX = os.getenv("DEFAULT_SECRET_PARAMETER_PREFIX", "")
 
 
 def get_secret_value(secret_name: str) -> str:

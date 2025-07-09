@@ -74,7 +74,7 @@ def test_store_secret_parameter_success(mock_boto3_client):
 
     assert result == {"Version": 1}
     mock_client.put_parameter.assert_called_once_with(
-        Name="/pdb/test_param",
+        Name="/test_param",
         Value="secret_value",
         Type="SecureString",
         Overwrite=True,
@@ -181,7 +181,7 @@ def test_delete_secret_parameter_success(mock_boto3_client):
     result = delete_secret_parameter("test_param")
 
     assert result is True
-    mock_client.delete_parameter.assert_called_once_with(Name="/pdb/test_param")
+    mock_client.delete_parameter.assert_called_once_with(Name="/test_param")
 
 
 @patch("pycommon.api.secrets.boto3.client")
@@ -209,7 +209,7 @@ def test_delete_secret_parameter_failure(mock_boto3_client):
     result = delete_secret_parameter("nonexistent_param")
 
     assert result is False
-    mock_client.delete_parameter.assert_called_once_with(Name="/pdb/nonexistent_param")
+    mock_client.delete_parameter.assert_called_once_with(Name="/nonexistent_param")
 
 
 @patch("pycommon.api.secrets.boto3.client")
@@ -224,4 +224,4 @@ def test_delete_secret_parameter_access_denied(mock_boto3_client):
     result = delete_secret_parameter("test_param")
 
     assert result is False
-    mock_client.delete_parameter.assert_called_once_with(Name="/pdb/test_param")
+    mock_client.delete_parameter.assert_called_once_with(Name="/test_param")

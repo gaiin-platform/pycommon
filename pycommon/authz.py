@@ -353,7 +353,10 @@ def _parse_and_validate(
         HTTPUnauthorized: If the user does not have permission to perform the operation.
     """  # noqa: E501
 
-    print(f"_parse_and_validate started for user: {current_user}, op: {op}")
+    print(
+        f"_parse_and_validate started for user: {current_user}, "
+        f"op: {op}, path: {event.get('path')}"
+    )
     print(f"api_accessed: {api_accessed}, validate_body: {validate_body}")
 
     data: dict = {}

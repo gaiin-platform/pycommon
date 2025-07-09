@@ -207,7 +207,9 @@ class TestGetDefaultModels:
         result = get_default_models("test_token")
 
         assert result == {}
-        mock_print.assert_called_once_with("Error fetching ops: 404 Not Found")
+        mock_print.assert_called_once_with(
+            "Error fetching default models: 404 Not Found"
+        )
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.models.requests.get")
@@ -219,7 +221,9 @@ class TestGetDefaultModels:
         result = get_default_models("test_token")
 
         assert result == {}
-        mock_print.assert_called_once_with("Error fetching ops: Connection timeout")
+        mock_print.assert_called_once_with(
+            "Error fetching default models: Connection timeout"
+        )
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.models.requests.get")
