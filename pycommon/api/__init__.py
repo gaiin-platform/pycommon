@@ -23,7 +23,7 @@ from .assistants import (
     list_assistants,
     share_assistant,
 )
-from .credentials import get_credentials, get_endpoint, get_json_credetials
+from .credentials import get_credentials, get_endpoint, get_json_credentials
 from .data_sources import (
     extract_key,
     get_data_source_keys,
@@ -72,7 +72,7 @@ __all__ = [
     "upload_to_presigned_url",
     "delete_assistant",
     "share_assistant",
-    "get_json_credetials",
+    "get_json_credentials",
     "get_endpoint",
     "check_embedding_completion",
     "get_data_source_keys",

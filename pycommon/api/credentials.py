@@ -35,7 +35,7 @@ def get_credentials(secret_name: str) -> str:
         return get_secret_value_response["SecretString"]
 
 
-def get_json_credetials(secret_arn: str) -> dict:
+def get_json_credentials(secret_arn: str) -> dict:
     """
     Retrieve and parse JSON credentials from AWS Secrets Manager.
 

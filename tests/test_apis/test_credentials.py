@@ -1,6 +1,5 @@
-# =============================================================================
-# Tests for api/credentials.py
-# =============================================================================
+# Copyright (c) 2024 Vanderbilt University
+# Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas
 
 import json
 from unittest.mock import MagicMock, patch
@@ -8,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from pycommon.api.credentials import get_credentials, get_endpoint, get_json_credetials
+from pycommon.api.credentials import get_credentials, get_endpoint, get_json_credentials
 
 
 @patch("pycommon.api.credentials.boto3.session.Session")
@@ -37,41 +36,56 @@ def test_get_credentials_client_error(mock_session):
 
 @patch("pycommon.api.credentials.boto3.session.Session")
 def test_get_json_credentials_success(mock_session):
+    """Test successful retrieval and parsing of JSON credentials."""
+    # Mock the Secrets Manager client
     mock_client = MagicMock()
-    mock_client.get_secret_value.return_value = {
-        "SecretString": '{"key": "value", "number": 123}'
-    }
     mock_session.return_value.client.return_value = mock_client
 
-    result = get_json_credetials("test_secret_arn")
+    # Mock successful response
+    test_secret = {"key1": "value1", "key2": "value2"}
+    mock_client.get_secret_value.return_value = {
+        "SecretString": json.dumps(test_secret)
+    }
 
-    assert result == {"key": "value", "number": 123}
+    # Call the function
+    result = get_json_credentials("test_secret_arn")
+
+    # Assertions
+    assert result == test_secret
     mock_client.get_secret_value.assert_called_once_with(SecretId="test_secret_arn")
 
 
 @patch("pycommon.api.credentials.boto3.session.Session")
-def test_get_json_credentials_json_decode_error_line_52_53(mock_session):
-    # Test JSON decode error in get_json_credetials lines 52-53
+def test_get_json_credentials_client_error(mock_session):
+    """Test error handling when Secrets Manager raises a ClientError."""
+    # Test JSON decode error in get_json_credentials lines 52-53
     mock_client = MagicMock()
     mock_session.return_value.client.return_value = mock_client
 
-    # Mock successful secret retrieval but invalid JSON
-    mock_client.get_secret_value.return_value = {"SecretString": "invalid json content"}
+    # Mock ClientError
+    error = ClientError(
+        error_response={"Error": {"Code": "ResourceNotFoundException"}},
+        operation_name="GetSecretValue",
+    )
+    mock_client.get_secret_value.side_effect = error
 
-    with pytest.raises(json.JSONDecodeError):
-        get_json_credetials("test-secret")
+    # Call the function and expect it to raise the ClientError
+    with pytest.raises(ClientError):
+        get_json_credentials("test-secret")
 
 
 @patch("pycommon.api.credentials.boto3.session.Session")
-def test_get_json_credentials_client_error_lines_33_34(mock_session):
+def test_get_json_credentials_json_decode_error(mock_session):
+    """Test error handling when JSON parsing fails."""
     mock_client = MagicMock()
-    mock_client.get_secret_value.side_effect = ClientError(
-        {"Error": {"Code": "ResourceNotFoundException"}}, "GetSecretValue"
-    )
     mock_session.return_value.client.return_value = mock_client
 
-    with pytest.raises(ClientError):
-        get_json_credetials("test-secret")
+    # Mock response with invalid JSON
+    mock_client.get_secret_value.return_value = {"SecretString": "invalid json"}
+
+    # Call the function and expect it to raise a JSONDecodeError
+    with pytest.raises(json.JSONDecodeError):
+        get_json_credentials("test-secret")
 
 
 @patch("pycommon.api.credentials.random.choice")

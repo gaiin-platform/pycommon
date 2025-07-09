@@ -21,7 +21,7 @@ def deactivate_key(access_token: str, api_owner_id: str) -> bool:
     """
     print("Initiate deactivate key call")
 
-    amplify_group_endpoint = os.environ["API_BASE_URL"] + "/apiKeys/deactivate_key"
+    api_key_endpoint = os.environ["API_BASE_URL"] + "/apiKeys/key/deactivate"
 
     headers = {
         "Content-Type": "application/json",
@@ -31,18 +31,16 @@ def deactivate_key(access_token: str, api_owner_id: str) -> bool:
 
     try:
         response = requests.post(
-            amplify_group_endpoint, headers=headers, data=json.dumps(data)
+            api_key_endpoint, headers=headers, data=json.dumps(data)
         )
-        response_content = (
-            response.json()
-        )  # to adhere to object access return response dict
+        response_content = response.json()
         print("Response: ", response_content)
 
         if response.status_code == 200 and response_content.get("success", False):
             return True
 
     except Exception as e:
-        print(f"Error getting user amplify groups: {e}")
+        print(f"Error deactivating API key: {e}")
 
     return False
 
