@@ -352,10 +352,28 @@ def _parse_and_validate(
         HTTPBadRequest: If the input is invalid or the user lacks permissions.
         HTTPUnauthorized: If the user does not have permission to perform the operation.
     """  # noqa: E501
+    print("Getting path from event...")
+    # Handle both API Gateway and Lambda Function URL events
+    name: Optional[str] = None
+
+    # First try API Gateway format
+    if "path" in event:
+        print("API Gateway format detected")
+        name = event.get("path")
+    # Then try Lambda Function URL formats
+    elif "rawPath" in event:
+        print("Lambda Function URL format detected")
+        name = event.get("rawPath")
+    elif "requestContext" in event and "http" in event["requestContext"]:
+        print("Lambda Function URL alternative format detected")
+        name = event["requestContext"]["http"].get("path")
+    elif "requestContext" in event and "path" in event["requestContext"]:
+        print("Container Lambda Function URL format detected")
+        name = event["requestContext"].get("path")
 
     print(
         f"_parse_and_validate started for user: {current_user}, "
-        f"op: {op}, path: {event.get('path')}"
+        f"op: {op}, path: {name}"
     )
     print(f"api_accessed: {api_accessed}, validate_body: {validate_body}")
 
@@ -368,9 +386,6 @@ def _parse_and_validate(
         print("JSON decode error in body parsing")
         raise HTTPBadRequest("Unable to parse JSON body.")
 
-    print("Getting path from event...")
-    name: Optional[str] = event.get("path")
-    print(f"Path extracted: {name}")
     if not name:
         print("No path found in event")
         raise HTTPBadRequest("Unable to perform the operation, invalid request.")

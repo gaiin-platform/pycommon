@@ -631,6 +631,78 @@ def test_parse_and_validate_valid_input():
     assert result == ["/state/share", {"data": {"key": "test", "value": 123}}]
 
 
+def test_parse_and_validate_rawpath_format():
+    """Test _parse_and_validate with Lambda Function URL rawPath format."""
+
+    def mock_permission_checker(user, type, op, data):
+        return lambda user, data: True
+
+    current_user = "mock_user"
+    event = {
+        "rawPath": "/state/share",
+        "body": '{"data": {"key": "test", "value": 123}}',
+    }
+    op = "append"
+    api_accessed = False
+    result = _parse_and_validate(
+        current_user,
+        event,
+        op,
+        api_accessed,
+        rules,
+        permission_checker=mock_permission_checker,
+    )
+    assert result == ["/state/share", {"data": {"key": "test", "value": 123}}]
+
+
+def test_parse_and_validate_lambda_function_url_alternative_format():
+    """Test _parse_and_validate with Lambda Function URL alternative format."""
+
+    def mock_permission_checker(user, type, op, data):
+        return lambda user, data: True
+
+    current_user = "mock_user"
+    event = {
+        "requestContext": {"http": {"path": "/state/share"}},
+        "body": '{"data": {"key": "test", "value": 123}}',
+    }
+    op = "append"
+    api_accessed = False
+    result = _parse_and_validate(
+        current_user,
+        event,
+        op,
+        api_accessed,
+        rules,
+        permission_checker=mock_permission_checker,
+    )
+    assert result == ["/state/share", {"data": {"key": "test", "value": 123}}]
+
+
+def test_parse_and_validate_container_lambda_function_url_format():
+    """Test _parse_and_validate with Container Lambda Function URL format."""
+
+    def mock_permission_checker(user, type, op, data):
+        return lambda user, data: True
+
+    current_user = "mock_user"
+    event = {
+        "requestContext": {"path": "/state/share"},
+        "body": '{"data": {"key": "test", "value": 123}}',
+    }
+    op = "append"
+    api_accessed = False
+    result = _parse_and_validate(
+        current_user,
+        event,
+        op,
+        api_accessed,
+        rules,
+        permission_checker=mock_permission_checker,
+    )
+    assert result == ["/state/share", {"data": {"key": "test", "value": 123}}]
+
+
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.os.getenv")
 def test_api_claims_success(mock_getenv, mock_boto3):
