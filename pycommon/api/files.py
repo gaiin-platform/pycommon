@@ -3,6 +3,8 @@ from typing import List, Union
 
 import requests
 
+from .data_sources import extract_key
+
 
 def upload_file(
     access_token: str,
@@ -196,7 +198,10 @@ def delete_file(access_token: str, key: str):
     """
     delete_endpoint = os.environ["API_BASE_URL"] + "/files/delete"
 
-    payload = {"data": {"key": key}}
+    # Sanitize the key by extracting it from any protocol prefix
+    sanitized_key = extract_key(key)
+
+    payload = {"data": {"key": sanitized_key}}
 
     try:
         response = requests.post(
