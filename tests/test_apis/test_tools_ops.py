@@ -508,7 +508,7 @@ class TestScanLambdaCodebase:
             "/var/task/service/handler.py",  # Should be included
             "/var/task/service/subdir/file.py",  # Should be included
             "/var/task/serviceX/file.py",  # Should NOT be included
-            "/var/task/other/service",  # Should be included (ends with service)
+            "/var/task/other/service",
             "/var/task/different/file.py",  # Should NOT be included
         ]
 
@@ -517,8 +517,7 @@ class TestScanLambdaCodebase:
 
             _scan_lambda_codebase("/var/task", ["service"])
 
-            # Should process 3 files: the service dir files
-            # and the file ending with service
+            # Should process 3 files: service dir files and file ending with service
             assert mock_extract.call_count == 3
             expected_files = [
                 "/var/task/service/handler.py",
@@ -527,6 +526,44 @@ class TestScanLambdaCodebase:
             ]
             for expected_file in expected_files:
                 mock_extract.assert_any_call(expected_file)
+
+    @patch("pycommon.api.tools_ops.find_python_files")
+    def test_scan_lambda_codebase_empty_include_dirs_uses_exclusion(
+        self, mock_find_files, capsys
+    ):
+        """Test that empty include_dirs uses exclusion-based filtering."""
+        mock_find_files.return_value = [
+            "/var/task/root_file.py",  # Root-level file - included
+            "/var/task/service/handler.py",  # Subdirectory file - included
+            "/var/task/schemata/schema.py",  # In excluded dir - NOT included
+            "/var/task/node_modules/lib.py",  # In excluded dir - NOT included
+            "/var/task/tests/test_file.py",  # In excluded dir - NOT included
+            "/var/task/__pycache__/cache.py",  # In excluded dir - NOT included
+        ]
+
+        with patch("pycommon.api.tools_ops.extract_ops_from_file") as mock_extract:
+            mock_extract.return_value = []
+
+            _scan_lambda_codebase("/var/task", [])  # Empty include_dirs
+
+            # Should process only non-excluded files
+            assert mock_extract.call_count == 2
+            mock_extract.assert_any_call("/var/task/root_file.py")
+            mock_extract.assert_any_call("/var/task/service/handler.py")
+
+            # Should NOT process excluded files
+            excluded_calls = [
+                "/var/task/schemata/schema.py",
+                "/var/task/node_modules/lib.py",
+                "/var/task/tests/test_file.py",
+                "/var/task/__pycache__/cache.py",
+            ]
+            for excluded_file in excluded_calls:
+                assert call(excluded_file) not in mock_extract.call_args_list
+
+            # Check debug output
+            captured = capsys.readouterr()
+            assert "Using exclusion-based filtering" in captured.out
 
     def test_scan_lambda_codebase_integration_with_real_files(self):
         """Integration test with real temporary files."""

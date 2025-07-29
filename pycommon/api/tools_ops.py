@@ -241,11 +241,15 @@ def _scan_lambda_codebase(
     Reuses existing tools/ops.py functions.
 
     Args:
-        directory: Root directory to scan
-        include_dirs: List of directories to include in scanning
+        directory: Root directory to scan (typically /var/task for Lambda)
+        include_dirs: List of directories to include in scanning.
+                     If empty, scans all files except those in excluded directories.
 
     Returns:
         List of OperationModel objects found
+
+    Raises:
+        Exception: If file system operations or AST parsing fails
     """
     print(f"Starting scan of directory: {directory}")
 
@@ -253,20 +257,54 @@ def _scan_lambda_codebase(
     all_python_files = find_python_files(directory)
     print(f"Found {len(all_python_files)} Python files total")
 
-    # Filter out files in excluded directories
+    # Directories to exclude when include_dirs is empty (exclusion-based approach)
+    EXCLUDED_DIRS = {
+        "schemata",
+        "node_modules",
+        "__pycache__",
+        ".git",
+        ".serverless",
+        "venv",
+        "env",
+        ".pytest_cache",
+        ".vscode",
+        ".idea",
+        "tests",
+    }
+
+    # Filter files based on include_dirs
     filtered_files = []
 
-    for file_path in all_python_files:
-        should_include = False
-        for include_dir in include_dirs:
-            if f"/{include_dir}/" in file_path or file_path.endswith(f"/{include_dir}"):
-                should_include = True
-                break
+    if not include_dirs:
+        # Exclusion-based: include all files except those in excluded directories
+        for file_path in all_python_files:
+            should_exclude = False
+            for exclude_dir in EXCLUDED_DIRS:
+                if f"/{exclude_dir}/" in file_path or file_path.endswith(
+                    f"/{exclude_dir}"
+                ):
+                    should_exclude = True
+                    break
 
-        # Include all non-excluded files
-        if should_include:
-            filtered_files.append(file_path)
-            print(f"Including file: {file_path}")
+            if not should_exclude:
+                filtered_files.append(file_path)
+                print(f"Including file: {file_path}")
+
+        print(f"Using exclusion-based filtering (excluded: {EXCLUDED_DIRS})")
+    else:
+        # Inclusion-based: only include files in specified directories
+        for file_path in all_python_files:
+            should_include = False
+            for include_dir in include_dirs:
+                if f"/{include_dir}/" in file_path or file_path.endswith(
+                    f"/{include_dir}"
+                ):
+                    should_include = True
+                    break
+
+            if should_include:
+                filtered_files.append(file_path)
+                print(f"Including file: {file_path}")
 
     print(f"After filtering, scanning {len(filtered_files)} files for " f"operations")
 
