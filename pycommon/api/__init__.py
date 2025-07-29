@@ -47,6 +47,7 @@ from .secrets import (
     update_dict_with_secrets,
 )
 from .ses_email import send_email
+from .tools_ops import api_tools_register_handler
 
 __all__ = [
     # Most common functions
@@ -65,6 +66,7 @@ __all__ = [
     "deactivate_key",
     "send_email",
     "api_tool",
+    "api_tools_register_handler",
     # All other functions
     "update_dict_with_secrets",
     "delete_secret_parameter",

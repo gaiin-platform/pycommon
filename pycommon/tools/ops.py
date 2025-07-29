@@ -260,6 +260,7 @@ def scan_and_register_ops(
 
 def print_pretty_ops(ops: List[OperationModel]):
     for op in ops:
+        print("_" * 80)
         print("Operation Details:")
         print(f"  Name       : {op.name}")
         print(f"  URL        : {op.url}")
@@ -275,10 +276,7 @@ def print_pretty_ops(ops: List[OperationModel]):
                     print(f"    - {prop_name} : {description}")
         print(f"  Include Access Token: {op.includeAccessToken}")
         print(f"  Type       : {op.type}")
-        if op.output:
-            print(f"  Output Schema: {op.output}")
-        if op.permissions:
-            print(f"  Permissions: {op.permissions}")
+        print(f"  Tags       : {op.tags}")
         print("")
 
 
@@ -379,7 +377,7 @@ def write_ops(
                 table.put_item(Item=item)
                 print(
                     f"Put item into table {table_name} for user {current_user} "
-                    f"and tag {tag}: {item}"
+                    f"and tag {tag}"
                 )
 
     return {
