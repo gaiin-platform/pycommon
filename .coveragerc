@@ -6,5 +6,5 @@ branch = True
 fail_under = 100
 show_missing = True
 omit =
-    */__init__.py
+    pycommon/__init__.py
     tests/*

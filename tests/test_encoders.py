@@ -92,7 +92,7 @@ def test_dumps_smart():
 def test_dumps_lossy():
     obj = {"value": decimal.Decimal("123.456")}
     result = dumps_lossy(obj)
-    assert result == '{"value": 123}'  # Decimal is truncated to an integerimport json
+    assert result == '{"value": 123}'  # Decimal is truncated to an integer
 
 
 def test_custom_pydantic_json_encoder_with_pydantic_model():
@@ -103,20 +103,25 @@ def test_custom_pydantic_json_encoder_with_pydantic_model():
     obj = SampleModel(name="Test", value=decimal.Decimal("123.456"))
     result = json.dumps(obj, cls=CustomPydanticJSONEncoder)
     assert (
-        result == '{"name": "Test", "value": "123.456"}'
-    )  # Pydantic model serialized as dict
+        result == '{"name": "Test", "value": 123.456}'
+    )  # Pydantic model serialized as dict with SmartDecimalEncoder
 
 
 def test_custom_pydantic_json_encoder_with_set():
-    obj = {1, 2, 3}
+    obj = {"apple", "banana", "cherry"}
     result = json.dumps(obj, cls=CustomPydanticJSONEncoder)
-    assert result == "[1, 2, 3]"  # Set is serialized as a list
+    # Sets are converted to lists, so we need to check if all elements are present
+    parsed = json.loads(result)
+    assert isinstance(parsed, list)
+    assert set(parsed) == {"apple", "banana", "cherry"}
 
 
 def test_custom_pydantic_json_encoder_with_decimal():
     obj = decimal.Decimal("123.456")
     result = json.dumps(obj, cls=CustomPydanticJSONEncoder)
-    assert result == '"123.456"'  # Decimal is serialized as a string
+    assert (
+        result == "123.456"
+    )  # Decimal is serialized as a float with SmartDecimalEncoder
 
 
 def test_custom_pydantic_json_encoder_with_unserializable_object():

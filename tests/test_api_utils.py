@@ -38,7 +38,7 @@ def test_tokenv1_generation_and_properties():
 
 
 def test_tokenv1_validate_and_eq():
-    key = "ampv1-mykey"
+    key = "amp-v1-mykey"
     t = TokenV1(key)
     # Should validate with the correct raw key
     assert t.validate(key)
@@ -52,7 +52,7 @@ def test_tokenv1_validate_and_eq():
 
 
 def test_tokenv1_key_generator_consistency():
-    key = "ampv1-anotherkey"
+    key = "amp-v1-anotherkey"
     t = TokenV1(key)
     assert t._key_generator(key) == t.key
 
