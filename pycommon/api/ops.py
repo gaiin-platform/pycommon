@@ -79,9 +79,10 @@ def api_tool(
         ValueError: If method is not "GET" or "POST"
     """
 
+    method = method.upper() if isinstance(method, str) else method
     # Validate that method is either GET or POST
-    if method not in ["GET", "POST"]:
-        raise ValueError(f"Method must be either 'GET' or 'POST', got '{method}'")
+    if method not in ["GET", "POST", "DELETE", "PUT"]:
+        raise ValueError(f"Method must be GET, POST, DELETE, or PUT, got '{method}'")
 
     # This is the actual decorator
     def decorator(func):
