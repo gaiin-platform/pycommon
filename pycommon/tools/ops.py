@@ -71,7 +71,9 @@ def find_python_files(directory: str) -> List[str]:
 
 def extract_dict(ast_node):
     """Extract dictionary from AST Dict node."""
-    return {key.s: value.s for key, value in zip(ast_node.keys, ast_node.values)}
+    return {
+        key.value: value.value for key, value in zip(ast_node.keys, ast_node.values)
+    }
 
 
 def extract_complex_dict(ast_node):
@@ -79,11 +81,11 @@ def extract_complex_dict(ast_node):
     result = {}
     for key, value in zip(ast_node.keys, ast_node.values):
         if isinstance(value, ast.Dict):
-            result[key.s] = extract_complex_dict(value)
+            result[key.value] = extract_complex_dict(value)
         elif isinstance(value, ast.List):
-            result[key.s] = extract_list(value)
+            result[key.value] = extract_list(value)
         elif isinstance(value, ast.Constant):
-            result[key.s] = value.value
+            result[key.value] = value.value
         else:
             # Try to get a literal value or default to string representation
             try:
@@ -143,8 +145,8 @@ def extract_ops_from_file(file_path: str) -> List[OperationModel]:
                 if func_name == "set_op_type" and node.args:
                     # Extract the op_type value from set_op_type("some_type")
                     arg = node.args[0]
-                    if hasattr(arg, "s"):  # String literal
-                        file_op_type = arg.s
+                    if hasattr(arg, "value"):  # String literal
+                        file_op_type = arg.value
                     else:
                         file_op_type = str(arg)
                     break
@@ -198,8 +200,8 @@ def extract_ops_from_file(file_path: str) -> List[OperationModel]:
                             method = "POST"
                             if "method" in op_kwargs:
                                 method_value = op_kwargs["method"]
-                                if hasattr(method_value, "s"):
-                                    method = method_value.s
+                                if hasattr(method_value, "value"):
+                                    method = method_value.value
                                 else:
                                     method = str(method_value)
 
@@ -214,18 +216,18 @@ def extract_ops_from_file(file_path: str) -> List[OperationModel]:
                             description = ""
                             path = ""
 
-                            if hasattr(op_kwargs["name"], "s"):
-                                name = op_kwargs["name"].s
+                            if hasattr(op_kwargs["name"], "value"):
+                                name = op_kwargs["name"].value
                             else:
                                 name = str(op_kwargs["name"])
 
-                            if hasattr(op_kwargs["description"], "s"):
-                                description = op_kwargs["description"].s
+                            if hasattr(op_kwargs["description"], "value"):
+                                description = op_kwargs["description"].value
                             else:
                                 description = str(op_kwargs["description"])
 
-                            if hasattr(op_kwargs["path"], "s"):
-                                path = op_kwargs["path"].s
+                            if hasattr(op_kwargs["path"], "value"):
+                                path = op_kwargs["path"].value
                             else:
                                 path = str(op_kwargs["path"])
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from typing import Any, ClassVar, Dict, Iterable, Optional, Tuple
 
@@ -20,6 +22,7 @@ class AwsUser(UserABC):
         given_name: str | None = None,
         cust_saml_groups: str | None = None,
         cust_vu_groups: str | None = None,
+        updated_at: str | None = None,
     ) -> None:
 
         self._user_id = user_id
@@ -28,7 +31,7 @@ class AwsUser(UserABC):
         self._given_name = given_name
         self._cust_saml_groups = cust_saml_groups
         self._cust_vu_groups = cust_vu_groups
-        self._updated_at = None
+        self._updated_at = updated_at
 
     @classmethod
     def _user_table(cls):
@@ -121,6 +124,50 @@ class AwsUser(UserABC):
         if not isinstance(value, str):
             raise TypeError("given_name must be str")
         self._given_name = value
+
+    @property
+    def cust_vu_groups(self) -> str | None:
+        """
+        Returns the custom VU groups associated with the user.
+
+        Returns:
+            str | None: A string containing the custom VU groups
+                        if available, otherwise None.
+        """
+        return self._cust_vu_groups
+
+    @cust_vu_groups.setter
+    def cust_vu_groups(self, value: list[str] | None) -> None:
+        """
+        Sets the custom VU groups for the user.
+
+        Args:
+            value (list[str] | None): A list of group names as strings,
+                or None to clear the groups.
+
+        Raises:
+            TypeError: If value is not a list of strings.
+
+        Side Effects:
+            Updates the internal _cust_vu_groups attribute with a
+            JSON-encoded list (stringified) of group names or None.
+        """
+        if value is None:
+            self._cust_vu_groups = None
+            return
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise TypeError("cust_vu_groups must be a list of strings")
+        self._cust_vu_groups = json.dumps(value)
+
+    @property
+    def updated_at(self) -> str | None:
+        """
+        Gets the timestamp indicating when the user was last updated.
+
+        Returns:
+            str | None: The ISO 8601 formatted timestamp of the last update, or None if not set.
+        """
+        return self._updated_at
 
     @property
     def cust_saml_groups(self) -> str | None:
@@ -258,7 +305,7 @@ class AwsUser(UserABC):
     # ClassMethods (other than dunders) go below here.
 
     @classmethod
-    def get(cls, user_id: str) -> "AwsUser":
+    def get_by_user_id(cls, user_id: str) -> AwsUser:
         """
         Retrieves a user by user_id from the DynamoDB table.
 
@@ -284,6 +331,7 @@ class AwsUser(UserABC):
                 email=item.get("email"),
                 family_name=item.get("family_name"),
                 given_name=item.get("given_name"),
+                updated_at=item.get("updated_at", None),
             )
             user.cust_saml_groups = item.get("custom:saml_groups", None)
             user.cust_vu_groups = item.get("custom:vu_groups", None)

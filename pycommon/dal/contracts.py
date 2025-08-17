@@ -54,7 +54,15 @@ class UserABC(ABC):
 
     @abstractmethod
     def __init__(
-        self, *, id: str | None, email: str, created_at: datetime | None = None
+        self,
+        *,
+        user_id: str,
+        email: str | None = None,
+        family_name: str | None = None,
+        given_name: str | None = None,
+        cust_saml_groups: str | None = None,
+        cust_vu_groups: str | None = None,
+        updated_at: str | None = None,
     ) -> None: ...
 
     # Instance methods (perform action on instance objects)
@@ -70,13 +78,13 @@ class UserABC(ABC):
     # Class methods (return objects)
     @classmethod
     @abstractmethod
-    def get(cls, user_id: str) -> "UserABC": ...
+    def get_by_user_id(cls, user_id: str) -> UserABC: ...
 
     @classmethod
     @abstractmethod
     def list(
         cls, *, limit: int = 100, cursor: str | None = None
-    ) -> tuple[Iterable["UserABC"], str | None]: ...
+    ) -> tuple[Iterable[UserABC], str | None]: ...
 
 
 class AccountABC(ABC):
@@ -94,15 +102,14 @@ class AccountABC(ABC):
     @abstractmethod
     def delete(self) -> None: ...
 
-    # @classmethod
-    # @abstractmethod
-    # def get(cls, account_id: str) -> AccountABC: ...
+    @classmethod
+    def get_all_for_user(cls, user_id: str) -> list[AccountABC]: ...
 
     @classmethod
-    @abstractmethod
-    def find_by_owner(
-        cls, user_id: str, *, limit: int = 100, cursor: str | None = None
-    ) -> tuple[Iterable["AccountABC"], str | None]: ...
+    def get_account_by_id_for_user(
+        cls, user_id: str, account_id: str
+    ) -> AccountABC | None:
+        pass
 
 
 # all required classes to fully implement a backend for Amplify

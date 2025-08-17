@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from typing import ClassVar, List, Optional, Tuple, TypedDict
 
@@ -78,22 +79,63 @@ class AwsAccount(AccountABC):
             "name": name,
             "rateLimit": RateLimitDict(
                 period=rate_limit_period,
-                limit=rate_limit_rate,
+                rate=rate_limit_rate,
             ),
         }
+
+    def __repr__(self):
+        return json.dumps(
+            {
+                "id": self._account["id"],
+                "isDefault": self._account["isDefault"],
+                "name": self._account["name"],
+                "rateLimit": {
+                    "period": self._account["rateLimit"]["period"],
+                    "rate": self._account["rateLimit"]["rate"],
+                },
+            },
+            indent=2,
+        )
 
     @classmethod
     def _user_table(cls):
         return cls.provider.get_table(cls.user_table_name)
 
     def save(self) -> None:
-        pass
+        """
+        Saves the current AwsAccount instance to the user table in DynamoDB.
+        If the account already exists for the user, it updates the entry; otherwise, it adds a new one.
+        """
+        table = self.__class__._user_table()
+        user = self._account["id"].split(":")[0]
+        response = table.get_item(Key={"user": user})
+        item = response.get("Item", {"user": user, "accounts": []})
+        accounts = item.get("accounts", [])
+
+        # Remove any existing account with the same id
+        accounts = [acct for acct in accounts if acct.get("id") != self._account["id"]]
+        # Add the current account
+        accounts.append(self._account)
+
+        # Save back to DynamoDB
+        table.put_item(Item={"user": user, "accounts": accounts})
 
     def delete(self) -> None:
         pass
 
     @classmethod
     def get_all_for_user(cls, user: str) -> List[AwsAccount]:
+        """
+        Retrieves all AWS accounts associated with a given user.
+
+        Args:
+            user (str): The user identifier for which to fetch AWS accounts.
+
+        Returns:
+            List[AwsAccount]: A list of AwsAccount instances associated with the user.
+                              Returns an empty list if no accounts are found.
+
+        """
         table = cls._user_table()
         response = table.get_item(Key={"user": user})
         item = response.get("Item")
@@ -119,11 +161,21 @@ class AwsAccount(AccountABC):
 
     @classmethod
     def get_account_by_id_for_user(cls, user: str, account_id: str) -> List[AwsAccount]:
+        """
+        Retrieves a list of AwsAccount objects for a given user and account ID.
+
+        Args:
+            user (str): The user identifier.
+            account_id (str): The AWS account ID to filter by.
+
+        Returns:
+            List[AwsAccount]: A list of AwsAccount objects matching the specified account ID for the user.
+        """  # noqa: E501
         table = cls._user_table()
         response = table.get_item(Key={"user": user})
         item = response.get("Item")
+        resp: list = []
         if item:
-            resp: list = []
             for i in item:
                 if i.get("id") != account_id:
                     continue
@@ -136,10 +188,4 @@ class AwsAccount(AccountABC):
                     rate_limit_rate=i.get("rateLimit", {}).get("rate", None),
                 )
                 resp.append(acct)
-            return resp
-
-    @classmethod
-    def find_by_owner(
-        cls, user_id: str, *, limit: int = 100, cursor: Optional[str] = None
-    ) -> Tuple[Iterable["AwsAccount"], Optional[str]]:
-        pass
+        return resp
