@@ -1,6 +1,7 @@
 from enum import Enum, auto
-from typing import Dict, Type, Any
-from .contracts import BackendABC, UserABC, AccountABC
+from typing import Any, Dict, Type
+
+from .contracts import AccountABC, BackendABC, UserABC
 from .errors import DalError
 
 
@@ -16,6 +17,7 @@ _REGISTRY: Dict[Backend, Type[BackendABC]] = {}
 
 
 def register_backend(kind: Backend, impl: Type[BackendABC]) -> None:
+    print(kind, impl)
     _REGISTRY[kind] = impl
 
 

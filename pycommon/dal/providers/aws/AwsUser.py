@@ -1,51 +1,14 @@
-# dal/providers/aws.py
-from boto3.dynamodb.conditions import Key
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import json
-from typing import Any, Callable, ClassVar, Dict, Iterable, Optional, Tuple, Type
+from typing import Any, ClassVar, Dict, Iterable, Optional, Tuple
 
-import boto3
-import botocore.exceptions
-
-from ..contracts import BackendABC, UserABC, AccountABC
-from ..dal import Backend, register_backend
-from ..errors import Conflict, NotFound, PermissionDenied, TransientError
-
-# get a timestamp string for right now w/ `nowstr()`
-nowstr: Callable = lambda: datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-# ---------- Provider context ----------
+from pycommon.dal.contracts import UserABC
+from pycommon.dal.errors import NotFound
+from pycommon.dal.providers.aws import AwsAccount, AwsProvider
+from pycommon.dal.providers.aws.helpers import map_aws_error, nowstr
 
 
-@dataclass
-class _AwsProvider:
-    dynamodb: Any
-    tables: dict = field(default_factory=dict)
-
-    def get_table(self, name: str):
-        if name not in self.tables:
-            self.tables[name] = self.dynamodb.Table(name)
-        return self.tables[name]
-
-
-def _map_aws_error(e: Exception) -> Exception:
-    if isinstance(e, botocore.exceptions.ClientError):
-        code = e.response.get("Error", {}).get("Code", "")
-        if code in {"ProvisionedThroughputExceededException", "ThrottlingException"}:
-            return TransientError(str(e))
-        if code in {"AccessDeniedException"}:
-            return PermissionDenied(str(e))
-        if code in {"ConditionalCheckFailedException"}:
-            return Conflict(str(e))
-    return e
-
-
-# ---------- Concrete User implementation ----------
-
-
-class _AwsUser(UserABC):
-    provider: ClassVar[_AwsProvider]
+class AwsUser(UserABC):
+    provider: ClassVar[AwsProvider]
     user_table_name: ClassVar[str] = "amplify-v6-object-access-dev-cognito-users"
 
     def __init__(
@@ -111,30 +74,81 @@ class _AwsUser(UserABC):
 
     @property
     def family_name(self) -> str | None:
+        """
+        Returns the family name (surname) of the user.
+
+        Returns:
+            str | None: The family name if available, otherwise None.
+        """
         return self._family_name
 
     @family_name.setter
     def family_name(self, value: str) -> None:
+        """
+        Setter for the family_name property.
+
+        Args:
+            value (str): The family name to set.
+
+        Raises:
+            TypeError: If the provided value is not a string.
+        """
         if not isinstance(value, str):
             raise TypeError("family_name must be str")
         self._family_name = value
 
     @property
     def given_name(self) -> str | None:
+        """
+        Returns the given name of the user.
+
+        Returns:
+            str | None: The given name if available, otherwise None.
+        """
         return self._given_name
 
     @given_name.setter
     def given_name(self, value: str) -> None:
+        """
+        Sets the given name of the user.
+
+        Args:
+            value (str): The given name to assign.
+
+        Raises:
+            TypeError: If the provided value is not a string.
+        """
         if not isinstance(value, str):
             raise TypeError("given_name must be str")
         self._given_name = value
 
     @property
     def cust_saml_groups(self) -> str | None:
+        """
+        Returns the custom SAML groups associated with the user.
+
+        Returns:
+            str | None: A string containing the custom SAML groups if
+                        available, otherwise None.
+        """
         return self._cust_saml_groups
 
     @cust_saml_groups.setter
     def cust_saml_groups(self, value: list[str] | None) -> None:
+        """
+        Sets the custom SAML groups for the user.
+
+        Args:
+            value (list[str] | None): A list of group names as strings, or None
+                                      to clear the groups.
+
+        Raises:
+            TypeError: If value is not a list of strings.
+
+        Side Effects:
+            Updates the internal _cust_saml_groups attribute with a JSON-encoded
+            list (stringified) of group names or None.
+        """
         if value is None:
             self._cust_saml_groups = None
             return
@@ -144,23 +158,43 @@ class _AwsUser(UserABC):
 
     @property
     def updated_at(self) -> str:
+        """
+        Returns the timestamp indicating when the user was last updated.
+
+        Returns:
+            str: The ISO 8601 formatted timestamp of the last update.
+        """
         return self._updated_at
 
     def _get_values_as_dict(self) -> dict:
+        """
+        Returns a dictionary representation of the user's attributes.
+
+        Returns:
+            dict: A dictionary containing user information including user_id, email,
+                  family_name, given_name, custom SAML groups, custom VU groups,
+                  and updated_at.
+        """
         return {
             "user_id": self.user_id,
             "email": self.email,
             "family_name": self.family_name,
             "given_name": self.given_name,
             "custom:saml_groups": self.cust_saml_groups,
-            # "custom:vu_groups": self.cust_vu_groups,
+            "custom:vu_groups": self.cust_vu_groups,
             "updated_at": self.updated_at,  # TODO(sam) make setter/getter
         }
 
     def _create_non_null_dynamodb_dict(self) -> dict:
+        """
+        Creates a dictionary of the user's attributes for DynamoDB,
+        excluding any attributes that have a value of None.
+
+        Returns:
+            dict: A dictionary containing only non-null user attributes.
+        """
         return {k: v for k, v in self._get_values_as_dict().items() if v is not None}
 
-    # Active-Record persistence
     def save(self, allow_overwrite: bool = True) -> None:
         """
         Saves the current object to the DynamoDB table using upsert semantics.
@@ -181,11 +215,14 @@ class _AwsUser(UserABC):
             table = self._user_table()
             table.put_item(**kwargs)
         except Exception as e:
-            raise _map_aws_error(e)
+            raise map_aws_error(e)
 
     def delete(self) -> None:
         """
         Deletes the user from the DynamoDB table.
+
+        WARNING: This operation deletes the record without respect to other records
+                 which may still reference it.
 
         Raises:
             Exception: If the DynamoDB operation fails, an appropriate mapped
@@ -198,11 +235,30 @@ class _AwsUser(UserABC):
                 ConditionExpression="attribute_exists(user_id)",
             )
         except Exception as e:
-            raise _map_aws_error(e)
+            raise map_aws_error(e)
 
-    # Lookups
+    def accounts(self, use_cache=True) -> list:
+        """
+        Retrieves the list of AWS accounts associated with the user.
+
+        Args:
+            use_cache (bool, optional): If True, returns cached accounts
+                if available, otherwise retrieve the accounts and populate
+                the cache. Defaults to True.
+
+        Returns:
+            list: A list of AWS accounts for the user.
+        """
+        if use_cache:
+            if hasattr(self, "_accounts"):
+                return self._accounts
+        self._accounts = AwsAccount.get_all_for_user(self.user_id)
+        return self._accounts
+
+    # ClassMethods (other than dunders) go below here.
+
     @classmethod
-    def get(cls, user_id: str) -> "_AwsUser":
+    def get(cls, user_id: str) -> "AwsUser":
         """
         Retrieves a user by user_id from the DynamoDB table.
 
@@ -210,11 +266,12 @@ class _AwsUser(UserABC):
             user_id (str): The unique identifier of the user.
 
         Returns:
-            _AwsUser: An instance of _AwsUser populated with all available attributes.
+            AwsUser: An instance of AwsUser populated with all available attributes.
 
         Raises:
             NotFound: If the user with the given user_id does not exist.
-            Exception: If the DynamoDB operation fails, an appropriate mapped AWS error is raised.
+            Exception: If the DynamoDB operation fails, an appropriate mapped
+                       AWS error is raised.
         """
         try:
             table = cls._user_table()
@@ -222,7 +279,7 @@ class _AwsUser(UserABC):
             item = resp.get("Item")
             if not item:
                 raise NotFound(user_id)
-            user: _AwsUser = _AwsUser(
+            user: AwsUser = AwsUser(
                 user_id=item.get("user_id"),
                 email=item.get("email"),
                 family_name=item.get("family_name"),
@@ -234,33 +291,28 @@ class _AwsUser(UserABC):
             return user
 
         except Exception as e:
-            raise _map_aws_error(e)
-
-    @classmethod
-    def find_by_user_id(cls, user_id: str) -> "_AwsUser":
-        try:
-            table = cls._user_table()
-            resp = table.query(
-                KeyConditionExpression=Key("user_id").eq(user_id),
-                Limit=1,
-            )
-            items = resp.get("Items") or []
-            if not items:
-                raise NotFound(user_id)
-            it = items[0]
-            return _AwsUser(
-                user_id=it.get("user_id"),
-                email=it.get("email"),
-                family_name=it.get("family_name"),
-                given_name=it.get("given_name"),
-            )
-        except Exception as e:
-            raise _map_aws_error(e)
+            raise map_aws_error(e)
 
     @classmethod
     def list(
         cls, *, limit: int = 100, cursor: Optional[str] = None
-    ) -> Tuple[Iterable["_AwsUser"], Optional[str]]:
+    ) -> Tuple[Iterable["AwsUser"], Optional[str]]:
+        """
+        Retrieves a list of AwsUser objects from the user table with optional pagination.
+
+        Args:
+            limit (int, optional): Maximum number of users to retrieve. Defaults to 100.
+            cursor (Optional[str], optional): The user_id to start scanning from for pagination. Defaults to None.
+
+        Returns:
+            Tuple[Iterable["AwsUser"], Optional[str]]:
+                A tuple containing:
+                    - An iterable of AwsUser instances.
+                    - The next cursor (user_id) for pagination, or None if there are no more results.
+
+        Raises:
+            Exception: Raises a mapped AWS error if the scan operation fails.
+        """  # noqa: E501
         try:
             table = cls._user_table()
             kwargs: Dict[str, Any] = {"Limit": limit}
@@ -269,7 +321,7 @@ class _AwsUser(UserABC):
 
             resp = table.scan(**kwargs)
             users = [
-                _AwsUser(
+                AwsUser(
                     user_id=item.get("user_id"),
                     email=item.get("email"),
                     family_name=item.get("family_name"),
@@ -281,58 +333,4 @@ class _AwsUser(UserABC):
             next_cursor = (resp.get("LastEvaluatedKey") or {}).get("user_id")
             return users, next_cursor
         except Exception as e:
-            raise _map_aws_error(e)
-
-
-# ---------- Concrete Account implementation ----------
-
-
-class _AwsAccount(AccountABC):
-    provider: ClassVar[_AwsProvider]
-
-    def __init__(self, *, id: str | None, name: str, owner_user_id: str) -> None:
-        if not name or not owner_user_id:
-            raise ValueError("name and owner_user_id are required")
-        self.id = id or f"{owner_user_id}:{name}"
-        self.name = name
-        self.owner_user_id = owner_user_id
-
-    def save(self) -> None:
-        pass
-
-    def delete(self) -> None:
-        pass
-
-    @classmethod
-    def get(cls, account_id: str) -> "_AwsAccount":
-        pass
-
-    @classmethod
-    def find_by_owner(
-        cls, user_id: str, *, limit: int = 100, cursor: Optional[str] = None
-    ) -> Tuple[Iterable["_AwsAccount"], Optional[str]]:
-        pass
-
-
-# ---------- Backend binding ----------
-
-
-class AwsBackend(BackendABC):
-
-    User = _AwsUser
-    Account = _AwsAccount
-
-    def __init__(self, **config: Any) -> None:
-        boto3_kwargs: Dict[str, Any] = config.get("boto3_kwargs", {}) or {}
-
-        dynamodb = boto3.resource("dynamodb", **boto3_kwargs)
-
-        provider = _AwsProvider(dynamodb=dynamodb)
-
-        # Bind provider context to the AR classes
-        self.User.provider = provider
-        self.Account.provider = provider
-
-
-# Register at import time
-register_backend(Backend.AWS, AwsBackend)
+            raise map_aws_error(e)

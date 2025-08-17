@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import ClassVar, Optional, Iterable, Type, Any
-from typing import TypedDict
+from typing import Any, ClassVar, Iterable, Type
 
 
 class UserABC(ABC):
@@ -36,7 +37,7 @@ class UserABC(ABC):
 
         list(limit: int = 100, cursor: str | None = None) -> tuple[Iterable["UserABC"], str | None]:
             List user instances with optional pagination.
-    """
+    """  # noqa: E501
 
     # Implementations can stash backend/client here (set by the Backend on init)
     provider: ClassVar[Any] = None
@@ -63,14 +64,13 @@ class UserABC(ABC):
     @abstractmethod
     def delete(self) -> None: ...
 
+    @abstractmethod
+    def accounts(self) -> list[AccountABC]: ...
+
     # Class methods (return objects)
     @classmethod
     @abstractmethod
     def get(cls, user_id: str) -> "UserABC": ...
-
-    @classmethod
-    @abstractmethod
-    def find_by_user_id(cls, user_id: str) -> "UserABC": ...
 
     @classmethod
     @abstractmethod
@@ -82,19 +82,10 @@ class UserABC(ABC):
 class AccountABC(ABC):
     provider: ClassVar[Any] = None
 
-    class RateLimitDict(TypedDict, total=False):
-        limit: int
-        period: str
-
-    class AccountDict(TypedDict):
-        id: str
-        isDefault: bool
-        name: str
-        rateLimit: "RateLimitDict" # type: ignore
-
     user: str
-    accounts: list[AccountDict]
+    accounts: list
 
+    @abstractmethod
     def __init__(self, *, id: str | None, name: str, owner_user_id: str) -> None: ...
 
     @abstractmethod
@@ -103,9 +94,9 @@ class AccountABC(ABC):
     @abstractmethod
     def delete(self) -> None: ...
 
-    @classmethod
-    @abstractmethod
-    def get(cls, account_id: str) -> "AccountABC": ...
+    # @classmethod
+    # @abstractmethod
+    # def get(cls, account_id: str) -> AccountABC: ...
 
     @classmethod
     @abstractmethod
@@ -136,10 +127,10 @@ class BackendABC(ABC):
             obj = cls.__dict__.get(name)
             if not (isinstance(obj, type) and issubclass(obj, base)):
                 raise TypeError(
-                    f"{cls.__name__} must define a concrete class '{name}' subclassing {base.__name__}"
+                    f"{cls.__name__} must define a concrete class '{name}' subclassing {base.__name__}"  # noqa E501
                 )
 
     @abstractmethod
     def __init__(self, **config: Any) -> None:
-        """Bind provider-specific clients/state and set .User.provider / .Account.provider."""
+        """Bind provider-specific clients/state and set .User.provider / .Account.provider."""  # noqa: E501
         ...
