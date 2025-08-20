@@ -367,6 +367,49 @@ class TestChatStreaming:
         assert content_events[0].get("d", "") == ""  # Should handle missing 'd' key
         assert content_events[1]["d"] == "Hello"
 
+    def test_chat_streaming_http_error_with_double_encoded_json_error_message(self):
+        """HTTP error where response.json() returns a JSON string (double-encoded)."""
+        mock_response = Mock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = '{"error": "Double encoded error"}'
+
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
+            with patch("builtins.print") as mock_print:
+                with pytest.raises(Exception) as exc_info:
+                    chat_streaming(
+                        "https://api.example.com/chat",
+                        "test_token",
+                        {"messages": []},
+                        lambda x: None,
+                    )
+
+        assert "Request failed with status 400: Double encoded error" in str(
+            exc_info.value
+        )
+        mock_print.assert_called_once_with(
+            "Request failed with status 400: Double encoded error"
+        )
+
+    def test_chat_streaming_http_error_with_string_body_non_json(self):
+        """HTTP error with non-JSON string body triggers fallback raise_for_status."""
+        mock_response = Mock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = "not-json"
+        mock_response.raise_for_status.side_effect = Exception(
+            "400 Bad Request String Body"
+        )
+
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
+            with pytest.raises(Exception) as exc_info:
+                chat_streaming(
+                    "https://api.example.com/chat",
+                    "test_token",
+                    {"messages": []},
+                    lambda x: None,
+                )
+
+        assert "400 Bad Request String Body" in str(exc_info.value)
+
 
 class TestChatIntegration:
     """Integration tests for chat function using chat_streaming."""
