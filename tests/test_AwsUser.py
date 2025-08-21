@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pycommon.dal.errors import NotFound
 from pycommon.dal.providers.aws.AwsUser import AwsUser
 
 
@@ -200,7 +201,7 @@ def test_get_by_user_id_not_found(monkeypatch):
     mock_table = MagicMock()
     mock_table.get_item.return_value = {"Item": None}
     monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
-    with pytest.raises(Exception):
+    with pytest.raises(NotFound):
         AwsUser.get_by_user_id("u1")
 
 
@@ -282,21 +283,30 @@ def test_create_non_null_dynamodb_dict_excludes_none_fields():
     assert d["family_name"] == "Smith"
     assert d["user_id"] == "u1"
 
+
 def test_save_sets_updated_at(monkeypatch):
     user = make_user()
     mock_table = MagicMock()
     monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
-    with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="2024-06-01T12:00:00Z"):
+    with patch(
+        "pycommon.dal.providers.aws.AwsUser.nowstr", return_value="2024-06-01T12:00:00Z"
+    ):
         user.save()
         args, kwargs = mock_table.put_item.call_args
         assert kwargs["Item"]["updated_at"] == "2024-06-01T12:00:00Z"
 
+
 def test_save_raises_mapped_exception(monkeypatch):
     user = make_user()
+
     class DummyTable:
         def put_item(self, **kwargs):
             raise Exception("dynamodb error")
+
     monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: DummyTable()))
-    with patch("pycommon.dal.providers.aws.AwsUser.map_aws_error", lambda e: RuntimeError("mapped error")):
+    with patch(
+        "pycommon.dal.providers.aws.AwsUser.map_aws_error",
+        lambda e: RuntimeError("mapped error"),
+    ):
         with pytest.raises(RuntimeError, match="mapped error"):
             user.save()

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
-from typing import ClassVar, List, Optional, Tuple, TypedDict
+from typing import ClassVar, List, TypedDict
 
 from pycommon.dal.contracts import AccountABC
 from pycommon.dal.providers.aws import AwsProvider
@@ -104,7 +103,8 @@ class AwsAccount(AccountABC):
     def save(self) -> None:
         """
         Saves the current AwsAccount instance to the user table in DynamoDB.
-        If the account already exists for the user, it updates the entry; otherwise, it adds a new one.
+        If the account already exists for the user, it updates the entry;
+        otherwise, it adds a new one.
         """
         table = self.__class__._user_table()
         user = self._account["id"].split(":")[0]
@@ -139,7 +139,9 @@ class AwsAccount(AccountABC):
         return cls.get_account_by_id_for_user(user, None)
 
     @classmethod
-    def get_account_by_id_for_user(cls, user: str, account_id: str | None) -> List[AwsAccount]:
+    def get_account_by_id_for_user(
+        cls, user: str, account_id: str | None
+    ) -> List[AwsAccount]:
         """
         Retrieves a list of AwsAccount objects for a given user and account ID.
 
