@@ -166,7 +166,7 @@ class AwsUser(UserABC):
 
         Returns:
             str | None: The ISO 8601 formatted timestamp of the last update, or None if not set.
-        """
+        """  # noqa: E501
         return self._updated_at
 
     @property
@@ -202,16 +202,6 @@ class AwsUser(UserABC):
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             raise TypeError("cust_saml_groups must be a list of strings")
         self._cust_saml_groups = json.dumps(value)
-
-    @property
-    def updated_at(self) -> str:
-        """
-        Returns the timestamp indicating when the user was last updated.
-
-        Returns:
-            str: The ISO 8601 formatted timestamp of the last update.
-        """
-        return self._updated_at
 
     def _get_values_as_dict(self) -> dict:
         """

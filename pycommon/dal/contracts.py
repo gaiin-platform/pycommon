@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import Any, ClassVar, Iterable, Type
 
 
@@ -103,9 +102,11 @@ class AccountABC(ABC):
     def delete(self) -> None: ...
 
     @classmethod
+    @abstractmethod
     def get_all_for_user(cls, user_id: str) -> list[AccountABC]: ...
 
     @classmethod
+    @abstractmethod
     def get_account_by_id_for_user(
         cls, user_id: str, account_id: str
     ) -> AccountABC | None:
