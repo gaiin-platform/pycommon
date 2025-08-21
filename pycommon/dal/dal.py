@@ -17,7 +17,6 @@ _REGISTRY: Dict[Backend, Type[BackendABC]] = {}
 
 
 def register_backend(kind: Backend, impl: Type[BackendABC]) -> None:
-    print(kind, impl)
     _REGISTRY[kind] = impl
 
 

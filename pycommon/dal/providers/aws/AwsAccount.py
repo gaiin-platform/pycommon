@@ -136,31 +136,10 @@ class AwsAccount(AccountABC):
                               Returns an empty list if no accounts are found.
 
         """
-        table = cls._user_table()
-        response = table.get_item(Key={"user": user})
-        item = response.get("Item")
-        if not item:
-            return []
-
-        accounts = item.get("accounts", [])
-        if not accounts:
-            return []
-
-        resp: list = []
-        for i in accounts:
-            acct = AwsAccount(
-                id=i.get("id"),
-                name=i.get("name"),
-                owner_user_id=item.get("user"),
-                is_default=i.get("isDefault", False),
-                rate_limit_period=i.get("rateLimit", {}).get("period", "Unlimited"),
-                rate_limit_rate=i.get("rateLimit", {}).get("rate", None),
-            )
-            resp.append(acct)
-        return resp
+        return cls.get_account_by_id_for_user(user, None)
 
     @classmethod
-    def get_account_by_id_for_user(cls, user: str, account_id: str) -> List[AwsAccount]:
+    def get_account_by_id_for_user(cls, user: str, account_id: str | None) -> List[AwsAccount]:
         """
         Retrieves a list of AwsAccount objects for a given user and account ID.
 
@@ -174,18 +153,24 @@ class AwsAccount(AccountABC):
         table = cls._user_table()
         response = table.get_item(Key={"user": user})
         item = response.get("Item")
+        if not item:
+            return []
+
+        accounts = item.get("accounts", [])
+        if not accounts:
+            return []
+
         resp: list = []
-        if item:
-            for i in item:
-                if i.get("id") != account_id:
-                    continue
-                acct = AwsAccount(
-                    id=i.get("id"),
-                    name=i.get("name"),
-                    owner_user_id=i.get("owner_user_id"),
-                    is_default=i.get("isDefault", False),
-                    rate_limit_period=i.get("rateLimit", {}).get("period", "Unlimited"),
-                    rate_limit_rate=i.get("rateLimit", {}).get("rate", None),
-                )
-                resp.append(acct)
+        for i in accounts:
+            if account_id and i.get("id") != account_id:
+                continue
+            acct = AwsAccount(
+                id=i.get("id"),
+                name=i.get("name"),
+                owner_user_id=user,
+                is_default=i.get("isDefault", False),
+                rate_limit_period=i.get("rateLimit", {}).get("period", "Unlimited"),
+                rate_limit_rate=i.get("rateLimit", {}).get("rate", None),
+            )
+            resp.append(acct)
         return resp
