@@ -165,7 +165,20 @@ def chat_streaming(
         try:
             # Try to extract error message from response body
             error_content = response.json()
-            error_message = error_content.get("error")
+            if isinstance(error_content, str):
+                try:
+                    error_content = json.loads(error_content)
+                except json.JSONDecodeError:
+                    # If it still isn't valid JSON,
+                    # leave it as-is; we'll fall back below
+                    pass
+
+            # Safely extract error message if we have a dict
+            error_message = (
+                (error_content.get("error") or error_content.get("message"))
+                if isinstance(error_content, dict)
+                else None
+            )
 
             if error_message:
                 # Return a more descriptive error with the actual message

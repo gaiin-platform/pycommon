@@ -3,7 +3,7 @@
 
 import json
 import os
-from typing import List
+from typing import List, Optional, Tuple
 
 import requests
 
@@ -84,3 +84,39 @@ def verify_user_in_amp_group(access_token: str, groups: List[str]) -> bool:
         print(f"Error verifying amp group membership: {e}")
 
     return False
+
+
+def get_user_affiliated_groups(
+    access_token: str,
+) -> Optional[Tuple[List[str], List[str]]]:
+    """
+    Get user's affiliated groups and all available groups.
+
+    Args:
+        access_token: Bearer token for authentication
+
+    Returns:
+        Tuple of (affiliated_groups, all_groups) on success, None on failure
+    """
+    print("Initiate get user affiliated groups call")
+
+    endpoint = os.environ["API_BASE_URL"] + "/amplifymin/amplify_groups/affiliated"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}",
+    }
+
+    try:
+        response = requests.get(endpoint, headers=headers)
+        print("Response: ", response.content)
+        response_content = response.json()
+
+        if response.status_code == 200 and response_content.get("success", False):
+            return response_content.get("data", []), response_content.get(
+                "all_groups", []
+            )
+
+    except Exception as e:
+        print(f"Error retrieving user affiliated groups: {e}")
+    return None
