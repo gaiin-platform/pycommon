@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
@@ -232,3 +233,47 @@ def test_get_account_by_id_for_user_all(monkeypatch):
     result = AwsAccount.get_account_by_id_for_user("u1", None)
     assert len(result) == 2
     assert all(isinstance(a, AwsAccount) for a in result)
+
+
+def test_get_account_has_decimal_rate(monkeypatch):
+    provider = setup_provider(monkeypatch)
+    table = provider.get_table(AwsAccount.user_table_name)
+    table.get_item.return_value = {
+        "Item": {
+            "user": "u1",
+            "accounts": [
+                {
+                    "id": "u1:acct1",
+                    "isDefault": True,
+                    "name": "acct1",
+                    "rateLimit": {"period": "minute", "rate": 105.5},
+                },
+                {
+                    "id": "u1:acct2",
+                    "isDefault": False,
+                    "name": "acct2",
+                    "rateLimit": {"period": "hour", "rate": Decimal("175")},
+                },
+                {
+                    "id": "u1:acct3",
+                    "isDefault": False,
+                    "name": "acct3",
+                    "rateLimit": {"period": "day", "rate": "BAD"},
+                },
+                {
+                    "id": "u1:acct4",
+                    "isDefault": False,
+                    "name": "acct4",
+                    "rateLimit": {"period": "week", "rate": None},
+                },
+            ],
+        }
+    }
+    result = AwsAccount.get_account_by_id_for_user("u1", None)
+    assert len(result) == 4
+    assert all(isinstance(a, AwsAccount) for a in result)
+    assert isinstance(result[0]._account["rateLimit"]["rate"], int)
+    assert result[0]._account["rateLimit"]["rate"] == 105
+    assert isinstance(result[1]._account["rateLimit"]["rate"], int)
+    assert result[1]._account["rateLimit"]["rate"] == 175
+    assert result[2]._account["rateLimit"]["rate"] is None
