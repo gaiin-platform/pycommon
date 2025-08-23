@@ -81,10 +81,12 @@ class AwsAccount(AccountABC):
                 rate=rate_limit_rate,
             ),
         }
+        self._owner: str = owner_user_id
 
     def __repr__(self):
         return json.dumps(
             {
+                "accountOwner": self._owner,
                 "id": self._account["id"],
                 "isDefault": self._account["isDefault"],
                 "name": self._account["name"],
@@ -107,21 +109,35 @@ class AwsAccount(AccountABC):
         otherwise, it adds a new one.
         """
         table = self.__class__._user_table()
-        user = self._account["id"].split(":")[0]
+        user = self._owner
         response = table.get_item(Key={"user": user})
         item = response.get("Item", {"user": user, "accounts": []})
         accounts = item.get("accounts", [])
 
         # Remove any existing account with the same id
         accounts = [acct for acct in accounts if acct.get("id") != self._account["id"]]
-        # Add the current account
+        # Add the current account (the one we've presumably modified)
         accounts.append(self._account)
 
         # Save back to DynamoDB
         table.put_item(Item={"user": user, "accounts": accounts})
 
     def delete(self) -> None:
-        pass
+        """
+        Deletes this AwsAccount instance from the user table in DynamoDB.
+        If the account does not exist, the operation is a no-op.
+        """
+        table = self.__class__._user_table()
+        user = self._owner
+        response = table.get_item(Key={"user": user})
+        item = response.get("Item")
+        if not item:
+            return
+        accounts = item.get("accounts", [])
+        accounts = [acct for acct in accounts if acct.get("id") != self._account["id"]]
+
+        # unlike save(), we simply don't re-add this one back to the list
+        table.put_item(Item={"user": user, "accounts": accounts})
 
     @classmethod
     def get_all_for_user(cls, user: str) -> List[AwsAccount]:

@@ -122,6 +122,28 @@ def test_delete_exception(monkeypatch):
         user.delete()
 
 
+def test_cascading_account_deletion(monkeypatch):
+    user = make_user()
+    mock_table = MagicMock()
+    mock_account1 = MagicMock()
+    mock_account2 = MagicMock()
+
+    # Mock accounts associated with the user
+    monkeypatch.setattr(
+        "pycommon.dal.providers.aws.AwsAccount.get_all_for_user",
+        lambda user_id: [mock_account1, mock_account2],
+    )
+    # Mock delete method for AwsAccount
+    mock_account1.delete = MagicMock()
+    mock_account2.delete = MagicMock()
+
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+    user.delete()
+    assert mock_table.delete_item.called
+    mock_account1.delete.assert_called_once()
+    mock_account2.delete.assert_called_once()
+
+
 def test_accounts_returns_cached(monkeypatch):
     user = make_user()
     user._accounts = ["acct1"]

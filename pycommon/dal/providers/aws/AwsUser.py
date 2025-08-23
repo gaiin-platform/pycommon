@@ -256,10 +256,12 @@ class AwsUser(UserABC):
 
     def delete(self) -> None:
         """
-        Deletes the user from the DynamoDB table.
+        Deletes:
+            The entry from the User DDB Table.
+            Any Accounts from the Account DDB Table for this user.
 
         WARNING: This operation deletes the record without respect to other records
-                 which may still reference it.
+                 which may still reference it other than those mentioned here.
 
         Raises:
             Exception: If the DynamoDB operation fails, an appropriate mapped
@@ -271,6 +273,10 @@ class AwsUser(UserABC):
                 Key={"user_id": self.user_id},
                 ConditionExpression="attribute_exists(user_id)",
             )
+
+            # now delete the Accounts
+            for account in self.accounts(use_cache=False):
+                account.delete()
         except Exception as e:
             raise map_aws_error(e)
 

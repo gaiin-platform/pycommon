@@ -109,10 +109,46 @@ def test_save_creates_new_item(monkeypatch):
     assert table.put_item.call_args[1]["Item"]["user"] == "u1"
 
 
-def test_delete(monkeypatch):
-    # Currently delete is a no-op
-    acct = make_account()
-    assert acct.delete() is None
+def test_delete_removes_account(monkeypatch):
+    provider = setup_provider(monkeypatch)
+    table = provider.get_table(AwsAccount.user_table_name)
+    # Simulate existing accounts
+    table.get_item.return_value = {
+        "Item": {
+            "user": "u1",
+            "accounts": [
+                {
+                    "id": "u1:acct1",
+                    "isDefault": True,
+                    "name": "acct1",
+                    "rateLimit": {"period": "minute", "rate": 10},
+                },
+                {
+                    "id": "u1:acct2",
+                    "isDefault": False,
+                    "name": "acct2",
+                    "rateLimit": {"period": "hour", "rate": 100},
+                },
+            ],
+        }
+    }
+    acct = make_account(id="u1:acct1")
+    acct.delete()
+    table.put_item.assert_called_once()
+    accounts = table.put_item.call_args[1]["Item"]["accounts"]
+    # Only acct2 should remain
+    assert len(accounts) == 1
+    assert accounts[0]["id"] == "u1:acct2"
+
+
+def test_delete_no_item(monkeypatch):
+    provider = setup_provider(monkeypatch)
+    table = provider.get_table(AwsAccount.user_table_name)
+    # Simulate no existing accounts
+    table.get_item.return_value = {}
+    acct = make_account(id="u1:acct1")
+    acct.delete()
+    table.put_item.assert_not_called()
 
 
 def test_get_all_for_user_calls_get_account_by_id_for_user(monkeypatch):
