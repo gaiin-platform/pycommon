@@ -109,8 +109,7 @@ class AccountABC(ABC):
     @abstractmethod
     def get_account_by_id_for_user(
         cls, user_id: str, account_id: str
-    ) -> AccountABC | None:
-        pass
+    ) -> AccountABC | None: ...
 
 
 # all required classes to fully implement a backend for Amplify

@@ -113,6 +113,15 @@ def test_delete_calls_delete_item(monkeypatch):
     assert mock_table.delete_item.called
 
 
+def test_delete_exception(monkeypatch):
+    user = make_user()
+    mock_table = MagicMock()
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+    mock_table.delete_item.side_effect = Exception("DynamoDB error")
+    with pytest.raises(Exception, match="DynamoDB error"):
+        user.delete()
+
+
 def test_accounts_returns_cached(monkeypatch):
     user = make_user()
     user._accounts = ["acct1"]
@@ -126,6 +135,15 @@ def test_accounts_calls_get_all_for_user(monkeypatch):
         lambda user_id: ["acct2"],
     )
     assert user.accounts(use_cache=False) == ["acct2"]
+
+
+def test_accounts_calls_use_cache(monkeypatch):
+    user = make_user()
+    monkeypatch.setattr(
+        "pycommon.dal.providers.aws.AwsAccount.get_all_for_user",
+        lambda user_id: ["acct2"],
+    )
+    assert user.accounts(use_cache=True) == ["acct2"]
 
 
 def test_get_by_user_id_success(monkeypatch):
@@ -232,6 +250,26 @@ def test_list_returns_users_and_cursor(monkeypatch):
     assert users[1].user_id == "u2"
 
 
+def test_list_with_cursor(monkeypatch):
+    mock_table = MagicMock()
+    mock_table.scan.return_value = {
+        "Items": [
+            {
+                "user_id": "u1",
+                "email": "test@example.com",
+                "family_name": "Smith",
+                "given_name": "John",
+            },
+        ],
+        "LastEvaluatedKey": {"user_id": "u1"},
+    }
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+    users, cursor = AwsUser.list(limit=1, cursor="u1")
+    assert len(users) == 1
+    assert cursor == "u1"
+    assert users[0].user_id == "u1"
+
+
 def test_list_empty(monkeypatch):
     mock_table = MagicMock()
     mock_table.scan.return_value = {"Items": [], "LastEvaluatedKey": None}
@@ -248,6 +286,14 @@ def test_list_empty(monkeypatch):
         monkeypatch.setattr(AwsUser, "provider", DummyProvider())
         result = AwsUser._user_table()
         assert result == f"table:{AwsUser.user_table_name}"
+
+
+def test_list_exception(monkeypatch):
+    mock_table = MagicMock()
+    mock_table.scan.side_effect = Exception("scan error")
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+    with pytest.raises(Exception, match="scan error"):
+        AwsUser.list()
 
 
 def test_user_table_uses_classvar(monkeypatch):
