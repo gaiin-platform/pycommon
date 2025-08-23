@@ -182,13 +182,23 @@ class AwsAccount(AccountABC):
         for i in accounts:
             if account_id and i.get("id") != account_id:
                 continue
+
+            # rate will be a Decimal
+            rate = i.get("rateLimit", {}).get("rate", None)
+            # Convert Decimal to int if necessary
+            if rate is not None:
+                try:
+                    rate = int(rate)
+                except (ValueError, TypeError):
+                    rate = None
+
             acct = AwsAccount(
                 id=i.get("id"),
                 name=i.get("name"),
                 owner_user_id=user,
                 is_default=i.get("isDefault", False),
                 rate_limit_period=i.get("rateLimit", {}).get("period", "Unlimited"),
-                rate_limit_rate=i.get("rateLimit", {}).get("rate", None),
+                rate_limit_rate=rate,
             )
             resp.append(acct)
         return resp
