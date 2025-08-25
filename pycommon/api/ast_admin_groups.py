@@ -6,6 +6,8 @@ import os
 
 import requests
 
+from pycommon.lzw import safe_compress
+
 
 def get_all_ast_admin_groups(access_token: str) -> dict:
     """
@@ -62,7 +64,7 @@ def update_ast_admin_groups(access_token: str, data: dict) -> dict:
 
     endpoint = os.environ["API_BASE_URL"] + "/groups/update"
 
-    request = {"data": data}
+    request = {"data": safe_compress(data)}
 
     headers = {
         "Content-Type": "application/json",

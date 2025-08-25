@@ -6,6 +6,8 @@ import os
 
 import requests
 
+from pycommon.lzw import safe_compress
+
 
 def send_email(
     access_token: str, email_to: str, email_subject: str, email_body: str
@@ -27,11 +29,13 @@ def send_email(
     endpoint = os.environ["API_BASE_URL"] + "/ses/send-email"
 
     request = {
-        "data": {
-            "email_to": email_to,
-            "email_subject": email_subject,
-            "email_body": email_body,
-        }
+        "data": safe_compress(
+            {
+                "email_to": email_to,
+                "email_subject": email_subject,
+                "email_body": email_body,
+            }
+        )
     }
 
     headers = {

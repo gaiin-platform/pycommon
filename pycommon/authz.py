@@ -39,6 +39,7 @@ from pycommon.exceptions import (
     HTTPUnauthorized,
     UnknownApiUserException,
 )
+from pycommon.lzw import is_lzw_compressed_format, lzw_uncompress
 
 ALGORITHMS = ["RS256"]
 
@@ -102,52 +103,6 @@ def add_api_access_types(access_types: List[str]):
     """
     global _access_types
     _access_types += access_types
-
-
-@required_env_vars("API_BASE_URL")
-def verify_user_as_admin(access_token: str, purpose: str) -> bool:
-    """Verifies if a user is an admin based on the provided token and purpose.
-
-    Args:
-        access_token (str): The access token for authentication.
-        purpose (str): The purpose of the authorization check.
-
-    Returns:
-        bool: True if the user is an admin, False otherwise.
-    """
-    print("Initiating authentication of user as admin.")
-
-    api_base_url = os.environ.get("API_BASE_URL")
-
-    endpoint = f"{api_base_url}/amplifymin/auth"
-
-    request_payload = {"data": {"purpose": purpose}}
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {access_token}",
-    }
-
-    try:
-        response: Response = requests.post(
-            endpoint, headers=headers, data=json.dumps(request_payload)
-        )
-
-        print("Response received:", response.content)
-        response_content: dict = response.json()
-
-        if (
-            response.status_code != 200
-            or response_content.get("success", False) is False
-        ):
-            return False
-        return response_content.get("isAdmin", False)
-    except requests.RequestException as e:
-        print(f"Network error during authentication: {e}")
-        return False
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON response: {e}")
-        return False
 
 
 @required_env_vars("OAUTH_ISSUER_BASE_URL", "OAUTH_AUDIENCE", "ACCOUNTS_DYNAMO_TABLE")
@@ -309,6 +264,14 @@ def _validate_data(
         validate_data = data
         if schema != {}:
             validate_data = data["data"]
+            # Check if data is compressed and decompress if needed
+            if is_lzw_compressed_format(validate_data):
+                print("Compressed data detected, decompressing...")
+                try:
+                    validate_data = lzw_uncompress(validate_data)
+                    print("Data decompressed successfully")
+                except Exception as e:
+                    print(f"Failed to decompress data: {e}")
         try:
             json_validate(instance=validate_data, schema=schema)
             print("JSON validation passed")

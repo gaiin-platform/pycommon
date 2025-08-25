@@ -6,6 +6,8 @@ import os
 
 import requests
 
+from pycommon.lzw import safe_compress
+
 
 def share_assistant(access_token: str, data: dict) -> bool:
     """
@@ -23,7 +25,7 @@ def share_assistant(access_token: str, data: dict) -> bool:
 
     share_assistant_endpoint = os.environ["API_BASE_URL"] + "/assistant/share"
 
-    request = {"data": data}
+    request = {"data": safe_compress(data)}
 
     headers = {
         "Content-Type": "application/json",
@@ -185,7 +187,7 @@ def create_assistant(access_token: str, data: dict) -> dict:
 
     assistant_endpoint = os.environ["API_BASE_URL"] + "/assistant/create"
 
-    request = {"data": data}
+    request = {"data": safe_compress(data)}
 
     headers = {
         "Content-Type": "application/json",
@@ -228,7 +230,7 @@ def add_assistant_path(access_token: str, data: dict) -> dict:
 
     path_assistant_endpoint = os.environ["API_BASE_URL"] + "/assistant/add_path"
 
-    request = {"data": data}
+    request = {"data": safe_compress(data)}
 
     headers = {
         "Content-Type": "application/json",
