@@ -270,6 +270,8 @@ def _validate_data(
                 try:
                     validate_data = lzw_uncompress(validate_data)
                     print("Data decompressed successfully")
+                    # Update the data dict with the decompressed data
+                    data["data"] = validate_data
                 except Exception as e:
                     print(f"Failed to decompress data: {e}")
         try:
