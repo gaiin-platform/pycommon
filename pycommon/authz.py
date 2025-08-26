@@ -262,7 +262,7 @@ def _validate_data(
         print(f"Found validator for {name}/{op}")
         schema: dict = validator[name][op]
         validate_data = data
-        if schema != {}:
+        if schema != {} and "data" in data:
             validate_data = data["data"]
             # Check if data is compressed and decompress if needed
             if is_lzw_compressed_format(validate_data):
