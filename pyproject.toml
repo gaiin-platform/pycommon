@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pycommon"
-version = "0.0.1-alpha"
+version = "0.1.0"
 description = "Common Python utilities for AWS Lambda and API operations"
 readme = "README.md"
 requires-python = ">=3.8"
