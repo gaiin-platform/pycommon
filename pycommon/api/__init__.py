@@ -15,7 +15,11 @@ from . import (
     secrets,
     ses_email,
 )
-from .amplify_groups import verify_member_of_ast_admin_group, verify_user_in_amp_group
+from .amplify_groups import (
+    get_user_affiliated_groups,
+    verify_member_of_ast_admin_group,
+    verify_user_in_amp_group,
+)
 from .api_key import deactivate_key, get_api_keys
 from .assistants import (
     create_assistant,
@@ -81,6 +85,7 @@ __all__ = [
     "translate_user_data_sources_to_hash_data_sources",
     "simulate_can_access_objects",
     "verify_user_in_amp_group",
+    "get_user_affiliated_groups",
     "get_api_keys",
     "set_route_data",
     "set_permissions_by_state",

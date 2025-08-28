@@ -202,6 +202,38 @@ def test_api_tool_decorator_method_validation():
     assert "/test_post" in ops._route_data
     assert ops._route_data["/test_post"]["method"] == "POST"
 
+    # Test valid methods: DELETE
+    @api_tool(
+        path="/test_delete",
+        name="Test DELETE Tool",
+        description="A test DELETE tool",
+        parameters={"type": "object"},
+        method="DELETE",
+    )
+    def test_function_delete():
+        return {"result": "success"}
+
+    result_delete = test_function_delete()
+    assert result_delete == {"result": "success"}
+    assert "/test_delete" in ops._route_data
+    assert ops._route_data["/test_delete"]["method"] == "DELETE"
+
+    # Test valid methods: PUT
+    @api_tool(
+        path="/test_put",
+        name="Test PUT Tool",
+        description="A test PUT tool",
+        parameters={"type": "object"},
+        method="PUT",
+    )
+    def test_function_put():
+        return {"result": "success"}
+
+    result_put = test_function_put()
+    assert result_put == {"result": "success"}
+    assert "/test_put" in ops._route_data
+    assert ops._route_data["/test_put"]["method"] == "PUT"
+
 
 def test_api_tool_decorator_invalid_method():
     """Test that api_tool raises ValueError for invalid methods."""
@@ -212,7 +244,7 @@ def test_api_tool_decorator_invalid_method():
 
     # Test invalid method - should raise ValueError during decoration
     with pytest.raises(
-        ValueError, match="Method must be either 'GET' or 'POST', got 'PUT'"
+        ValueError, match="Method must be GET, POST, DELETE, or PUT, got 'PATCH'"
     ):
 
         @api_tool(
@@ -220,14 +252,14 @@ def test_api_tool_decorator_invalid_method():
             name="Test Invalid Tool",
             description="A test tool with invalid method",
             parameters={"type": "object"},
-            method="PUT",
+            method="PATCH",
         )
         def test_function_invalid():
             return {"result": "success"}
 
     # Test another invalid method
     with pytest.raises(
-        ValueError, match="Method must be either 'GET' or 'POST', got 'DELETE'"
+        ValueError, match="Method must be GET, POST, DELETE, or PUT, got 'OPTIONS'"
     ):
 
         @api_tool(
@@ -235,22 +267,46 @@ def test_api_tool_decorator_invalid_method():
             name="Test Invalid Tool 2",
             description="A test tool with invalid method",
             parameters={"type": "object"},
-            method="DELETE",
+            method="OPTIONS",
         )
         def test_function_invalid2():
             return {"result": "success"}
 
-    # Test lowercase method (should also be invalid)
+    # Test non-string method (should be invalid)
     with pytest.raises(
-        ValueError, match="Method must be either 'GET' or 'POST', got 'get'"
+        ValueError, match="Method must be GET, POST, DELETE, or PUT, got '123'"
     ):
 
         @api_tool(
-            path="/test_invalid3",
-            name="Test Invalid Tool 3",
-            description="A test tool with lowercase method",
+            path="/test_invalid4",
+            name="Test Invalid Tool 4",
+            description="A test tool with non-string method",
             parameters={"type": "object"},
-            method="get",
+            method=123,
         )
-        def test_function_invalid3():
+        def test_function_invalid4():
             return {"result": "success"}
+
+
+def test_api_tool_decorator_lowercase_method():
+    """Test that api_tool properly handles lowercase method names."""
+    # Reset global state
+    set_route_data({"dummy": {}})
+    set_op_type("test")
+    set_permissions_by_state(None)
+
+    # Test lowercase method - should be converted to uppercase and work
+    @api_tool(
+        path="/test_lowercase",
+        name="Test Lowercase Tool",
+        description="A test tool with lowercase method",
+        parameters={"type": "object"},
+        method="get",
+    )
+    def test_function_lowercase():
+        return {"result": "success"}
+
+    result = test_function_lowercase()
+    assert result == {"result": "success"}
+    assert "/test_lowercase" in ops._route_data
+    assert ops._route_data["/test_lowercase"]["method"] == "GET"
