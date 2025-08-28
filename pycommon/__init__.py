@@ -4,9 +4,10 @@
 # Import commonly used root-level modules
 # Import key modules for easy access
 from . import api, authz, const, decorators, encoders, exceptions, llm, tools
+from .api.auth_admin import verify_user_as_admin
 
 # Import most commonly used functions directly for convenience
-from .authz import get_claims, validated, verify_user_as_admin
+from .authz import get_claims, validated
 from .decorators import required_env_vars
 from .encoders import dumps_lossy, dumps_safe, dumps_smart
 from .exceptions import (

@@ -7,6 +7,8 @@ UNLIMITED = "Unlimited"
 # Define the default rate limit for unlimited access
 NO_RATE_LIMIT = {"period": UNLIMITED, "rate": None}
 
+IMAGE_FILE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+
 
 class APIAccessType(Enum):
     # User-facing API access types

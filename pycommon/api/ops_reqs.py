@@ -7,6 +7,8 @@ from typing import Any, Dict, List
 
 import requests
 
+from pycommon.lzw import safe_compress
+
 
 def get_all_op(access_token: str) -> dict:
     """
@@ -61,7 +63,7 @@ def register_ops(
     """
     endpoint = os.environ["API_BASE_URL"] + "/ops/register"
 
-    request = {"data": {"ops": ops, "system_op": system_op}}
+    request = {"data": safe_compress({"ops": ops, "system_op": system_op})}
 
     headers = {
         "Content-Type": "application/json",

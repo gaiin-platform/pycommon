@@ -5,7 +5,9 @@ import json
 import os
 from typing import List, Optional
 
+import boto3
 import requests
+from botocore.exceptions import ClientError
 
 
 def get_email_suggestions(
@@ -103,7 +105,7 @@ def are_valid_amplify_users(
     access_token: str, user_emails: List[str]
 ) -> tuple[List[str], List[str]]:
     """
-    Check if given emails are valid Amplify users.
+    Check if given emails are valid Amplify users using efficient direct lookups.
 
     Args:
         access_token: Bearer token for authentication
@@ -116,33 +118,52 @@ def are_valid_amplify_users(
     """
     print(f"Checking if {user_emails} are valid Amplify users")
 
-    # Get all emails from the system
-    all_emails = get_email_suggestions(access_token, "*")
-    if all_emails is None:
-        print("Failed to retrieve email list")
-        all_emails = []
-
-    # Get system users
     system_data = get_system_ids(access_token)
     system_users = []
     if system_data is not None:
         # Extract owner emails from system data
         system_users = [
-            item.get("owner", "") for item in system_data if item.get("owner")
+            item.get("owner", "").lower() for item in system_data if item.get("owner")
         ]
     else:
         print("Failed to retrieve system users list")
 
-    # Combine both lists and check if the user email exists
-    all_valid_emails = all_emails + system_users
+    # Convert system users to a set for O(1) lookup
+    system_users_set = set(system_users)
+
+    # Initialize DynamoDB client
+    dynamodb = boto3.resource("dynamodb")
+    cognito_user_table = dynamodb.Table(os.environ["COGNITO_USERS_DYNAMODB_TABLE"])
+
     valid = []
     invalid = []
-    for user in user_emails:
-        lower_user = user.lower()
-        is_valid = lower_user in [email.lower() for email in all_valid_emails]
-        if is_valid:
+
+    for user_email in user_emails:
+        lower_user = user_email.lower()
+
+        # First check if it's a system user (fast set lookup)
+        if lower_user in system_users_set:
             valid.append(lower_user)
-        else:
+            continue
+
+        # Check if it exists in cognito_users table using direct GetItem
+        try:
+            response = cognito_user_table.get_item(
+                Key={"user_id": lower_user},
+                ProjectionExpression="user_id",
+                # Only get the key back to minimize data transfer
+            )
+
+            if "Item" in response:
+                # User exists in cognito table
+                valid.append(lower_user)
+            else:
+                # User doesn't exist in either place
+                invalid.append(lower_user)
+
+        except ClientError as e:
+            print(f"Error checking user {lower_user}: {e.response['Error']['Message']}")
+            # On error, treat as invalid to be safe
             invalid.append(lower_user)
 
     print(f"Valid Users: {valid}")

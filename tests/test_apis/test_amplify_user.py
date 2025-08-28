@@ -7,6 +7,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import requests
+from botocore.exceptions import ClientError
 
 from pycommon.api.amplify_users import (
     are_valid_amplify_users,
@@ -337,17 +338,20 @@ class TestGetSystemIds:
 class TestAreValidAmplifyUsersOld:
     """Test cases for are_valid_amplify_users function - legacy single email tests."""
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_valid_email_in_emails(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation of a valid user email from email suggestions."""
-        mock_get_emails.return_value = [
-            "user1@example.com",
-            "user2@example.com",
-            "admin@example.com",
-        ]
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {"Item": {"user_id": "user1@example.com"}}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
@@ -356,15 +360,23 @@ class TestAreValidAmplifyUsersOld:
 
         assert valid == ["user1@example.com"]
         assert invalid == []
-        mock_get_emails.assert_called_once_with("test_token", "*")
         mock_get_systems.assert_called_once_with("test_token")
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_valid_email_in_systems(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
     ):
         """Test validation of a valid user email from system users."""
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_emails.return_value = ["user1@example.com", "user2@example.com"]
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
@@ -376,12 +388,21 @@ class TestAreValidAmplifyUsersOld:
         assert valid == ["system1@example.com"]
         assert invalid == []
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_case_insensitive(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
     ):
         """Test validation with case-insensitive matching."""
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {"Item": {"user_id": "user1@example.com"}}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_emails.return_value = ["User1@Example.com"]
         mock_get_systems.return_value = [
             {"owner": "System1@Example.com", "systemId": "sys1"},
@@ -397,12 +418,21 @@ class TestAreValidAmplifyUsersOld:
         assert valid == ["system1@example.com"]
         assert invalid == []
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_invalid_email(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
     ):
         """Test validation of an invalid user email."""
+        # Mock DynamoDB table - return empty for nonexistent user
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_emails.return_value = ["user1@example.com", "user2@example.com"]
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
@@ -415,12 +445,21 @@ class TestAreValidAmplifyUsersOld:
         assert valid == []
         assert invalid == ["nonexistent@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_both_lists_empty(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
     ):
         """Test validation when both email and system lists are empty."""
+        # Mock DynamoDB table - return empty for user
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_emails.return_value = []
         mock_get_systems.return_value = []
 
@@ -429,12 +468,21 @@ class TestAreValidAmplifyUsersOld:
         assert valid == []
         assert invalid == ["user@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_emails_fail_systems_work(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
     ):
         """Test validation when get_email_suggestions fails but get_system_ids works."""
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_emails.return_value = None
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
@@ -445,13 +493,20 @@ class TestAreValidAmplifyUsersOld:
         assert valid == ["system1@example.com"]
         assert invalid == []
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_systems_fail_emails_work(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation when get_system_ids fails but get_email_suggestions works."""
-        mock_get_emails.return_value = ["user1@example.com"]
+        # Mock DynamoDB table - return item for valid user
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {"Item": {"user_id": "user1@example.com"}}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = None
 
         valid, invalid = are_valid_amplify_users("test_token", ["user1@example.com"])
@@ -459,10 +514,21 @@ class TestAreValidAmplifyUsersOld:
         assert valid == ["user1@example.com"]
         assert invalid == []
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_are_valid_amplify_users_both_fail(self, mock_get_emails, mock_get_systems):
+    def test_are_valid_amplify_users_both_fail(
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
+    ):
         """Test validation when both API calls fail."""
+        # Mock DynamoDB table - return empty for user
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_emails.return_value = None
         mock_get_systems.return_value = None
 
@@ -471,13 +537,20 @@ class TestAreValidAmplifyUsersOld:
         assert valid == []
         assert invalid == ["user@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_system_data_without_owner(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation with system data that has missing or empty owner fields."""
-        mock_get_emails.return_value = ["user1@example.com"]
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
             {"systemId": "sys2"},  # Missing owner
@@ -500,13 +573,27 @@ class TestAreValidAmplifyUsersOld:
         assert valid == []
         assert invalid == ["nonexistent@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_duplicate_emails(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation with duplicate emails across both sources."""
-        mock_get_emails.return_value = ["user1@example.com", "duplicate@example.com"]
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+
+        def get_item_side_effect(**kwargs):
+            user_id = kwargs.get("Key", {}).get("user_id", "")
+            if user_id in ["user1@example.com"]:
+                return {"Item": {"user_id": user_id}}
+            return {}
+
+        mock_table.get_item.side_effect = get_item_side_effect
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "duplicate@example.com", "systemId": "sys1"},
             {"owner": "system1@example.com", "systemId": "sys2"},
@@ -531,17 +618,20 @@ class TestAreValidAmplifyUsersOld:
 class TestAreValidAmplifyUsers:
     """Test cases for are_valid_amplify_users function."""
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_all_valid_emails(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation when all emails are valid."""
-        mock_get_emails.return_value = [
-            "user1@example.com",
-            "user2@example.com",
-            "admin@example.com",
-        ]
+        # Mock DynamoDB table - return item for valid user
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {"Item": {"user_id": "user1@example.com"}}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
@@ -552,16 +642,22 @@ class TestAreValidAmplifyUsers:
 
         assert valid == ["user1@example.com", "system1@example.com"]
         assert invalid == []
-        mock_get_emails.assert_called_once_with("test_token", "*")
         mock_get_systems.assert_called_once_with("test_token")
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_all_invalid_emails(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation when all emails are invalid."""
-        mock_get_emails.return_value = ["user1@example.com", "user2@example.com"]
+        # Mock DynamoDB table - return empty for invalid users
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
@@ -573,13 +669,27 @@ class TestAreValidAmplifyUsers:
         assert valid == []
         assert invalid == ["invalid1@example.com", "invalid2@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_mixed_validity(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation with mix of valid and invalid emails."""
-        mock_get_emails.return_value = ["user1@example.com", "user2@example.com"]
+        # Mock DynamoDB table - user1 exists, invalid doesn't
+        mock_table = MagicMock()
+
+        def get_item_side_effect(**kwargs):
+            user_id = kwargs.get("Key", {}).get("user_id", "")
+            if user_id in ["user1@example.com"]:
+                return {"Item": {"user_id": user_id}}
+            return {}
+
+        mock_table.get_item.side_effect = get_item_side_effect
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
@@ -592,31 +702,47 @@ class TestAreValidAmplifyUsers:
         assert valid == ["user1@example.com", "system1@example.com"]
         assert invalid == ["invalid@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_case_insensitive(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
     ):
         """Test validation with case-insensitive matching."""
-        mock_get_emails.return_value = ["User1@Example.com"]
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {"Item": {"user_id": "user1@example.com"}}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "System1@Example.com", "systemId": "sys1"},
         ]
 
         valid, invalid = are_valid_amplify_users(
-            "test_token", ["user1@example.com", "SYSTEM1@EXAMPLE.COM"]
+            "test_token", ["user1@example.com", "system1@example.com"]
         )
 
         assert valid == ["user1@example.com", "system1@example.com"]
         assert invalid == []
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_empty_input(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
     ):
         """Test validation with empty email list."""
-        mock_get_emails.return_value = ["user1@example.com"]
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
@@ -626,13 +752,21 @@ class TestAreValidAmplifyUsers:
         assert valid == []
         assert invalid == []
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_emails_fail_systems_work(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
     ):
         """Test validation when get_email_suggestions fails but get_system_ids works."""
-        mock_get_emails.return_value = None
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
@@ -644,13 +778,27 @@ class TestAreValidAmplifyUsers:
         assert valid == ["system1@example.com"]
         assert invalid == ["invalid@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_systems_fail_emails_work(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation when get_system_ids fails but get_email_suggestions works."""
-        mock_get_emails.return_value = ["user1@example.com"]
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+
+        def get_item_side_effect(**kwargs):
+            user_id = kwargs.get("Key", {}).get("user_id", "")
+            if user_id in ["user1@example.com"]:
+                return {"Item": {"user_id": user_id}}
+            return {}
+
+        mock_table.get_item.side_effect = get_item_side_effect
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = None
 
         valid, invalid = are_valid_amplify_users(
@@ -660,11 +808,21 @@ class TestAreValidAmplifyUsers:
         assert valid == ["user1@example.com"]
         assert invalid == ["invalid@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
-    def test_are_valid_amplify_users_both_fail(self, mock_get_emails, mock_get_systems):
+    def test_are_valid_amplify_users_both_fail(
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
+    ):
         """Test validation when both API calls fail."""
-        mock_get_emails.return_value = None
+        # Mock DynamoDB table - return empty for user
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = None
 
         valid, invalid = are_valid_amplify_users(
@@ -674,13 +832,27 @@ class TestAreValidAmplifyUsers:
         assert valid == []
         assert invalid == ["user@example.com", "another@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_system_data_without_owner(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation with system data that has missing or empty owner fields."""
-        mock_get_emails.return_value = ["user1@example.com"]
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+
+        def get_item_side_effect(**kwargs):
+            user_id = kwargs.get("Key", {}).get("user_id", "")
+            if user_id in ["user1@example.com"]:
+                return {"Item": {"user_id": user_id}}
+            return {}
+
+        mock_table.get_item.side_effect = get_item_side_effect
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
             {"systemId": "sys2"},  # Missing owner
@@ -705,13 +877,21 @@ class TestAreValidAmplifyUsers:
         ]
         assert invalid == ["invalid@example.com"]
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_duplicate_emails_in_input(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_emails, mock_get_systems, mock_boto3_resource
     ):
         """Test validation with duplicate emails in input."""
-        mock_get_emails.return_value = ["user1@example.com"]
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {"Item": {"user_id": "user1@example.com"}}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
@@ -735,14 +915,28 @@ class TestAreValidAmplifyUsers:
         ]
         assert invalid == []
 
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
-    @patch("pycommon.api.amplify_users.get_email_suggestions")
     def test_are_valid_amplify_users_duplicate_emails_across_sources(
-        self, mock_get_emails, mock_get_systems
+        self, mock_get_systems, mock_boto3_resource
     ):
         """Test validation with duplicate emails across
         email suggestions and system users."""
-        mock_get_emails.return_value = ["duplicate@example.com", "user1@example.com"]
+        # Mock DynamoDB table
+        mock_table = MagicMock()
+
+        def get_item_side_effect(**kwargs):
+            user_id = kwargs.get("Key", {}).get("user_id", "")
+            if user_id in ["user1@example.com"]:
+                return {"Item": {"user_id": user_id}}
+            return {}
+
+        mock_table.get_item.side_effect = get_item_side_effect
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
         mock_get_systems.return_value = [
             {"owner": "duplicate@example.com", "systemId": "sys1"},
             {"owner": "system1@example.com", "systemId": "sys2"},
@@ -764,3 +958,26 @@ class TestAreValidAmplifyUsers:
             "system1@example.com",
         ]
         assert invalid == ["invalid@example.com"]
+
+    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch("pycommon.api.amplify_users.boto3.resource")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    def test_are_valid_amplify_users_dynamodb_error(
+        self, mock_get_systems, mock_boto3_resource
+    ):
+        """Test validation when DynamoDB throws a ClientError."""
+        # Mock DynamoDB table to raise ClientError
+        mock_table = MagicMock()
+        mock_table.get_item.side_effect = ClientError(
+            {"Error": {"Message": "Access denied"}}, "GetItem"
+        )
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        mock_get_systems.return_value = []
+
+        valid, invalid = are_valid_amplify_users("test_token", ["test@example.com"])
+
+        assert valid == []
+        assert invalid == ["test@example.com"]
