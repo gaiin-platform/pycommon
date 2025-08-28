@@ -262,18 +262,20 @@ def _validate_data(
         print(f"Found validator for {name}/{op}")
         schema: dict = validator[name][op]
         validate_data = data
-        if schema != {} and "data" in data:
+
+        # Always check for compressed data first, regardless of schema
+        if "data" in data and is_lzw_compressed_format(data["data"]):
+            print("Compressed data detected in data['data'], decompressing...")
+            try:
+                decompressed = lzw_uncompress(data["data"])
+                data["data"] = decompressed
+                print("Data decompressed successfully")
+            except Exception as e:
+                print(f"Failed to decompress data['data']: {e}")
+                print("Continuing with original data")
+
+        if schema != {}:
             validate_data = data["data"]
-            # Check if data is compressed and decompress if needed
-            if is_lzw_compressed_format(validate_data):
-                print("Compressed data detected, decompressing...")
-                try:
-                    validate_data = lzw_uncompress(validate_data)
-                    print("Data decompressed successfully")
-                    # Update the data dict with the decompressed data
-                    data["data"] = validate_data
-                except Exception as e:
-                    print(f"Failed to decompress data: {e}")
         try:
             json_validate(instance=validate_data, schema=schema)
             print("JSON validation passed")
