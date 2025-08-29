@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, ClassVar, Dict, Iterable, Optional, Tuple
 
 from pycommon.dal.contracts import UserABC
@@ -11,7 +12,7 @@ from pycommon.dal.providers.aws.helpers import map_aws_error, nowstr
 
 class AwsUser(UserABC):
     provider: ClassVar[AwsProvider]
-    user_table_name: ClassVar[str] = "amplify-v6-object-access-dev-cognito-users"
+    user_table_name: ClassVar[str] = os.getenv("ACCOUNTS_DYNAMO_TABLE")
 
     def __init__(
         self,

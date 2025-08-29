@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import ClassVar, List, TypedDict
 
 from pycommon.dal.contracts import AccountABC
@@ -43,7 +44,10 @@ class AccountDict(TypedDict):
 
 class AwsAccount(AccountABC):
     provider: ClassVar[AwsProvider]
-    user_table_name: ClassVar[str] = "amplify-v6-lambda-dev-accounts"
+
+    # TODO: This should use a generic getter method that supports arbitrary
+    # value stores (e.g., kv store, env, etc)
+    user_table_name: ClassVar[str] = os.getenv("COGNITO_USERS_TABLE")
 
     def __init__(
         self,
