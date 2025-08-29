@@ -8,3 +8,6 @@ show_missing = True
 omit =
     pycommon/__init__.py
     tests/*
+exclude_also = 
+    @abstractmethod
+    @raise NotImplementedError
