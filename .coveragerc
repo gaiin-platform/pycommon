@@ -11,3 +11,4 @@ omit =
 exclude_also = 
     @abstractmethod
     @raise NotImplementedError
+    pass

@@ -1,4 +1,5 @@
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -300,14 +301,14 @@ def test_list_empty(monkeypatch):
     assert users == []
     assert cursor is None
 
-    def test_user_table_returns_provider_table(monkeypatch):
-        class DummyProvider:
-            def get_table(self, table_name):
-                return f"table:{table_name}"
 
-        monkeypatch.setattr(AwsUser, "provider", DummyProvider())
-        result = AwsUser._user_table()
-        assert result == f"table:{AwsUser.user_table_name}"
+def test_user_table_returns_provider_table(monkeypatch):
+    os.environ["COGNITO_USERS_DYNAMODB_TABLE"] = "dummy_table"
+    dummy_provider = MagicMock()
+    dummy_provider.get_table.return_value = "dummy_table"
+    monkeypatch.setattr(AwsUser, "provider", dummy_provider)
+    result = AwsUser._user_table()
+    assert result == AwsUser.user_table_name
 
 
 def test_list_exception(monkeypatch):
@@ -319,17 +320,12 @@ def test_list_exception(monkeypatch):
 
 
 def test_user_table_uses_classvar(monkeypatch):
-    called = {}
-
-    class DummyProvider:
-        def get_table(self, table_name):
-            called["table_name"] = table_name
-            return "dummy_table"
-
-    monkeypatch.setattr(AwsUser, "provider", DummyProvider())
+    dummy_provider = MagicMock()
+    dummy_provider.get_table.return_value = "dummy_table"
+    monkeypatch.setattr(AwsUser, "provider", dummy_provider)
     table = AwsUser._user_table()
     assert table == "dummy_table"
-    assert called["table_name"] == AwsUser.user_table_name
+    assert dummy_provider.get_table.called
 
 
 def test_create_non_null_dynamodb_dict_excludes_none_fields():
@@ -378,3 +374,113 @@ def test_save_raises_mapped_exception(monkeypatch):
     ):
         with pytest.raises(RuntimeError, match="mapped error"):
             user.save()
+
+
+def test_get_user_settings(monkeypatch):
+    monkeypatch.setenv("DYNAMODB_TABLE", "dummy_table")
+    dummy_provider = MagicMock()
+    dummy_table = MagicMock()
+    dummy_provider.get_table.return_value = dummy_table
+    dummy_table.query.return_value = {
+        "Items": [
+            {
+                "id": "u1",
+            }
+        ]
+    }
+    monkeypatch.setattr(AwsUser, "provider", dummy_provider)
+    user = AwsUser(user_id="u1")
+    settings = user.settings
+    assert settings._id == "u1"
+
+
+def test_no_user_settings(monkeypatch):
+    # Set up environment variable for settings table
+    monkeypatch.setenv("DYNAMODB_TABLE", "settings-table")
+
+    # Create two mock tables
+    mock_user_table = MagicMock()
+    mock_user_table.get_item.return_value = {"Item": {"user_id": "u1"}}
+    mock_settings_table = MagicMock()
+    mock_settings_table.query.return_value = {"Items": []}
+
+    # Create a provider that returns the correct table based on name
+    def get_table(name):
+        if name == "settings-table":
+            return mock_settings_table
+        else:
+            return mock_user_table
+
+    mock_provider = MagicMock()
+    mock_provider.get_table.side_effect = get_table
+
+    # Patch AwsUser.provider
+    monkeypatch.setattr(AwsUser, "provider", mock_provider)
+
+    # Test user table call
+    user = AwsUser.get_by_user_id(user_id="u1")
+    assert user.user_id == "u1"
+    assert mock_user_table.get_item.called
+
+    # # Test settings table call via user.settings
+    with pytest.raises(NotFound):
+        user.settings
+
+    assert mock_settings_table.query.called
+
+
+def test_update_settings_username(monkeypatch):
+    monkeypatch.setenv("DYNAMODB_TABLE", "settings-table")
+    mock_user_table = MagicMock()
+    mock_user_table.get_item.return_value = {"Item": {"user_id": "u1"}}
+    mock_settings_table = MagicMock()
+    mock_settings_table.query.return_value = {"Items": [{"id": "u1"}]}
+    mock_settings_table.get_item.return_value = {"Item": []}
+
+    # Create a provider that returns the correct table based on name
+    def get_table(name):
+        if name == "settings-table":
+            return mock_settings_table
+        else:
+            return mock_user_table
+
+    mock_provider = MagicMock()
+    mock_provider.get_table.side_effect = get_table
+
+    monkeypatch.setattr(AwsUser, "provider", mock_provider)
+
+    user = AwsUser.get_by_user_id(user_id="u1")
+    settings = user.settings
+    settings.update_username("new_username")
+    assert settings._id == "u1"
+
+
+def test_update_settings_username_already_taken(monkeypatch):
+    monkeypatch.setenv("DYNAMODB_TABLE", "settings-table")
+    mock_user_table = MagicMock()
+    mock_user_table.get_item.return_value = {"Item": {"user_id": "u1"}}
+    mock_settings_table = MagicMock()
+    mock_settings_table.query.return_value = {"Items": [{"id": "u1"}]}
+    mock_settings_table.get_item.return_value = {"Item": [{"id": "new_username"}]}
+
+    # Create a provider that returns the correct table based on name
+    def get_table(name):
+        if name == "settings-table":
+            return mock_settings_table
+        else:
+            return mock_user_table
+
+    mock_provider = MagicMock()
+    mock_provider.get_table.side_effect = get_table
+
+    monkeypatch.setattr(AwsUser, "provider", mock_provider)
+
+    user = AwsUser.get_by_user_id(user_id="u1")
+    settings = user.settings
+    with pytest.raises(ValueError, match="Username 'new_username' is already taken."):
+        settings.update_username("new_username")
+    assert settings._id == "u1"
+
+    # snag the settings again to make sure the object has a cache
+    settings = user.settings
+    assert settings._id == "u1"

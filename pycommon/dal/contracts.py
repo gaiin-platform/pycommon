@@ -72,6 +72,18 @@ class UserABC(ABC):
     def delete(self) -> None: ...
 
     @abstractmethod
+    def update_username(self, new_username: str) -> None:
+        """Update the user's username (user_id).
+
+        Args:
+            new_username (str): The new username to set.
+
+        Raises:
+            ValueError: If the new username is invalid or already taken.
+        """
+        ...
+
+    @abstractmethod
     def accounts(self) -> list[AccountABC]: ...
 
     # Class methods (return objects)

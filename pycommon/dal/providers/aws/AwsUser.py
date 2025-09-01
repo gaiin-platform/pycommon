@@ -10,9 +10,78 @@ from pycommon.dal.providers.aws import AwsAccount, AwsProvider
 from pycommon.dal.providers.aws.helpers import map_aws_error, nowstr
 
 
+class _UserSettings:
+    """Class representing the internal data for settings
+
+    At present in AWS, the Settings are contained in the
+    DYNAMODB_TABLE: ${self:service}-${sls:stage}
+    (e.g., amplify-v6-lambda-dev) in a Map called 'Settings' which
+    includes a Map called 'featureOptions'. We do not wish to
+    expose the internals here, but rather just the values.
+
+    However, we want all our changes to settings to go through this
+    object (via the AwsUser object - e.g., User.Settings.Theme = Dark)
+    rather than directly modifying the underlying data structures.
+    """
+
+    def __init__(self, user: AwsUser):
+        self.user = user
+        self.provider = user.provider
+        self.settings_table: str = os.getenv("DYNAMODB_TABLE")
+        self.table = self.provider.get_table(self.settings_table)
+        self._id: str | None = None
+
+        # read username from table
+        # TODO: once this class gets fleshed out, we should do a better
+        # job storing/caching the data.
+        resp = self.table.query(
+            IndexName="UserIndex",
+            KeyConditionExpression="#u = :user_id",
+            ExpressionAttributeNames={"#u": "user"},
+            ExpressionAttributeValues={":user_id": self.user.user_id},
+        )
+        items = resp.get("Items")
+        if not items:
+            raise NotFound(self.user.user_id)
+        self._id = items[0].get("id", None)
+
+    def __repr__(self):
+        # TODO: once we have all settings described, provide a nice repr
+        pass
+
+    def update_username(self, new_username: str) -> None:
+        """Update the user's username (user_id).
+
+        Args:
+            new_username (str): The new username to set.
+
+        Raises:
+            ValueError: If the new username is invalid or already taken.
+        """
+        pass
+
+        # Check if new username already exists
+        existing = self.table.get_item(Key={"id": new_username}, ConsistentRead=True)
+        if existing.get("Item"):
+            raise ValueError(f"Username '{new_username}' is already taken.")
+
+        # Update the username in place using UpdateItem
+        # TODO: Error handling
+        self.table.update_item(
+            Key={"id": self._id},
+            UpdateExpression="SET #u = :new_username",
+            ExpressionAttributeNames={"#u": "user"},
+            ExpressionAttributeValues={":new_username": new_username},
+            ConditionExpression="attribute_exists(id)",
+        )
+
+        # Update the instance's user_id
+        self._user_id = new_username
+
+
 class AwsUser(UserABC):
     provider: ClassVar[AwsProvider]
-    user_table_name: ClassVar[str] = os.getenv("ACCOUNTS_DYNAMO_TABLE")
+    user_table_name: ClassVar[str] = None
 
     def __init__(
         self,
@@ -33,9 +102,12 @@ class AwsUser(UserABC):
         self._cust_saml_groups = cust_saml_groups
         self._cust_vu_groups = cust_vu_groups
         self._updated_at = updated_at
+        self._settings: Optional[_UserSettings] = None
 
     @classmethod
     def _user_table(cls):
+        if cls.user_table_name is None:
+            cls.user_table_name = os.getenv("COGNITO_USERS_DYNAMODB_TABLE")
         return cls.provider.get_table(cls.user_table_name)
 
     def __repr__(self):
@@ -298,6 +370,30 @@ class AwsUser(UserABC):
                 return self._accounts
         self._accounts = AwsAccount.get_all_for_user(self.user_id)
         return self._accounts
+
+    def update_username(self, new_username):
+        """
+        Update the user's username (user_id).
+
+        Args:
+            new_username (str): The new username to set.
+
+        Raises:
+            ValueError: If the new username is invalid or already taken.
+        """
+        pass
+
+    @property
+    def settings(self, use_cache=True):
+        """
+        Retrieves the user's settings.
+
+        Returns:
+            dict: A dictionary containing the user's settings.
+        """
+        if not self._settings:
+            self._settings = _UserSettings(self)
+        return self._settings
 
     # ClassMethods (other than dunders) go below here.
 
