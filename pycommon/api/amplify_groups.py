@@ -119,4 +119,4 @@ def get_user_affiliated_groups(
 
     except Exception as e:
         print(f"Error retrieving user affiliated groups: {e}")
-    return None
+    return None, None

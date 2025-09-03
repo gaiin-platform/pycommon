@@ -164,7 +164,7 @@ def test_get_user_affiliated_groups_api_failure(mock_get):
 
     result = get_user_affiliated_groups("test_token")
 
-    assert result is None
+    assert result == (None, None)
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
@@ -177,7 +177,7 @@ def test_get_user_affiliated_groups_http_error(mock_get):
 
     result = get_user_affiliated_groups("test_token")
 
-    assert result is None
+    assert result == (None, None)
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
@@ -187,7 +187,7 @@ def test_get_user_affiliated_groups_exception(mock_get):
 
     result = get_user_affiliated_groups("test_token")
 
-    assert result is None
+    assert result == (None, None)
 
 
 @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
