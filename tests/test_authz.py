@@ -1,20 +1,24 @@
 import json
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import boto3
 import pytest
+import requests
 from jose import ExpiredSignatureError, JWTError
 from jose.exceptions import JWTClaimsError
 from jsonschema.exceptions import ValidationError
 
 from pycommon.authz import (
     _determine_api_user,
+    _get_jwks_for_url,
     _parse_and_validate,
     _parse_token,
     _validate_data,
     add_api_access_types,
     api_claims,
     get_claims,
+    get_jwks_for_url,
     is_rate_limited,
     set_permission_checker,
     set_validate_rules,
@@ -59,6 +63,11 @@ def always_allow_permission_checker(user, type, op, data):
 
 
 always_allow_permission_checker(None, None, None, None)
+
+
+@pytest.fixture(autouse=True)
+def clear_jwks_cache():
+    _get_jwks_for_url.cache_clear()
 
 
 @patch("pycommon.authz.requests.get")
@@ -1892,3 +1901,52 @@ def test_validate_data_with_invalid_compressed_data():
         _validate_data(
             "/compressed", "test", {"data": invalid_compressed}, False, validator_rules
         )
+
+
+def test_get_jwks_with_connection_exception():
+    """Test get_jwks handling a connection error."""
+    with patch("pycommon.authz.requests.get") as mock_get:
+        mock_get.side_effect = requests.exceptions.ConnectionError("Unable to connect")
+        with pytest.raises(
+            ClaimException, match="JWKS endpoint unreachable. fail_open = True"
+        ):
+            get_jwks_for_url("http://invalid-url.com/.well-known/jwks.json")
+
+
+def test_get_jwks_with_connection_exception_fail_closed():
+    """Test get_jwks handling a connection error with fail_open=False."""
+    with patch("pycommon.authz.requests.get") as mock_get:
+        mock_get.side_effect = requests.exceptions.ConnectionError("Unable to connect")
+        with pytest.raises(
+            ClaimException, match="JWKS endpoint unreachable. fail_open = False"
+        ):
+            get_jwks_for_url(
+                "http://invalid-url.com/.well-known/jwks.json", fail_open=False
+            )
+
+
+def test_get_jwks_with_connection_exception_fail_open_with_cache():
+    """Test get_jwks handling a connection error with fail_open=True and cache."""
+    # first call the function and mock success response so jwks is not None
+    # then mock requests.get to fail on the second call
+    with patch("pycommon.authz.requests.get") as mock_get:
+        mock_get.return_value = MagicMock(
+            ok=True,
+            json=MagicMock(
+                return_value={"keys": [{"kid": "cached_kid", "key": "cached_key"}]}
+            ),
+        )
+        # First call to populate the cache
+        jwks = get_jwks_for_url("http://valid-url.com/.well-known/jwks.json")
+        assert jwks is not None
+
+        with patch(
+            "pycommon.authz.JWKS_CACHE_TIME", datetime.now() + timedelta(minutes=-10)
+        ):
+            # Now mock a connection error for the second call
+            mock_get.side_effect = requests.exceptions.ConnectionError(
+                "Unable to connect"
+            )
+            # Second call should return cached JWKS without raising an exception
+            cached_jwks = get_jwks_for_url("http://valid-url.com/.well-known/jwks.json")
+            assert cached_jwks == jwks  # Should return the cached value
