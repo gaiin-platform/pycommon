@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Iterable, Type
+from typing import Any, ClassVar, Iterable, Optional, Type
 
 
 class UserABC(ABC):
@@ -112,8 +112,42 @@ class AccountABC(ABC):
     ) -> AccountABC | None: ...
 
 
+class AdminConfigABC(ABC):
+    provider: ClassVar[Any] = None
+
+    @abstractmethod
+    def __init__(self, **config: Any) -> None:
+        """Provides access to admin configuration tables"""
+        pass
+
+    @abstractmethod
+    def get_config(self, key: str) -> dict | None:
+        """Retrieve a configuration value by key."""
+        pass
+
+    @abstractmethod
+    def set_config(self, key: str, value: Any) -> bool:
+        """Set (overwrite) a configuration value by key."""
+        pass
+
+    @abstractmethod
+    def delete_config(self, key: str) -> bool:
+        """Delete a configuration value by key."""
+        pass
+
+    @abstractmethod
+    def list(self, limit: int = 100, cursor: Optional[str] = None) -> list[str]:
+        """List all configuration keys."""
+        pass
+
+    @abstractmethod
+    def update_config(self, key: str, value: str) -> None:
+        """Update a configuration value by key."""
+        pass
+
+
 # all required classes to fully implement a backend for Amplify
-required = {"User": UserABC, "Account": AccountABC}
+required = {"User": UserABC, "Account": AccountABC, "AdminConfig": AdminConfigABC}
 
 
 class BackendABC(ABC):
@@ -126,6 +160,7 @@ class BackendABC(ABC):
     # abstract "class attributes" (enforced by __init_subclass__)
     User: Type[UserABC]
     Account: Type[AccountABC]
+    AdminConfig: Type[AdminConfigABC]
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()

@@ -12,7 +12,7 @@ from pycommon.dal.providers.aws.helpers import map_aws_error, nowstr
 
 class AwsUser(UserABC):
     provider: ClassVar[AwsProvider]
-    user_table_name: ClassVar[str] = os.getenv("ACCOUNTS_DYNAMO_TABLE")
+    user_table_name: ClassVar[str] = os.getenv("COGNITO_USERS_TABLE")
 
     def __init__(
         self,

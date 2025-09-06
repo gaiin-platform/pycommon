@@ -1,6 +1,7 @@
 # isort: off
 from .AwsProvider import AwsProvider
 from .AwsAccount import AwsAccount
+from .AwsAdminConfig import AwsAdminConfig
 from .AwsUser import AwsUser
 from .aws import AwsBackend
 
@@ -10,4 +11,5 @@ __all__ = [
     "AwsAccount",
     "AwsUser",
     "AwsBackend",
+    "AwsAdminConfig",
 ]
