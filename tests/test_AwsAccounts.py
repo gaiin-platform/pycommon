@@ -57,13 +57,13 @@ def test_repr():
 def test_user_table(monkeypatch):
     provider = setup_provider(monkeypatch)
     table = AwsAccount._user_table()
-    assert provider.called == [AwsAccount.user_table_name]
-    assert table is provider.tables[AwsAccount.user_table_name]
+    assert provider.called == [AwsAccount.account_table_name]
+    assert table is provider.tables[AwsAccount.account_table_name]
 
 
 def test_save_adds_account(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     # Simulate no accounts yet
     table.get_item.return_value = {"Item": {"user": "u1", "accounts": []}}
     acct = make_account()
@@ -76,7 +76,7 @@ def test_save_adds_account(monkeypatch):
 
 def test_save_updates_account(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     # Simulate existing account with same id
     table.get_item.return_value = {
         "Item": {
@@ -101,7 +101,7 @@ def test_save_updates_account(monkeypatch):
 
 def test_save_creates_new_item(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     # Simulate no Item returned
     table.get_item.return_value = {}
     acct = make_account()
@@ -112,7 +112,7 @@ def test_save_creates_new_item(monkeypatch):
 
 def test_delete_removes_account(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     # Simulate existing accounts
     table.get_item.return_value = {
         "Item": {
@@ -144,7 +144,7 @@ def test_delete_removes_account(monkeypatch):
 
 def test_delete_no_item(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     # Simulate no existing accounts
     table.get_item.return_value = {}
     acct = make_account(id="u1:acct1")
@@ -164,7 +164,7 @@ def test_get_all_for_user_calls_get_account_by_id_for_user(monkeypatch):
 
 def test_get_account_by_id_for_user_no_item(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     table.get_item.return_value = {"Item": None}
     result = AwsAccount.get_account_by_id_for_user("u1", None)
     assert result == []
@@ -172,7 +172,7 @@ def test_get_account_by_id_for_user_no_item(monkeypatch):
 
 def test_get_account_by_id_for_user_no_accounts(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     table.get_item.return_value = {"Item": {"user": "u1", "accounts": []}}
     result = AwsAccount.get_account_by_id_for_user("u1", None)
     assert result == []
@@ -180,7 +180,7 @@ def test_get_account_by_id_for_user_no_accounts(monkeypatch):
 
 def test_get_account_by_id_for_user_found(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     table.get_item.return_value = {
         "Item": {
             "user": "u1",
@@ -210,7 +210,7 @@ def test_get_account_by_id_for_user_found(monkeypatch):
 
 def test_get_account_by_id_for_user_all(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     table.get_item.return_value = {
         "Item": {
             "user": "u1",
@@ -237,7 +237,7 @@ def test_get_account_by_id_for_user_all(monkeypatch):
 
 def test_get_account_has_decimal_rate(monkeypatch):
     provider = setup_provider(monkeypatch)
-    table = provider.get_table(AwsAccount.user_table_name)
+    table = provider.get_table(AwsAccount.account_table_name)
     table.get_item.return_value = {
         "Item": {
             "user": "u1",

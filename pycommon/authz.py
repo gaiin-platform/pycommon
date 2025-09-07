@@ -15,6 +15,7 @@ import json
 import os
 import re
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
@@ -42,6 +43,9 @@ from pycommon.exceptions import (
 from pycommon.lzw import is_lzw_compressed_format, lzw_uncompress
 
 ALGORITHMS = ["RS256"]
+# used to minimize the number of calls to OAuth issuer for JWKS
+JWKS_CACHE_TTL = 60 * 5  # 5 minutes
+JWKS_CACHE_TIME = None
 
 # Globals needed by this file
 load_dotenv(dotenv_path=".env.local")
@@ -105,6 +109,89 @@ def add_api_access_types(access_types: List[str]):
     _access_types += access_types
 
 
+def get_jwks_for_url(oauth_issuer_base_url: str, fail_open: bool = True) -> dict:
+    """Retrieve the JSON Web Key Set (JWKS) from the OAuth issuer.
+
+    Note that this function is memoized and will cache the result for
+    subsequent calls with the same issuer URL. The cache is invalidated
+    every 5 minutes to reduce stale keys being available.
+
+    We provide a "fail_closed" or "fail_open" mechanism here. If the
+    JWKS cannot be retrieved and the "fail_open" parameter is set to True,
+    the function will return the matching from the cache if available,
+    otherwise it will raise an exception. If "fail_open" is False, the
+    function will raise an exception if the JWKS cannot be retrieved.
+
+    The fail_open is defaulted to True because we assume that an outage of
+    the OAuth issuer should not take down the entire system and likely does
+    not represent some kind of token revocation or similar security action.
+    It would be safer to default to False and that is a call the deploying
+    system should make.
+
+    Args:
+        oauth_issuer_base_url (str): The base URL of the OAuth issuer.
+        fail_open (bool): Whether to fail open (True) or closed (False)
+
+    Returns:
+        dict: The JWKS retrieved from the issuer.
+
+    Raises:
+        ClaimException: If the JWKS cannot be retrieved or is invalid.
+    """
+    jwks = None
+    try:
+        global JWKS_CACHE_TIME
+        # start by getting the cache if it exists
+        jwks = _get_jwks_for_url(oauth_issuer_base_url, fail_open)
+        # if its been too long since we snagged an updated jwks
+        if (
+            JWKS_CACHE_TIME is None
+            or (datetime.now() - JWKS_CACHE_TIME).total_seconds() > JWKS_CACHE_TTL
+        ):
+            _get_jwks_for_url.cache_clear()
+            # this'll update the cache and return the new version
+            jwks = _get_jwks_for_url(oauth_issuer_base_url, fail_open)
+            # restart the cache timer
+            JWKS_CACHE_TIME = datetime.now()
+        return jwks
+    except requests.exceptions.ConnectionError:
+        # if we reach this point, we've tried to get a new JWKS but the
+        # endpoint is unreachable. So we take our fail open/closed logic
+        # into account.
+        if fail_open:
+            if jwks is not None:
+                return jwks
+        raise ClaimException(f"JWKS endpoint unreachable. fail_open = {fail_open}")
+
+
+@lru_cache(maxsize=1)
+def _get_jwks_for_url(oauth_issuer_base_url: str, fail_open: bool) -> dict:
+    """Retrieve the JSON Web Key Set (JWKS) from the OAuth issuer.
+
+    This is the private implementation that is cached and actually
+    retrieves the JWKS.
+
+    Args:
+        kid (str): The key ID to retrieve the JWKS for.
+
+    Returns:
+        dict: The JWKS for the specified key ID.
+    """
+    jwks_url: str = f"{oauth_issuer_base_url}/.well-known/jwks.json"
+
+    try:
+        jwks_response: Response = requests.get(jwks_url)
+        if not jwks_response.ok:
+            raise ClaimException(
+                f"Failed to retrieve JWKS from {jwks_url}, status code: {jwks_response.status_code}"  # noqa: E501
+            )
+        jwks_data: dict = jwks_response.json()
+        return jwks_data
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON response from JWKS: {e}")
+        raise ClaimException("Invalid JWKS response")
+
+
 @required_env_vars("OAUTH_ISSUER_BASE_URL", "OAUTH_AUDIENCE", "ACCOUNTS_DYNAMO_TABLE")
 def get_claims(token: str) -> dict:
     """Retrieve and validate claims from a JSON Web Token (JWT).
@@ -141,20 +228,9 @@ def get_claims(token: str) -> dict:
 
     idp_prefix: str = (os.getenv("IDP_PREFIX") or "").lower()
 
-    jwks_url: str = f"{oauth_issuer_base_url}/.well-known/jwks.json"
-
     # Try to get the jwks here and fail otherwise
-    try:
-        jwks: Response = requests.get(jwks_url)
-        if not jwks.ok:
-            raise ClaimException(
-                f"Failed to retrieve JWKS from {jwks_url}, status code: {jwks.status_code}"  # noqa: E501
-            )
-        jwks_data: dict = jwks.json()
-        header = jwt.get_unverified_header(token)
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON response from JWKS: {e}")
-        raise ClaimException("Invalid JWKS response")
+    jwks_data = get_jwks_for_url(oauth_issuer_base_url, fail_open=True)
+    header = jwt.get_unverified_header(token)
 
     # This datastructure is:
     # { "keys": [ {}, {}, ... ] }

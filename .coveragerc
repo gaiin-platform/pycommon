@@ -10,4 +10,5 @@ omit =
     tests/*
 exclude_also = 
     @abstractmethod
-    @raise NotImplementedError
+    raise NotImplementedError
+    pass

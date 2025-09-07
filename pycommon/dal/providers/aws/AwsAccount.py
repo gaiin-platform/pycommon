@@ -47,7 +47,7 @@ class AwsAccount(AccountABC):
 
     # TODO: This should use a generic getter method that supports arbitrary
     # value stores (e.g., kv store, env, etc)
-    user_table_name: ClassVar[str] = os.getenv("COGNITO_USERS_TABLE")
+    account_table_name: ClassVar[str] = os.getenv("ACCOUNTS_DYNAMO_TABLE")
 
     def __init__(
         self,
@@ -104,7 +104,7 @@ class AwsAccount(AccountABC):
 
     @classmethod
     def _user_table(cls):
-        return cls.provider.get_table(cls.user_table_name)
+        return cls.provider.get_table(cls.account_table_name)
 
     def save(self) -> None:
         """

@@ -2,7 +2,7 @@ from enum import Enum
 
 import pytest
 
-from pycommon.dal.contracts import AccountABC, BackendABC, UserABC
+from pycommon.dal.contracts import AccountABC, AdminConfigABC, BackendABC, UserABC
 from pycommon.dal.dal import _REGISTRY, DAL, Backend, DalError, register_backend
 
 
@@ -14,13 +14,19 @@ class DummyAccount(AccountABC):
     pass
 
 
+class DummyAdminConfig(AdminConfigABC):
+    pass
+
+
 class DummyBackend(BackendABC):
     User = DummyUser
     Account = DummyAccount
+    AdminConfig = DummyAdminConfig
 
     def __init__(self, **config):
         self.User = DummyUser
         self.Account = DummyAccount
+        self.AdminConfig = DummyAdminConfig
 
 
 def test_register_backend_and_dal_instantiation():
@@ -48,11 +54,13 @@ def test_dal_passes_config_to_backend():
     class ConfigBackend(BackendABC):
         User = DummyUser
         Account = DummyAccount
+        AdminConfig = DummyAdminConfig
 
         def __init__(self, **config):
             self.config = config
             self.User = DummyUser
             self.Account = DummyAccount
+            self.AdminConfig = DummyAdminConfig
 
     register_backend(Backend.AWS, ConfigBackend)
     dal = DAL(Backend.AWS, foo="bar")

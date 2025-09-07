@@ -1,14 +1,13 @@
 from enum import Enum, auto
 from typing import Any, Dict, Type
 
-from .contracts import AccountABC, BackendABC, UserABC
+from .contracts import AccountABC, AdminConfigABC, BackendABC, UserABC
 from .errors import DalError
 
 
 class Backend(Enum):
-    MEMORY = auto()
     AWS = auto()
-    # GCP = auto()
+    MEMORY = auto()
     # AZURE = auto()
 
 
@@ -36,3 +35,4 @@ class DAL:
         # expose the bound classes
         self.User: Type[UserABC] = self._backend.User
         self.Account: Type[AccountABC] = self._backend.Account
+        self.AdminConfig: Type[AdminConfigABC] = self._backend.AdminConfig
