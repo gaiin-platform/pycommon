@@ -378,3 +378,20 @@ def test_save_raises_mapped_exception(monkeypatch):
     ):
         with pytest.raises(RuntimeError, match="mapped error"):
             user.save()
+
+
+def test_get_version_default():
+    user = make_user()
+    assert user.version == 1  # Assuming default version is 1
+
+
+def test_set_version(monkeypatch):
+    user = make_user()
+    user.version = 2
+    assert user.version == 2
+
+
+def test_set_version_invalid(monkeypatch):
+    user = make_user()
+    with pytest.raises(TypeError, match="version must be int"):
+        user.version = "invalid"

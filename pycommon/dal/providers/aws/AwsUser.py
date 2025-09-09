@@ -33,6 +33,7 @@ class AwsUser(UserABC):
         self._cust_saml_groups = cust_saml_groups
         self._cust_vu_groups = cust_vu_groups
         self._updated_at = updated_at
+        self._version = 1
 
     @classmethod
     def _user_table(cls):
@@ -40,6 +41,31 @@ class AwsUser(UserABC):
 
     def __repr__(self):
         return json.dumps(self._get_values_as_dict(), indent=2)
+
+    @property
+    def version(self) -> int:
+        """
+        Gets the version of the user object.
+
+        Returns:
+            int: The version number.
+        """
+        return self._version
+
+    @version.setter
+    def version(self, value: int) -> None:
+        """
+        Sets the version of the user object.
+
+        Args:
+            value (int): The version number to set.
+
+        Raises:
+            TypeError: If the provided value is not an integer.
+        """
+        if not isinstance(value, int):
+            raise TypeError("version must be int")
+        self._version = value
 
     @property
     def user_id(self) -> str:
@@ -221,6 +247,7 @@ class AwsUser(UserABC):
             "custom:saml_groups": self.cust_saml_groups,
             "custom:vu_groups": self.cust_vu_groups,
             "updated_at": self.updated_at,  # TODO(sam) make setter/getter
+            "version": self.version,
         }
 
     def _create_non_null_dynamodb_dict(self) -> dict:
