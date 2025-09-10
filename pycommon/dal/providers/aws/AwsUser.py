@@ -272,13 +272,44 @@ class AwsUser(UserABC):
                        AWS error is raised.
         """
         try:
-            data: dict = self._create_non_null_dynamodb_dict()
-            data["updated_at"] = nowstr()
-            kwargs: dict = {"Item": data}
+            table = self._user_table()
+            data = self._create_non_null_dynamodb_dict()
+            kwargs = {"Item": data}
             if not allow_overwrite:
                 kwargs["ConditionExpression"] = "attribute_not_exists(user_id)"
-            table = self._user_table()
-            table.put_item(**kwargs)
+
+            resp = table.get_item(Key={"user_id": self.user_id})
+            if not resp.get("Item"):
+                data["updated_at"] = nowstr()
+                table.put_item(**kwargs)
+            else:
+                # remove any keys that don't need updated
+                keys_to_delete = []
+                for k, v in data.items():
+                    if resp["Item"].get(k) == v:
+                        keys_to_delete.append(k)
+
+                for k in keys_to_delete:
+                    del data[k]
+
+                if not data:
+                    return
+
+                data["updated_at"] = nowstr()
+                update_expr = "SET " + ", ".join(
+                    f"#{k}=:{k}" for k in data.keys() if k != "user_id"
+                )
+                expr_attr_names = {f"#{k}": k for k in data.keys() if k != "user_id"}
+                expr_attr_values = {
+                    f":{k}": v for k, v in data.items() if k != "user_id"
+                }
+
+                table.update_item(
+                    Key={"user_id": self.user_id},
+                    UpdateExpression=update_expr,
+                    ExpressionAttributeNames=expr_attr_names,
+                    ExpressionAttributeValues=expr_attr_values,
+                )
         except Exception as e:
             raise map_aws_error(e)
 

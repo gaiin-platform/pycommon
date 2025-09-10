@@ -89,6 +89,8 @@ def test_create_non_null_dynamodb_dict():
 def test_save_calls_put_item(monkeypatch):
     user = make_user()
     mock_table = MagicMock()
+    mock_table.get_item.return_value = {}
+    mock_table.put_item.return_value = {}
     monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
     monkeypatch.setattr("pycommon.dal.providers.aws.helpers.nowstr", lambda: "now")
     user.save()
@@ -98,6 +100,8 @@ def test_save_calls_put_item(monkeypatch):
 def test_save_condition_expression(monkeypatch):
     user = make_user()
     mock_table = MagicMock()
+    mock_table.get_item.return_value = {}
+    mock_table.put_item.return_value = {}
     monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
     monkeypatch.setattr("pycommon.dal.providers.aws.helpers.nowstr", lambda: "now")
     user.save(allow_overwrite=False)
@@ -355,6 +359,8 @@ def test_create_non_null_dynamodb_dict_excludes_none_fields():
 def test_save_sets_updated_at(monkeypatch):
     user = make_user()
     mock_table = MagicMock()
+    mock_table.get_item.return_value = {}
+    mock_table.put_item.return_value = {}
     monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
     with patch(
         "pycommon.dal.providers.aws.AwsUser.nowstr", return_value="2024-06-01T12:00:00Z"
@@ -362,6 +368,45 @@ def test_save_sets_updated_at(monkeypatch):
         user.save()
         args, kwargs = mock_table.put_item.call_args
         assert kwargs["Item"]["updated_at"] == "2024-06-01T12:00:00Z"
+
+
+def test_save_existing_sets_updated_at(monkeypatch):
+    user = make_user()
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {"user_id": "u1", "email": "test@example.com"}
+    }
+    mock_table.update_item.return_value = {
+        "ExpressionAttributeValues": {"updated_at": "2024-06-01T12:00:00Z"}
+    }
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+    with patch(
+        "pycommon.dal.providers.aws.AwsUser.nowstr", return_value="2024-06-01T12:00:00Z"
+    ):
+        user.save()
+        args, kwargs = mock_table.update_item.call_args
+        assert (
+            kwargs["ExpressionAttributeValues"][":updated_at"] == "2024-06-01T12:00:00Z"
+        )
+
+
+def test_save_existing_empty_data(monkeypatch):
+    user = make_user()
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {"user_id": "u1", "email": "test@example.com"}
+    }
+    mock_table.update_item.return_value = {
+        "ExpressionAttributeValues": {"updated_at": "2024-06-01T12:00:00Z"}
+    }
+    user._create_non_null_dynamodb_dict = MagicMock(return_value={})
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+    with patch(
+        "pycommon.dal.providers.aws.AwsUser.nowstr", return_value="2024-06-01T12:00:00Z"
+    ):
+        user.save()
+        assert not mock_table.update_item.called
+        assert not mock_table.put_item.called
 
 
 def test_save_raises_mapped_exception(monkeypatch):
