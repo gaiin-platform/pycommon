@@ -53,8 +53,17 @@ def test_cust_saml_groups_getter_and_setter():
     assert json.loads(user.cust_saml_groups) == ["saml1", "saml2"]
     user.cust_saml_groups = None
     assert user.cust_saml_groups is None
+
+    user.cust_saml_groups = [1, 2]
+    assert json.loads(user.cust_saml_groups) == ["1", "2"]
+
+
+def test_cust_saml_bad_type():
+    user = make_user()
     with pytest.raises(TypeError):
-        user.cust_saml_groups = [1, 2]
+        user.cust_saml_groups = 123
+    with pytest.raises(TypeError):
+        user.cust_saml_groups = {"a": 1}
 
 
 def test_updated_at_getter():
@@ -233,12 +242,26 @@ def test_cust_vu_groups_setter_type_error():
 
 def test_cust_saml_groups_setter_type_error():
     user = make_user()
-    with pytest.raises(TypeError):
-        user.cust_saml_groups = "not a list"
-    with pytest.raises(TypeError):
-        user.cust_saml_groups = [1, "valid", {}]
-    with pytest.raises(TypeError):
-        user.cust_saml_groups = [None, "valid"]
+    user.cust_saml_groups = [None, "valid"]
+    assert user.cust_saml_groups == '["valid"]'
+
+    user.cust_saml_groups = [1, "valid", {}]
+    assert user.cust_saml_groups == '["1", "valid", "{}"]'
+
+    # assert does not raise
+    user.cust_saml_groups = "saml1, saml2"
+    assert user.cust_saml_groups == '["saml1", "saml2"]'
+    user.cust_saml_groups = '["saml3", "saml4"]'
+    assert user.cust_saml_groups == '["saml3", "saml4"]'
+
+    user.cust_saml_groups = '"saml1", "saml2"'
+    assert user.cust_saml_groups == '["saml1", "saml2"]'
+
+    user.cust_saml_groups = "'saml1', 'saml2'"
+    assert user.cust_saml_groups == '["saml1", "saml2"]'
+
+    user.cust_saml_groups = "[group1, group2, group3]"
+    assert user.cust_saml_groups == '["group1", "group2", "group3"]'
 
 
 def test_get_by_user_id_not_found(monkeypatch):
