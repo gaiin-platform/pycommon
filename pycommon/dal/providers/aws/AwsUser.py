@@ -208,13 +208,14 @@ class AwsUser(UserABC):
         return self._cust_saml_groups
 
     @cust_saml_groups.setter
-    def cust_saml_groups(self, value: list[str] | None) -> None:
+    def cust_saml_groups(self, value: list[str] | str | None) -> None:
         """
         Sets the custom SAML groups for the user.
 
         Args:
-            value (list[str] | None): A list of group names as strings, or None
-                                      to clear the groups.
+            value (list[str] | str | None): A list of group names as strings, or None
+                                      to clear the groups. Some legacy Dynamodb records
+                                      included a string that was not deserializable JSON.
 
         Raises:
             TypeError: If value is not a list of strings.
@@ -222,12 +223,20 @@ class AwsUser(UserABC):
         Side Effects:
             Updates the internal _cust_saml_groups attribute with a JSON-encoded
             list (stringified) of group names or None.
-        """
+        """  # noqa: E501
         if value is None:
             self._cust_saml_groups = None
             return
-        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
-            raise TypeError("cust_saml_groups must be a list of strings")
+        if isinstance(value, str):
+            value = [
+                str(item).strip("'\" ")  # treat as string, remove quotes and spaces
+                for item in value.strip("[]").split(",")
+                if item.strip() and item is not None
+            ]
+        elif isinstance(value, list):
+            value = [str(x) for x in value if x is not None]
+        else:
+            raise TypeError("cust_saml_groups must be a list of strings or a string")
         self._cust_saml_groups = json.dumps(value)
 
     def _get_values_as_dict(self) -> dict:
