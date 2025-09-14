@@ -304,13 +304,22 @@ class AwsUser(UserABC):
                 if not data:
                     return
 
+                # because the dynamodb table has keys like "custom:saml_groups",
+                # we need to alias them for the update expression because boto3
+                # doesn't like special characters in the expression attribute names.
+                key_alias = lambda k: f"{k.replace(':','_')}"  # noqa: E731
+
                 data["updated_at"] = nowstr()
                 update_expr = "SET " + ", ".join(
-                    f"#{k}=:{k}" for k in data.keys() if k != "user_id"
+                    f"#{key_alias(k)}=:{key_alias(k)}"
+                    for k in data.keys()
+                    if k != "user_id"
                 )
-                expr_attr_names = {f"#{k}": k for k in data.keys() if k != "user_id"}
+                expr_attr_names = {
+                    f"#{key_alias(k)}": k for k in data.keys() if k != "user_id"
+                }
                 expr_attr_values = {
-                    f":{k}": v for k, v in data.items() if k != "user_id"
+                    f":{key_alias(k)}": v for k, v in data.items() if k != "user_id"
                 }
 
                 table.update_item(
