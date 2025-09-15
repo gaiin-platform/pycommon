@@ -280,9 +280,14 @@ class AwsUser(UserABC):
             Exception: If the DynamoDB operation fails, an appropriate mapped
                        AWS error is raised.
         """
+        # because the dynamodb table has keys like "custom:saml_groups",
+        # we need to alias them for the update expression because boto3
+        # doesn't like special characters in the expression attribute names.
+        key_alias = lambda k: f"{k.replace(':','_')}"  # noqa: E731
+
         try:
             table = self._user_table()
-            data = self._create_non_null_dynamodb_dict()
+            data = self._get_values_as_dict()
             kwargs = {"Item": data}
             if not allow_overwrite:
                 kwargs["ConditionExpression"] = "attribute_not_exists(user_id)"
@@ -294,32 +299,39 @@ class AwsUser(UserABC):
             else:
                 # remove any keys that don't need updated
                 keys_to_delete = []
+                attrs_to_delete = []
+                data["updated_at"] = nowstr()
+
+                # remove any keys which match both sides
                 for k, v in data.items():
-                    if resp["Item"].get(k) == v:
+                    if data.get(k) is None and resp["Item"].get(k) is not None:
+                        attrs_to_delete.append(k)
+                    elif resp["Item"].get(k) == v:
                         keys_to_delete.append(k)
 
                 for k in keys_to_delete:
                     del data[k]
 
-                if not data:
+                if not data or data.keys() == {"updated_at"}:
                     return
 
-                # because the dynamodb table has keys like "custom:saml_groups",
-                # we need to alias them for the update expression because boto3
-                # doesn't like special characters in the expression attribute names.
-                key_alias = lambda k: f"{k.replace(':','_')}"  # noqa: E731
-
-                data["updated_at"] = nowstr()
                 update_expr = "SET " + ", ".join(
                     f"#{key_alias(k)}=:{key_alias(k)}"
                     for k in data.keys()
-                    if k != "user_id"
+                    if k != "user_id" and k not in attrs_to_delete
                 )
+                if attrs_to_delete:
+                    update_expr += " REMOVE " + ", ".join(
+                        [f"#{key_alias(k)}" for k in attrs_to_delete]
+                    )
+
                 expr_attr_names = {
                     f"#{key_alias(k)}": k for k in data.keys() if k != "user_id"
                 }
                 expr_attr_values = {
-                    f":{key_alias(k)}": v for k, v in data.items() if k != "user_id"
+                    f":{key_alias(k)}": v
+                    for k, v in data.items()
+                    if k != "user_id" and k not in attrs_to_delete
                 }
 
                 table.update_item(
