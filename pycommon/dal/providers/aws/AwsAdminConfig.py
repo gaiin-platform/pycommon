@@ -5,7 +5,7 @@ from typing import Any, ClassVar, Dict, Optional
 
 from pycommon.dal.contracts import AdminConfigABC
 from pycommon.dal.providers.aws import AwsProvider
-from pycommon.dal.providers.aws.helpers import map_aws_error
+from pycommon.dal.providers.aws.helpers import map_aws_error, nowstr
 
 
 class AwsAdminConfig(AdminConfigABC):
@@ -46,9 +46,21 @@ class AwsAdminConfig(AdminConfigABC):
         except Exception as e:
             raise map_aws_error(e)
 
-    def set_config(self, key: str, value: Any) -> bool:
-        """Set (overwrite) a configuration value by key."""
-        raise NotImplementedError("set_config is not implemented yet")
+    @classmethod
+    def set_config(cls, key: str, value: Any) -> None:
+        """Set (overwrite) a configuration value by key.
+
+        The key is the config_id in the DynamoDB table. The value is stored
+        in the 'data' field of the record. The 'last_updated' field is set to
+        the current time in ISO format.
+        """
+        try:
+            table = cls._table()
+            table.put_item(
+                Item={"config_id": key, "data": value, "last_updated": nowstr()}
+            )
+        except Exception as e:
+            raise map_aws_error(e)
 
     def delete_config(self, key: str) -> bool:
         """Delete a configuration value by key."""
