@@ -422,7 +422,7 @@ def test_save_existing_empty_data(monkeypatch):
     mock_table.update_item.return_value = {
         "ExpressionAttributeValues": {"updated_at": "2024-06-01T12:00:00Z"}
     }
-    user._create_non_null_dynamodb_dict = MagicMock(return_value={})
+    user._get_values_as_dict = MagicMock(return_value={})
     monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
     with patch(
         "pycommon.dal.providers.aws.AwsUser.nowstr", return_value="2024-06-01T12:00:00Z"
@@ -446,6 +446,72 @@ def test_save_raises_mapped_exception(monkeypatch):
     ):
         with pytest.raises(RuntimeError, match="mapped error"):
             user.save()
+
+
+def test_deletes_attributes_set_to_none(monkeypatch):
+    user = make_user()
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "user_id": "u1",
+            "email": "test@example.com",
+            "family_name": "Smith",
+            "given_name": "John",
+            "custom:saml_groups": '["abc"]',
+            "custom:vu_groups": None,
+            "updated_at": None,
+            "version": 1,
+        }
+    }
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+    user.cust_saml_groups = None  # This should trigger deletion
+    with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="now"):
+        user.save()
+        args, kwargs = mock_table.update_item.call_args
+        assert "REMOVE #custom_saml_groups" in kwargs["UpdateExpression"]
+
+
+def test_save_no_changes(monkeypatch):
+    user = make_user()
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "user_id": "u1",
+            "email": "test@example.com",
+            "family_name": "Smith",
+            "given_name": "John",
+            "version": 1,
+            "updated_at": "now",
+        }
+    }
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+    user.email = "test@example.com"
+    with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="now"):
+        user.save()
+        assert not mock_table.update_item.called
+
+
+def test_none_deletes_attr(monkeypatch):
+    user = make_user()
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "user_id": "u1",
+            "email": "test@example.com",
+            "family_name": "Smith",
+            "given_name": "John",
+            "custom:saml_groups": '["abc"]',
+            "custom:vu_groups": None,
+            "updated_at": None,
+            "version": 1,
+        }
+    }
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+    user.cust_saml_groups = None  # This should trigger deletion
+    with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="now"):
+        user.save()
+        args, kwargs = mock_table.update_item.call_args
+        assert "REMOVE #custom_saml_groups" in kwargs["UpdateExpression"]
 
 
 def test_get_version_default():
