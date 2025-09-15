@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from pycommon.dal.providers.aws import AwsAdminConfig
+from pycommon.dal.providers.aws.helpers import nowstr
 
 
 def test_get_config_returns_value(monkeypatch):
@@ -86,3 +87,28 @@ def test_list_with_cursor(monkeypatch):
     keys, cursor = AwsAdminConfig.list(cursor="foo")
     assert keys == ["foo", "bar"]
     assert cursor == {"config_id": "bar"}
+
+
+def test_set_config(monkeypatch):
+    dummy_provider = MagicMock()
+    dummy_table = MagicMock()
+    dummy_provider.get_table.return_value = dummy_table
+    monkeypatch.setattr(AwsAdminConfig, "provider", dummy_provider)
+    AwsAdminConfig.set_config("test_key", {"some": "value"})
+    dummy_table.put_item.assert_called_once_with(
+        Item={
+            "config_id": "test_key",
+            "data": {"some": "value"},
+            "last_updated": nowstr(),
+        }
+    )
+
+
+def test_set_config_raises_exception(monkeypatch):
+    dummy_provider = MagicMock()
+    dummy_table = MagicMock()
+    dummy_provider.get_table.return_value = dummy_table
+    monkeypatch.setattr(AwsAdminConfig, "provider", dummy_provider)
+    dummy_table.put_item.side_effect = Exception("Dynamo error")
+    with pytest.raises(Exception, match="Dynamo error"):
+        AwsAdminConfig.set_config("test_key", {"some": "value"})
