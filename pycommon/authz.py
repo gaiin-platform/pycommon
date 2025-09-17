@@ -265,11 +265,15 @@ def get_claims(token: str) -> dict:
 
     print(f"IDP_PREFIX from env: {idp_prefix}")
     print(f"Original username: {payload['username']}")
-    user = payload["username"]
-    if len(idp_prefix) > 0 and user.startswith(idp_prefix + "_"):
-        user = user.split(idp_prefix + "_", 1)[1]
-        print(f"User matched pattern, updated to: {user}")
-    print(f"Final user value: {user}")
+    if payload.get("immutable_id"):
+        print(f"Using immutable_id for user: {payload['immutable_id']}")
+        user = payload["immutable_id"]
+    else:
+        user = payload["username"]
+        if len(idp_prefix) > 0 and user.startswith(idp_prefix + "_"):
+            user = user.split(idp_prefix + "_", 1)[1]
+            print(f"User matched pattern, updated to: {user}")
+        print(f"Final user value: {user}")
 
     dynamodb = boto3.resource("dynamodb")
     table = dynamodb.Table(accounts_table_name)
