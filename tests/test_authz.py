@@ -1950,3 +1950,51 @@ def test_get_jwks_with_connection_exception_fail_open_with_cache():
             # Second call should return cached JWKS without raising an exception
             cached_jwks = get_jwks_for_url("http://valid-url.com/.well-known/jwks.json")
             assert cached_jwks == jwks  # Should return the cached value
+
+
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
+def test_get_claims_uses_immutable_id_if_present(
+    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+):
+    mock_get_env.side_effect = lambda key, default: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "IDP_PREFIX": "mockprefix",
+    }.get(key, default)
+
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {
+        "username": "mockprefix_mockuser",
+        "immutable_id": "12345",
+    }
+
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [
+                {
+                    "id": "mock_account",
+                    "isDefault": True,
+                    "rateLimit": {"rate": 42, "period": "Hourly"},
+                }
+            ],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    result = get_claims("mock_token")
+
+    assert result["username"] == "12345"  # Should use immutable_id
+    assert result["account"] == "mock_account"
+    assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}

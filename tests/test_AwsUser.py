@@ -204,8 +204,6 @@ def test_email_setter_type_error():
     user = make_user()
     with pytest.raises(TypeError):
         user.email = 123
-    with pytest.raises(TypeError):
-        user.email = None
 
 
 def test_email_setter_correct():
@@ -217,15 +215,11 @@ def test_email_setter_correct():
 def test_family_name_setter_type_error():
     user = make_user()
     with pytest.raises(TypeError):
-        user.family_name = None
-    with pytest.raises(TypeError):
         user.family_name = 123.45
 
 
 def test_given_name_setter_type_error():
     user = make_user()
-    with pytest.raises(TypeError):
-        user.given_name = None
     with pytest.raises(TypeError):
         user.given_name = ["not", "a", "string"]
 

@@ -27,11 +27,11 @@ class AwsUser(UserABC):
     ) -> None:
 
         self._user_id = user_id
-        self._email = email
-        self._family_name = family_name
-        self._given_name = given_name
-        self._cust_saml_groups = cust_saml_groups
-        self._cust_vu_groups = cust_vu_groups
+        self.email = email
+        self.family_name = family_name
+        self.given_name = given_name
+        self.cust_saml_groups = cust_saml_groups
+        self.cust_vu_groups = cust_vu_groups
         self._updated_at = updated_at
         self._version = 1
 
@@ -98,7 +98,7 @@ class AwsUser(UserABC):
         Raises:
             TypeError: If the provided value is not a string.
         """
-        if not isinstance(value, str):
+        if not isinstance(value, str) and value is not None:
             raise TypeError("email must be str")
         self._email = value
 
@@ -123,7 +123,7 @@ class AwsUser(UserABC):
         Raises:
             TypeError: If the provided value is not a string.
         """
-        if not isinstance(value, str):
+        if not isinstance(value, str) and value is not None:
             raise TypeError("family_name must be str")
         self._family_name = value
 
@@ -148,7 +148,7 @@ class AwsUser(UserABC):
         Raises:
             TypeError: If the provided value is not a string.
         """
-        if not isinstance(value, str):
+        if not isinstance(value, str) and value is not None:
             raise TypeError("given_name must be str")
         self._given_name = value
 
