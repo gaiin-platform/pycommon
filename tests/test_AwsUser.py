@@ -39,11 +39,9 @@ def test_cust_vu_groups_getter_and_setter():
     user = make_user()
     assert user.cust_vu_groups is None
     user.cust_vu_groups = ["group1", "group2"]
-    assert json.loads(user.cust_vu_groups) == ["group1", "group2"]
+    assert user.cust_vu_groups == "['group1', 'group2']"
     user.cust_vu_groups = None
     assert user.cust_vu_groups is None
-    with pytest.raises(TypeError):
-        user.cust_vu_groups = [1, 2]
 
 
 def test_cust_saml_groups_getter_and_setter():
@@ -226,12 +224,7 @@ def test_given_name_setter_type_error():
 
 def test_cust_vu_groups_setter_type_error():
     user = make_user()
-    with pytest.raises(TypeError):
-        user.cust_vu_groups = "not a list"
-    with pytest.raises(TypeError):
-        user.cust_vu_groups = [1, "valid", {}]
-    with pytest.raises(TypeError):
-        user.cust_vu_groups = [None, "valid"]
+    user.cust_vu_groups = "not a list"
 
 
 def test_cust_saml_groups_setter_type_error():

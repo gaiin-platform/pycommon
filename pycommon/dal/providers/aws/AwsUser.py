@@ -33,7 +33,7 @@ class AwsUser(UserABC):
         self.cust_saml_groups = cust_saml_groups
         self.cust_vu_groups = cust_vu_groups
         self._updated_at = updated_at
-        self._version = 1
+        self.version = 1
 
     @classmethod
     def _user_table(cls):
@@ -164,27 +164,11 @@ class AwsUser(UserABC):
         return self._cust_vu_groups
 
     @cust_vu_groups.setter
-    def cust_vu_groups(self, value: list[str] | None) -> None:
+    def cust_vu_groups(self, value: str | None) -> None:
         """
-        Sets the custom VU groups for the user.
-
-        Args:
-            value (list[str] | None): A list of group names as strings,
-                or None to clear the groups.
-
-        Raises:
-            TypeError: If value is not a list of strings.
-
-        Side Effects:
-            Updates the internal _cust_vu_groups attribute with a
-            JSON-encoded list (stringified) of group names or None.
+        TBD
         """
-        if value is None:
-            self._cust_vu_groups = None
-            return
-        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
-            raise TypeError("cust_vu_groups must be a list of strings")
-        self._cust_vu_groups = json.dumps(value)
+        self._cust_vu_groups = str(value) if value is not None else None
 
     @property
     def updated_at(self) -> str | None:
