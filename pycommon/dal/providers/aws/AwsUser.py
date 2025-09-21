@@ -75,6 +75,20 @@ class AwsUser(UserABC):
         """
         return self._user_id
 
+    @user_id.setter
+    def user_id(self, value: str) -> None:
+        """
+        Sets the user ID for the provider.
+
+        Args:
+            value (str): The user ID to set.
+        Raises:
+            TypeError: If the provided value is not a string.
+        """
+        if not isinstance(value, str):
+            raise TypeError("user_id must be str")
+        self._user_id = value
+
     @property
     def email(self) -> str | None:
         """

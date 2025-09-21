@@ -188,6 +188,18 @@ def test_get_by_user_id_success(monkeypatch):
     assert user.email == "test@example.com"
 
 
+def test_set_user_id():
+    user = make_user()
+    user.user_id = "new_id"
+    assert user.user_id == "new_id"
+
+
+def test_set_user_id_bad_type():
+    user = make_user()
+    with pytest.raises(TypeError):
+        user.user_id = 12345
+
+
 def test_email_setter_type_error():
     user = make_user()
     with pytest.raises(TypeError):
