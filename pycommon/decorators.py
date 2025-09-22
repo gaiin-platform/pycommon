@@ -143,6 +143,10 @@ class EnvVarTracker:
                         UpdateExpression="SET last_accessed = :timestamp",
                         ExpressionAttributeValues={":timestamp": timestamp},
                     )
+                    print(
+                        f"ENV_VAR_TRACKING: UPDATED {service_var_key} - "
+                        f"updated last_accessed timestamp"
+                    )
                     logger.debug(f"Updated access tracking for {service_var_key}")
                     return
             except Exception:
@@ -160,6 +164,10 @@ class EnvVarTracker:
                     "first_accessed": timestamp,
                     "last_accessed": timestamp,
                 }
+            )
+            print(
+                f"ENV_VAR_TRACKING: PUT NEW item for {service_var_key} - "
+                f"first time tracking this variable"
             )
             logger.info(f"Created new tracking record for {service_var_key}")
 
