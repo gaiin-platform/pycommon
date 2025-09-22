@@ -148,21 +148,31 @@ class EnvVarTracker:
                         merged_operations = list(existing_operations | new_operations)
 
                         # Update record with merged operations
-                        self.table.update_item(
-                            Key={"service_var_key": service_var_key},
-                            UpdateExpression="SET operations = :operations",
-                            ExpressionAttributeValues={
-                                ":operations": merged_operations
-                            },
-                        )
-                        print(
-                            f"ENV_VAR_TRACKING: MERGED {service_var_key} - "
-                            f"added {list(operations_to_add)}"
-                        )
-                        logger.debug(
-                            f"Merged operations for {service_var_key}: "
-                            f"{operations_to_add}"
-                        )
+                        try:
+                            response = self.table.update_item(
+                                Key={"service_var_key": service_var_key},
+                                UpdateExpression="SET operations = :operations",
+                                ExpressionAttributeValues={
+                                    ":operations": merged_operations
+                                },
+                                ReturnValues="ALL_NEW",
+                            )
+                            print(
+                                f"ENV_VAR_TRACKING: MERGED {service_var_key} - "
+                                f"added {list(operations_to_add)} → "
+                                f"now: {response['Attributes']['operations']}"
+                            )
+                            logger.debug(
+                                f"Merged operations for {service_var_key}: "
+                                f"{operations_to_add}"
+                            )
+                        except Exception as update_error:
+                            print(
+                                f"ENV_VAR_TRACKING: MERGE FAILED {service_var_key} - "
+                                f"{update_error}"
+                            )
+                            # Fall through to create new record if update fails
+                            raise
                     else:
                         # No new operations, skip update
                         print(

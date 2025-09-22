@@ -143,6 +143,10 @@ class TestEnvVarTracker:
                 "service_var_key": "test-service#TEST_VAR",
             }
         }
+        # Mock update_item to return successful response
+        mock_table.update_item.return_value = {
+            "Attributes": {"operations": ["dynamodb:GetItem"]}
+        }
 
         tracker = EnvVarTracker()
         tracker.tracking_enabled = True
@@ -313,6 +317,10 @@ class TestEnvVarTracker:
                 "service_var_key": "test-service#TEST_VAR",
             }
         }
+        # Mock update_item to return successful response
+        mock_table.update_item.return_value = {
+            "Attributes": {"operations": ["dynamodb:GetItem", "dynamodb:PutItem"]}
+        }
 
         tracker = EnvVarTracker()
         tracker.tracking_enabled = True
@@ -324,6 +332,7 @@ class TestEnvVarTracker:
 
         # Should merge operations
         mock_table.update_item.assert_called_once()
+        mock_table.put_item.assert_not_called()
         call_args = mock_table.update_item.call_args[1]
         merged_ops = call_args["ExpressionAttributeValues"][":operations"]
         assert set(merged_ops) == {"dynamodb:GetItem", "dynamodb:PutItem"}
@@ -346,6 +355,35 @@ class TestEnvVarTracker:
         # Should have first_accessed but not last_accessed
         assert "first_accessed" in call_args
         assert "last_accessed" not in call_args
+
+    def test_track_env_var_update_fallback_to_put(self):
+        """Test that when update_item fails, it falls back to put_item"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {
+            "Item": {
+                "operations": [],  # No existing operations
+                "service_var_key": "test-service#TEST_VAR",
+            }
+        }
+        # Mock update_item to raise an exception
+        mock_table.update_item.side_effect = Exception("Update failed")
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"TEST_VAR": "test_value"}):
+            tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+        # Should call update_item first, then fall back to put_item
+        mock_table.update_item.assert_called_once()
+        mock_table.put_item.assert_called_once()
+
+        # Check put_item was called with correct arguments
+        call_args = mock_table.put_item.call_args[1]["Item"]
+        assert call_args["service_var_key"] == "test-service#TEST_VAR"
+        assert call_args["operations"] == ["dynamodb:GetItem"]
 
 
 class TestRequiredEnvVarsDecorator:
