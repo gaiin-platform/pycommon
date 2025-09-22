@@ -80,14 +80,14 @@ class EnvVarTracker:
         value = os.getenv(var_name)
         if value:
             logger.debug(f"Resolved {var_name} from Lambda environment")
-            return value
+            return value.strip()
 
         # Try Parameter Store as fallback
         if self.ssm_enabled:
             try:
                 parameter_path = f"/amplify/{self.stage}/{self.service_name}/{var_name}"
                 response = self.ssm.get_parameter(Name=parameter_path)
-                value = response["Parameter"]["Value"]
+                value = response["Parameter"]["Value"].strip()
 
                 # Cache in Lambda environment for future calls
                 os.environ[var_name] = value
@@ -122,7 +122,7 @@ class EnvVarTracker:
 
             # Use provided value or get current value
             if resolved_value is None:
-                resolved_value = os.getenv(var_name, "")
+                resolved_value = os.getenv(var_name, "").strip()
 
             # Convert operations to strings if they're enum values
             if operations is None:
