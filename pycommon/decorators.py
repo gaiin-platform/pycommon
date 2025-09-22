@@ -133,26 +133,50 @@ class EnvVarTracker:
 
             timestamp = datetime.utcnow().isoformat() + "Z"
 
-            # Try to update existing record
+            # Try to get existing record and merge operations
             try:
                 response = self.table.get_item(Key={"service_var_key": service_var_key})
                 if "Item" in response:
-                    # Update existing record with new access time
-                    self.table.update_item(
-                        Key={"service_var_key": service_var_key},
-                        UpdateExpression="SET last_accessed = :timestamp",
-                        ExpressionAttributeValues={":timestamp": timestamp},
-                    )
-                    print(
-                        f"ENV_VAR_TRACKING: UPDATED {service_var_key} - "
-                        f"updated last_accessed timestamp"
-                    )
-                    logger.debug(f"Updated access tracking for {service_var_key}")
+                    existing_item = response["Item"]
+                    existing_operations = set(existing_item.get("operations", []))
+                    new_operations = set(operation_strings)
+
+                    # Check if we have any new operations to add
+                    operations_to_add = new_operations - existing_operations
+                    if operations_to_add:
+                        # Merge operations (existing + new)
+                        merged_operations = list(existing_operations | new_operations)
+
+                        # Update record with merged operations
+                        self.table.update_item(
+                            Key={"service_var_key": service_var_key},
+                            UpdateExpression="SET operations = :operations",
+                            ExpressionAttributeValues={
+                                ":operations": merged_operations
+                            },
+                        )
+                        print(
+                            f"ENV_VAR_TRACKING: MERGED {service_var_key} - "
+                            f"added {list(operations_to_add)}"
+                        )
+                        logger.debug(
+                            f"Merged operations for {service_var_key}: "
+                            f"{operations_to_add}"
+                        )
+                    else:
+                        # No new operations, skip update
+                        print(
+                            f"ENV_VAR_TRACKING: SKIPPED {service_var_key} - "
+                            f"no new operations to add"
+                        )
+                        logger.debug(
+                            f"Skipped update for {service_var_key} - no new operations"
+                        )
                     return
             except Exception:
                 pass  # Fall through to create new record
 
-            # Create new tracking record
+            # Create new tracking record (no last_accessed field)
             self.table.put_item(
                 Item={
                     "service_var_key": service_var_key,
@@ -162,12 +186,11 @@ class EnvVarTracker:
                     "parameter_path": parameter_path,
                     "operations": operation_strings,
                     "first_accessed": timestamp,
-                    "last_accessed": timestamp,
                 }
             )
             print(
                 f"ENV_VAR_TRACKING: PUT NEW item for {service_var_key} - "
-                f"first time tracking this variable"
+                f"operations: {operation_strings}"
             )
             logger.info(f"Created new tracking record for {service_var_key}")
 

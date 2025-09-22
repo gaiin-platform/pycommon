@@ -112,6 +112,9 @@ class TestEnvVarTracker:
         assert call_args["var_name"] == "TEST_VAR"
         assert call_args["resolved_value"] == "test_value"
         assert call_args["operations"] == ["dynamodb:GetItem"]
+        # Should have first_accessed but not last_accessed
+        assert "first_accessed" in call_args
+        assert "last_accessed" not in call_args
 
     def test_resolve_env_var_parameter_not_found(self):
         """Test resolving env var when parameter not found in Parameter Store"""
@@ -134,7 +137,12 @@ class TestEnvVarTracker:
     def test_track_env_var_update_existing(self):
         """Test tracking when record already exists (update path)"""
         mock_table = Mock()
-        mock_table.get_item.return_value = {"Item": {"existing": "record"}}
+        mock_table.get_item.return_value = {
+            "Item": {
+                "operations": [],  # No existing operations
+                "service_var_key": "test-service#TEST_VAR",
+            }
+        }
 
         tracker = EnvVarTracker()
         tracker.tracking_enabled = True
@@ -144,8 +152,15 @@ class TestEnvVarTracker:
         with patch.dict(os.environ, {"TEST_VAR": "test_value"}):
             tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
 
+        # Should update with new operations
         mock_table.update_item.assert_called_once()
         mock_table.put_item.assert_not_called()
+
+        # Check that operations were updated correctly
+        call_args = mock_table.update_item.call_args[1]
+        assert call_args["UpdateExpression"] == "SET operations = :operations"
+        merged_ops = call_args["ExpressionAttributeValues"][":operations"]
+        assert merged_ops == ["dynamodb:GetItem"]
 
     def test_track_env_var_with_none_values(self):
         """Test tracking with None resolved_value and operations"""
@@ -208,8 +223,14 @@ class TestEnvVarTracker:
             os.environ, {"STAGE": "test", "SERVICE_NAME": "test-service"}, clear=True
         ):
             mock_ssm = Mock()
-            mock_ssm.exceptions.ParameterNotFound = Exception
-            mock_ssm.get_parameter.side_effect = Exception("SSM service error")
+            # Create a different exception class for ParameterNotFound
+
+            class MockParameterNotFound(Exception):
+                pass
+
+            mock_ssm.exceptions.ParameterNotFound = MockParameterNotFound
+            # Use a different exception to hit the general exception handler
+            mock_ssm.get_parameter.side_effect = RuntimeError("SSM service error")
 
             tracker = EnvVarTracker()
             tracker.ssm = mock_ssm
@@ -217,6 +238,114 @@ class TestEnvVarTracker:
 
             with pytest.raises(EnvVarError):
                 tracker.resolve_env_var("MISSING_VAR")
+
+    def test_resolve_env_var_strips_whitespace(self):
+        """Test that resolved env var values are stripped of whitespace"""
+        with patch.dict(os.environ, {"TEST_VAR": "  test_value  "}):
+            tracker = EnvVarTracker()
+            result = tracker.resolve_env_var("TEST_VAR")
+            assert result == "test_value"
+
+    def test_resolve_env_var_parameter_store_strips_whitespace(self):
+        """Test that Parameter Store values are stripped of whitespace"""
+        with patch.dict(
+            os.environ, {"STAGE": "test", "SERVICE_NAME": "test-service"}, clear=True
+        ):
+            mock_ssm = Mock()
+            mock_ssm.get_parameter.return_value = {
+                "Parameter": {"Value": "  parameter_value  "}
+            }
+
+            tracker = EnvVarTracker()
+            tracker.ssm = mock_ssm
+            tracker.ssm_enabled = True
+
+            result = tracker.resolve_env_var("TEST_VAR")
+            assert result == "parameter_value"
+            assert os.environ["TEST_VAR"] == "parameter_value"
+
+    def test_track_env_var_strips_resolved_value(self):
+        """Test that tracking strips whitespace from resolved values"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {}
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"TEST_VAR": "  test_value  "}):
+            tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+        mock_table.put_item.assert_called_once()
+        call_args = mock_table.put_item.call_args[1]["Item"]
+        assert call_args["resolved_value"] == "test_value"
+
+    def test_track_env_var_no_new_operations(self):
+        """Test tracking when no new operations need to be added"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {
+            "Item": {
+                "operations": ["dynamodb:GetItem"],  # Already has this operation
+                "service_var_key": "test-service#TEST_VAR",
+            }
+        }
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        # Try to track the same operation that already exists
+        tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+        # Should call get_item but not update_item or put_item
+        mock_table.get_item.assert_called_once()
+        mock_table.update_item.assert_not_called()
+        mock_table.put_item.assert_not_called()
+
+    def test_track_env_var_merges_operations(self):
+        """Test that tracking merges new operations with existing ones"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {
+            "Item": {
+                "operations": ["dynamodb:GetItem"],
+                "service_var_key": "test-service#TEST_VAR",
+            }
+        }
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        # Add a new operation
+        tracker.track_env_var("TEST_VAR", [DynamoDBOperation.PUT_ITEM])
+
+        # Should merge operations
+        mock_table.update_item.assert_called_once()
+        call_args = mock_table.update_item.call_args[1]
+        merged_ops = call_args["ExpressionAttributeValues"][":operations"]
+        assert set(merged_ops) == {"dynamodb:GetItem", "dynamodb:PutItem"}
+
+    def test_track_env_var_creates_record_without_last_accessed(self):
+        """Test that new tracking records don't include last_accessed field"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {}
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+        mock_table.put_item.assert_called_once()
+        call_args = mock_table.put_item.call_args[1]["Item"]
+
+        # Should have first_accessed but not last_accessed
+        assert "first_accessed" in call_args
+        assert "last_accessed" not in call_args
 
 
 class TestRequiredEnvVarsDecorator:
