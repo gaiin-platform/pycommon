@@ -116,7 +116,7 @@ def test_get_claims_success(
 
 
 @patch("pycommon.authz.requests.get")
-@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.os.getenv")
 def test_get_claims_missing_env(mock_get_env, mock_requests_get):
     required_env_vars = [
         "OAUTH_ISSUER_BASE_URL",
@@ -125,11 +125,29 @@ def test_get_claims_missing_env(mock_get_env, mock_requests_get):
     ]
 
     for missing_var in required_env_vars:
-        mock_get_env.side_effect = lambda key, default, missing_var=missing_var: (
-            None if key == missing_var else "mock_value"
-        )
 
-        with pytest.raises(EnvVarError, match=f"Env Var: '{missing_var}' is not set"):
+        def mock_getenv_side_effect(key, default=None, missing=missing_var):
+            env_vars = {
+                "OAUTH_ISSUER_BASE_URL": (
+                    "mock_value" if missing != "OAUTH_ISSUER_BASE_URL" else None
+                ),
+                "OAUTH_AUDIENCE": (
+                    "mock_value" if missing != "OAUTH_AUDIENCE" else None
+                ),
+                "ACCOUNTS_DYNAMO_TABLE": (
+                    "mock_value" if missing != "ACCOUNTS_DYNAMO_TABLE" else None
+                ),
+                "STAGE": "test",
+                "SERVICE_NAME": "test-service",
+                "AWS_REGION": "us-east-1",
+            }
+            return env_vars.get(key, default)
+
+        mock_get_env.side_effect = mock_getenv_side_effect
+
+        with pytest.raises(
+            EnvVarError, match=f"Environment variable '{missing_var}' not found"
+        ):
             get_claims("mock_token")
 
 
@@ -645,10 +663,17 @@ def test_api_claims_success(mock_getenv, mock_boto3):
         # Set access types to include the ones used in this test
         pycommon.authz._access_types = ["full_access", "file_upload", "share"]
 
-        mock_getenv.side_effect = lambda key: {
-            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
-        }.get(key)
+        def mock_getenv_side_effect(key, default=None):
+            env_vars = {
+                "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+                "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+                "STAGE": "test",
+                "SERVICE_NAME": "test-service",
+                "AWS_REGION": "us-east-1",
+            }
+            return env_vars.get(key, default)
+
+        mock_getenv.side_effect = mock_getenv_side_effect
         mock_api_keys_table = MagicMock()
         mock_api_keys_table.query.return_value = {
             "Items": [
@@ -711,10 +736,17 @@ def test_api_claims_success_with_v1_token(mock_token_v1, mock_getenv, mock_boto3
         mock_token_v1_instance.key = "hashed_token_value"
         mock_token_v1.return_value = mock_token_v1_instance
 
-        mock_getenv.side_effect = lambda key: {
-            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
-        }.get(key)
+        def mock_getenv_side_effect(key, default=None):
+            env_vars = {
+                "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+                "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+                "STAGE": "test",
+                "SERVICE_NAME": "test-service",
+                "AWS_REGION": "us-east-1",
+            }
+            return env_vars.get(key, default)
+
+        mock_getenv.side_effect = mock_getenv_side_effect
         mock_api_keys_table = MagicMock()
         mock_api_keys_table.query.return_value = {
             "Items": [
@@ -772,9 +804,16 @@ def test_api_claims_success_with_v1_token(mock_token_v1, mock_getenv, mock_boto3
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.os.getenv")
 def test_api_claims_key_not_found(mock_getenv, mock_boto3):
-    mock_getenv.side_effect = lambda key: {
-        "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-    }.get(key)
+    def mock_getenv_side_effect(key, default=None):
+        env_vars = {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "STAGE": "test",
+            "SERVICE_NAME": "test-service",
+            "AWS_REGION": "us-east-1",
+        }
+        return env_vars.get(key, default)
+
+    mock_getenv.side_effect = mock_getenv_side_effect
 
     mock_table = MagicMock()
     mock_table.query.return_value = {"Items": []}
@@ -787,9 +826,16 @@ def test_api_claims_key_not_found(mock_getenv, mock_boto3):
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.os.getenv")
 def test_api_claims_inactive_key(mock_getenv, mock_boto3):
-    mock_getenv.side_effect = lambda key: {
-        "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-    }.get(key)
+    def mock_getenv_side_effect(key, default=None):
+        env_vars = {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "STAGE": "test",
+            "SERVICE_NAME": "test-service",
+            "AWS_REGION": "us-east-1",
+        }
+        return env_vars.get(key, default)
+
+    mock_getenv.side_effect = mock_getenv_side_effect
     mock_table = MagicMock()
     mock_table.query.return_value = {
         "Items": [{"apiKey": "mock_token", "active": False}]
@@ -802,9 +848,16 @@ def test_api_claims_inactive_key(mock_getenv, mock_boto3):
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.os.getenv")
 def test_api_claims_expired_key(mock_getenv, mock_boto3):
-    mock_getenv.side_effect = lambda key: {
-        "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-    }.get(key)
+    def mock_getenv_side_effect(key, default=None):
+        env_vars = {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "STAGE": "test",
+            "SERVICE_NAME": "test-service",
+            "AWS_REGION": "us-east-1",
+        }
+        return env_vars.get(key, default)
+
+    mock_getenv.side_effect = mock_getenv_side_effect
     mock_table = MagicMock()
     mock_table.query.return_value = {
         "Items": [
@@ -819,9 +872,16 @@ def test_api_claims_expired_key(mock_getenv, mock_boto3):
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.os.getenv")
 def test_api_claims_no_access_rights(mock_getenv, mock_boto3):
-    mock_getenv.side_effect = lambda key: {
-        "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-    }.get(key)
+    def mock_getenv_side_effect(key, default=None):
+        env_vars = {
+            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+            "STAGE": "test",
+            "SERVICE_NAME": "test-service",
+            "AWS_REGION": "us-east-1",
+        }
+        return env_vars.get(key, default)
+
+    mock_getenv.side_effect = mock_getenv_side_effect
     mock_table = MagicMock()
     mock_table.query.return_value = {
         "Items": [{"apiKey": "mock_token", "active": True, "accessTypes": []}]
@@ -1225,10 +1285,17 @@ def test_api_claims_rate_limit_exceeded(mock_getenv, mock_boto3):
         # Set access types to include the ones used in this test
         pycommon.authz._access_types = ["full_access", "file_upload", "share"]
 
-        mock_getenv.side_effect = lambda key: {
-            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
-        }.get(key)
+        def mock_getenv_side_effect(key, default=None):
+            env_vars = {
+                "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+                "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+                "STAGE": "test",
+                "SERVICE_NAME": "test-service",
+                "AWS_REGION": "us-east-1",
+            }
+            return env_vars.get(key, default)
+
+        mock_getenv.side_effect = mock_getenv_side_effect
         mock_table = MagicMock()
         mock_table.query.return_value = {
             "Items": [
@@ -1517,17 +1584,30 @@ def test_is_rate_limited_unexpected_exception(mock_getenv, mock_boto3):
 
 
 @patch("pycommon.authz.requests.get")
-@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.os.getenv")
 def test_get_claims_missing_env_vars(mock_get_env, _):
     required_vars = ["OAUTH_ISSUER_BASE_URL", "OAUTH_AUDIENCE", "ACCOUNTS_DYNAMO_TABLE"]
-    mock_get_env.side_effect = lambda key, default=None: (
-        None if key == missing else "value"
-    )
-    for missing in required_vars:
+    for missing_var in required_vars:
 
+        def mock_getenv_side_effect(key, default=None, missing=missing_var):
+            env_vars = {
+                "OAUTH_ISSUER_BASE_URL": (
+                    "value" if missing != "OAUTH_ISSUER_BASE_URL" else None
+                ),
+                "OAUTH_AUDIENCE": "value" if missing != "OAUTH_AUDIENCE" else None,
+                "ACCOUNTS_DYNAMO_TABLE": (
+                    "value" if missing != "ACCOUNTS_DYNAMO_TABLE" else None
+                ),
+                "STAGE": "test",
+                "SERVICE_NAME": "test-service",
+                "AWS_REGION": "us-east-1",
+            }
+            return env_vars.get(key, default)
+
+        mock_get_env.side_effect = mock_getenv_side_effect
         with pytest.raises(EnvVarError) as exc:
             get_claims("sometoken")
-        assert f"Env Var: '{missing}' is not set" in str(exc.value)
+        assert f"Environment variable '{missing_var}' not found" in str(exc.value)
 
 
 @patch("pycommon.authz.requests.get")
@@ -1694,9 +1774,16 @@ def test_api_claims_empty_access_types(mock_getenv, mock_boto3):
         # Set _access_types to empty list
         pycommon.authz._access_types = []
 
-        mock_getenv.side_effect = lambda key: {
-            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-        }.get(key)
+        def mock_getenv_side_effect(key, default=None):
+            env_vars = {
+                "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+                "STAGE": "test",
+                "SERVICE_NAME": "test-service",
+                "AWS_REGION": "us-east-1",
+            }
+            return env_vars.get(key, default)
+
+        mock_getenv.side_effect = mock_getenv_side_effect
 
         mock_table = MagicMock()
         mock_table.query.return_value = {
@@ -1738,10 +1825,17 @@ def test_api_claims_partial_access_match(mock_getenv, mock_boto3):
         # Set specific access types required
         pycommon.authz._access_types = ["chat", "assistants"]
 
-        mock_getenv.side_effect = lambda key: {
-            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-            "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
-        }.get(key)
+        def mock_getenv_side_effect(key, default=None):
+            env_vars = {
+                "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+                "COST_CALCULATIONS_DYNAMO_TABLE": "mock_cost_calculations_table",
+                "STAGE": "test",
+                "SERVICE_NAME": "test-service",
+                "AWS_REGION": "us-east-1",
+            }
+            return env_vars.get(key, default)
+
+        mock_getenv.side_effect = mock_getenv_side_effect
 
         mock_api_keys_table = MagicMock()
         mock_api_keys_table.query.return_value = {
@@ -1802,9 +1896,16 @@ def test_api_claims_no_matching_access_types(mock_getenv, mock_boto3):
         # Set specific access types required
         pycommon.authz._access_types = ["assistants", "dual_embedding"]
 
-        mock_getenv.side_effect = lambda key: {
-            "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
-        }.get(key)
+        def mock_getenv_side_effect(key, default=None):
+            env_vars = {
+                "API_KEYS_DYNAMODB_TABLE": "mock_api_keys_table",
+                "STAGE": "test",
+                "SERVICE_NAME": "test-service",
+                "AWS_REGION": "us-east-1",
+            }
+            return env_vars.get(key, default)
+
+        mock_getenv.side_effect = mock_getenv_side_effect
 
         mock_table = MagicMock()
         mock_table.query.return_value = {

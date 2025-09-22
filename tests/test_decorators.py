@@ -1,112 +1,350 @@
+import os
+from unittest.mock import Mock, patch
+
 import pytest
-from jsonschema.exceptions import ValidationError
 
-from pycommon.authz import _validate_data
+from pycommon.dal.providers.aws.resource_perms import (
+    DynamoDBOperation,
+    S3Operation,
+    SecretsManagerOperation,
+)
+from pycommon.decorators import EnvVarTracker, required_env_vars
+from pycommon.exceptions import EnvVarError
 
 
-def test_validate_data_success():
-    """
-    Test that _validate_data successfully validates data against a schema.
-    """
-    name = "test_operation"
-    op = "create"
-    data = {"data": {"key": "value"}}
-    api_accessed = False
-    validator_rules = {
-        "validators": {
-            "test_operation": {
-                "create": {
-                    "type": "object",
-                    "properties": {"key": {"type": "string"}},
-                },
-                "required": ["key"],
+class TestEnvVarTracker:
+    """Test cases for the EnvVarTracker class"""
+
+    def test_init_with_tracking_table(self):
+        """Test EnvVarTracker initialization with tracking table"""
+        with patch.dict(
+            os.environ,
+            {
+                "STAGE": "test",
+                "SERVICE_NAME": "test-service",
+                "ENV_VARS_TRACKING_TABLE": "test-table",
+                "AWS_REGION": "us-west-2",
+            },
+        ):
+            with patch("boto3.resource"):
+                tracker = EnvVarTracker()
+                assert tracker.stage == "test"
+                assert tracker.service_name == "test-service"
+                assert tracker.tracking_table == "test-table"
+                assert tracker.region == "us-west-2"
+                assert tracker.tracking_enabled is True
+
+    def test_init_without_tracking_table(self):
+        """Test EnvVarTracker initialization without tracking table"""
+        with patch.dict(os.environ, {}, clear=True):
+            tracker = EnvVarTracker()
+            assert tracker.stage == "dev"
+            assert tracker.service_name == "unknown"
+            assert tracker.tracking_table is None
+            assert tracker.tracking_enabled is False
+
+    def test_resolve_env_var_from_lambda_env(self):
+        """Test resolving env var from Lambda environment"""
+        with patch.dict(os.environ, {"TEST_VAR": "test_value"}):
+            tracker = EnvVarTracker()
+            result = tracker.resolve_env_var("TEST_VAR")
+            assert result == "test_value"
+
+    def test_resolve_env_var_from_parameter_store(self):
+        """Test resolving env var from Parameter Store when not in Lambda env"""
+        with patch.dict(
+            os.environ, {"STAGE": "test", "SERVICE_NAME": "test-service"}, clear=True
+        ):
+            mock_ssm = Mock()
+            mock_ssm.get_parameter.return_value = {
+                "Parameter": {"Value": "parameter_store_value"}
             }
+
+            tracker = EnvVarTracker()
+            tracker.ssm = mock_ssm
+            tracker.ssm_enabled = True
+
+            result = tracker.resolve_env_var("TEST_VAR")
+            assert result == "parameter_store_value"
+            assert os.environ["TEST_VAR"] == "parameter_store_value"
+
+            mock_ssm.get_parameter.assert_called_once_with(
+                Name="/amplify/test/test-service/TEST_VAR"
+            )
+
+    def test_resolve_env_var_not_found(self):
+        """Test resolving env var that doesn't exist anywhere"""
+        with patch.dict(os.environ, {}, clear=True):
+            tracker = EnvVarTracker()
+            tracker.ssm_enabled = False
+
+            with pytest.raises(
+                EnvVarError, match="Environment variable 'MISSING_VAR' not found"
+            ):
+                tracker.resolve_env_var("MISSING_VAR")
+
+    def test_track_env_var_disabled(self):
+        """Test tracking when tracking is disabled"""
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = False
+
+        # Should not raise any errors
+        tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+    def test_track_env_var_enabled(self):
+        """Test tracking when tracking is enabled"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {}  # No existing item
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"TEST_VAR": "test_value"}):
+            tracker.track_env_var(
+                "TEST_VAR", [DynamoDBOperation.GET_ITEM], "test_value"
+            )
+
+        mock_table.put_item.assert_called_once()
+        call_args = mock_table.put_item.call_args[1]["Item"]
+        assert call_args["service_var_key"] == "test-service#TEST_VAR"
+        assert call_args["var_name"] == "TEST_VAR"
+        assert call_args["resolved_value"] == "test_value"
+        assert call_args["operations"] == ["dynamodb:GetItem"]
+
+    def test_resolve_env_var_parameter_not_found(self):
+        """Test resolving env var when parameter not found in Parameter Store"""
+        with patch.dict(
+            os.environ, {"STAGE": "test", "SERVICE_NAME": "test-service"}, clear=True
+        ):
+            mock_ssm = Mock()
+            mock_ssm.exceptions.ParameterNotFound = Exception
+            mock_ssm.get_parameter.side_effect = mock_ssm.exceptions.ParameterNotFound(
+                "Not found"
+            )
+
+            tracker = EnvVarTracker()
+            tracker.ssm = mock_ssm
+            tracker.ssm_enabled = True
+
+            with pytest.raises(EnvVarError):
+                tracker.resolve_env_var("MISSING_VAR")
+
+    def test_track_env_var_update_existing(self):
+        """Test tracking when record already exists (update path)"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {"Item": {"existing": "record"}}
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"TEST_VAR": "test_value"}):
+            tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+        mock_table.update_item.assert_called_once()
+        mock_table.put_item.assert_not_called()
+
+    def test_track_env_var_with_none_values(self):
+        """Test tracking with None resolved_value and operations"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {}
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        # Test with None values - should use defaults
+        tracker.track_env_var("TEST_VAR", None, None)
+
+        mock_table.put_item.assert_called_once()
+        call_args = mock_table.put_item.call_args[1]["Item"]
+        assert call_args["operations"] == []
+        assert (
+            call_args["resolved_value"] == ""
+        )  # Should get empty string from os.getenv default
+
+    def test_track_env_var_exception_handling(self):
+        """Test tracking exception handling doesn't fail the function"""
+        mock_table = Mock()
+        mock_table.get_item.side_effect = Exception("DynamoDB error")
+        mock_table.put_item.side_effect = Exception("Another error")
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        # Should not raise exception, just log warning
+        tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+        # If we get here, the exception was handled properly
+
+    def test_init_with_dynamodb_exception(self):
+        """Test EnvVarTracker initialization when DynamoDB resource fails"""
+        with patch.dict(os.environ, {"ENV_VARS_TRACKING_TABLE": "test-table"}):
+            with patch("boto3.resource") as mock_boto3_resource:
+                mock_boto3_resource.side_effect = Exception(
+                    "DynamoDB connection failed"
+                )
+
+                tracker = EnvVarTracker()
+                assert tracker.tracking_enabled is False
+
+    def test_init_with_ssm_exception(self):
+        """Test EnvVarTracker initialization when SSM client fails"""
+        with patch.dict(os.environ, {}):
+            with patch("boto3.client") as mock_boto3_client:
+                mock_boto3_client.side_effect = Exception("SSM connection failed")
+
+                tracker = EnvVarTracker()
+                assert tracker.ssm_enabled is False
+
+    def test_resolve_env_var_parameter_store_exception(self):
+        """Test resolving env var when Parameter Store has other exceptions"""
+        with patch.dict(
+            os.environ, {"STAGE": "test", "SERVICE_NAME": "test-service"}, clear=True
+        ):
+            mock_ssm = Mock()
+            mock_ssm.exceptions.ParameterNotFound = Exception
+            mock_ssm.get_parameter.side_effect = Exception("SSM service error")
+
+            tracker = EnvVarTracker()
+            tracker.ssm = mock_ssm
+            tracker.ssm_enabled = True
+
+            with pytest.raises(EnvVarError):
+                tracker.resolve_env_var("MISSING_VAR")
+
+
+class TestRequiredEnvVarsDecorator:
+    """Test cases for the required_env_vars decorator"""
+
+    def test_decorator_with_valid_env_vars(self):
+        """Test decorator with valid environment variables"""
+        env_vars_dict = {
+            "TEST_TABLE": [DynamoDBOperation.GET_ITEM, DynamoDBOperation.PUT_ITEM],
+            "TEST_BUCKET": [S3Operation.GET_OBJECT, S3Operation.PUT_OBJECT],
         }
-    }
 
-    _validate_data(name, op, data, api_accessed, validator_rules)
+        @required_env_vars(env_vars_dict)
+        def test_function():
+            return "success"
 
+        with patch.dict(
+            os.environ, {"TEST_TABLE": "table-name", "TEST_BUCKET": "bucket-name"}
+        ):
+            with patch("pycommon.decorators.EnvVarTracker") as mock_tracker_class:
+                mock_tracker = Mock()
+                mock_tracker.resolve_env_var.side_effect = lambda x: os.environ[x]
+                mock_tracker_class.return_value = mock_tracker
 
-def test_validate_data_no_validator_found():
-    """
-    Test that _validate_data raises ValidationError when no validator is found.
-    """
-    name = "test_operation"
-    op = "create"
-    data = {"data": {"key": "value"}}
-    api_accessed = False
-    validator_rules = {}  # No validators provided
+                result = test_function()
+                assert result == "success"
 
-    with pytest.raises(ValidationError, match="No validator found for the operation"):
-        _validate_data(name, op, data, api_accessed, validator_rules)
+                # Verify resolve_env_var was called for each env var
+                assert mock_tracker.resolve_env_var.call_count == 2
+                mock_tracker.track_env_var.assert_called()
 
+    def test_decorator_with_missing_env_var(self):
+        """Test decorator when required env var is missing"""
+        env_vars_dict = {"MISSING_VAR": [DynamoDBOperation.GET_ITEM]}
 
-def test_validate_data_invalid_data():
-    """
-    Test that _validate_data raises ValidationError for invalid data.
-    """
-    name = "test_operation"
-    op = "create"
-    data = {"data": {"key": 123}}  # Invalid data (key should be a string)
-    api_accessed = False
-    validator_rules = {
-        "validators": {
-            "test_operation": {
-                "create": {
-                    "type": "object",
-                    "properties": {"key": {"type": "string"}},
-                    "required": ["key"],
-                }
-            }
+        @required_env_vars(env_vars_dict)
+        def test_function():
+            return "success"
+
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("pycommon.decorators.EnvVarTracker") as mock_tracker_class:
+                mock_tracker = Mock()
+                mock_tracker.resolve_env_var.side_effect = EnvVarError(
+                    "Variable not found"
+                )
+                mock_tracker_class.return_value = mock_tracker
+
+                with pytest.raises(EnvVarError):
+                    test_function()
+
+    def test_decorator_with_invalid_operations(self):
+        """Test decorator with invalid operations"""
+        env_vars_dict = {"TEST_VAR": ["invalid_operation"]}  # Not an enum
+
+        with pytest.raises(
+            ValueError, match="Invalid operation invalid_operation for TEST_VAR"
+        ):
+
+            @required_env_vars(env_vars_dict)
+            def test_function():
+                return "success"
+
+    def test_decorator_with_invalid_env_vars_dict(self):
+        """Test decorator with invalid env_vars_dict parameter"""
+        with pytest.raises(ValueError, match="required_env_vars expects a dictionary"):
+
+            @required_env_vars("not_a_dict")
+            def test_function():
+                return "success"
+
+    def test_decorator_metadata(self):
+        """Test that decorator adds metadata to the function"""
+        env_vars_dict = {
+            "TEST_TABLE": [DynamoDBOperation.GET_ITEM],
+            "TEST_SECRET": [SecretsManagerOperation.GET_SECRET_VALUE],
         }
-    }
 
-    with pytest.raises(ValidationError, match="Invalid data: .*"):
-        _validate_data(name, op, data, api_accessed, validator_rules)
+        @required_env_vars(env_vars_dict)
+        def test_function():
+            return "success"
 
-
-def test_validate_data_invalid_schema():
-    """
-    Test that _validate_data raises ValidationError for an invalid schema.
-    """
-    name = "test_operation"
-    op = "create"
-    data = {"data": {"key": "value"}}
-    api_accessed = False
-    validator_rules = {
-        "validators": {
-            "test_operation": {
-                "create": {
-                    "type": "invalid_type",  # Invalid schema type
-                    "properties": {"key": {"type": "string"}},
-                }
-            }
+        assert hasattr(test_function, "_required_env_vars")
+        assert hasattr(test_function, "_env_var_operations")
+        assert test_function._required_env_vars == env_vars_dict
+        assert test_function._env_var_operations == {
+            "TEST_TABLE": ["dynamodb:GetItem"],
+            "TEST_SECRET": ["secretsmanager:GetSecretValue"],
         }
-    }
 
-    with pytest.raises(ValidationError, match="Invalid schema: .*"):
-        _validate_data(name, op, data, api_accessed, validator_rules)
+    def test_decorator_with_invalid_var_name_type(self):
+        """Test decorator with invalid env var name (not string)"""
+        env_vars_dict = {123: [DynamoDBOperation.GET_ITEM]}  # Invalid - not a string
 
+        with pytest.raises(
+            ValueError, match="Environment variable name must be a string: 123"
+        ):
 
-def test_validate_data_invalid_path():
-    """
-    Test that _validate_data raises ValidationError for an invalid operation path.
-    """
-    name = "invalid_operation"
-    op = "create"
-    data = {"data": {"key": "value"}}
-    api_accessed = False
-    validator_rules = {
-        "validators": {
-            "test_operation": {
-                "create": {
-                    "type": "object",
-                    "properties": {"key": {"type": "string"}},
-                    "required": ["key"],
-                }
-            }
-        }
-    }
+            @required_env_vars(env_vars_dict)
+            def test_function():
+                return "success"
 
-    with pytest.raises(ValidationError, match="Invalid data or path"):
-        _validate_data(name, op, data, api_accessed, validator_rules)
+    def test_decorator_with_invalid_operations_type(self):
+        """Test decorator with invalid operations (not list)"""
+        env_vars_dict = {"TEST_VAR": DynamoDBOperation.GET_ITEM}  # Invalid - not a list
+
+        with pytest.raises(ValueError, match="Operations must be a list for TEST_VAR"):
+
+            @required_env_vars(env_vars_dict)
+            def test_function():
+                return "success"
+
+    def test_decorator_with_non_critical_error(self):
+        """Test decorator handles non-critical errors gracefully"""
+        env_vars_dict = {"TEST_VAR": [DynamoDBOperation.GET_ITEM]}
+
+        @required_env_vars(env_vars_dict)
+        def test_function():
+            return "success"
+
+        with patch.dict(os.environ, {"TEST_VAR": "test_value"}):
+            with patch("pycommon.decorators.EnvVarTracker") as mock_tracker_class:
+                mock_tracker = Mock()
+                mock_tracker.resolve_env_var.return_value = "test_value"
+                mock_tracker.track_env_var.side_effect = Exception(
+                    "Non-critical tracking error"
+                )
+                mock_tracker_class.return_value = mock_tracker
+
+                # Should still execute successfully despite tracking error
+                result = test_function()
+                assert result == "success"

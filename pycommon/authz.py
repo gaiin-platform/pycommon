@@ -31,6 +31,7 @@ from requests import Response
 
 from pycommon.api_utils import TokenV1
 from pycommon.const import NO_RATE_LIMIT, UNLIMITED, APIAccessType
+from pycommon.dal.providers.aws.resource_perms import DynamoDBOperation
 from pycommon.decorators import required_env_vars
 from pycommon.encoders import CustomPydanticJSONEncoder
 from pycommon.exceptions import (
@@ -192,7 +193,15 @@ def _get_jwks_for_url(oauth_issuer_base_url: str, fail_open: bool) -> dict:
         raise ClaimException("Invalid JWKS response")
 
 
-@required_env_vars("OAUTH_ISSUER_BASE_URL", "OAUTH_AUDIENCE", "ACCOUNTS_DYNAMO_TABLE")
+@required_env_vars(
+    {
+        "OAUTH_ISSUER_BASE_URL": [],  # Configuration value, no AWS operations
+        "OAUTH_AUDIENCE": [],  # Configuration value, no AWS operations
+        "ACCOUNTS_DYNAMO_TABLE": [
+            DynamoDBOperation.GET_ITEM
+        ],  # DynamoDB table for user accounts
+    }
+)
 def get_claims(token: str) -> dict:
     """Retrieve and validate claims from a JSON Web Token (JWT).
 
@@ -467,7 +476,13 @@ def _parse_and_validate(
     return [name, data]
 
 
-@required_env_vars("API_KEYS_DYNAMODB_TABLE")
+@required_env_vars(
+    {
+        "API_KEYS_DYNAMODB_TABLE": [
+            DynamoDBOperation.QUERY
+        ]  # DynamoDB table for API key lookups
+    }
+)
 def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, Any]:
     """Retrieve and validate API claims based on the provided token.
 
@@ -611,7 +626,13 @@ def _determine_api_user(data: Dict[str, Any]) -> str:
     return user
 
 
-@required_env_vars("COST_CALCULATIONS_DYNAMO_TABLE")
+@required_env_vars(
+    {
+        "COST_CALCULATIONS_DYNAMO_TABLE": [
+            DynamoDBOperation.QUERY
+        ]  # DynamoDB table for rate limit calculations
+    }
+)
 def is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
     """
     Checks if the current user has exceeded their rate limit based on usage data stored in DynamoDB.
