@@ -31,6 +31,7 @@ class S3Operation(Enum):
     GET_BUCKET_VERSIONING = "s3:GetBucketVersioning"
     PUT_BUCKET_CORS = "s3:PutBucketCors"
     GET_BUCKET_CORS = "s3:GetBucketCors"
+    HEAD_OBJECT = "s3:HeadObject"
 
 
 class SQSOperation(Enum):
