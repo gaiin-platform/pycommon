@@ -131,6 +131,11 @@ class EnvVarTracker:
                 op.value if hasattr(op, "value") else str(op) for op in operations
             ]
 
+            # Check for version tracking
+            version = os.getenv("VERSION")
+            if version:
+                version = version.strip()
+
             timestamp = datetime.utcnow().isoformat() + "Z"
 
             # Try to get existing record and merge operations
@@ -140,31 +145,55 @@ class EnvVarTracker:
                     existing_item = response["Item"]
                     existing_operations = set(existing_item.get("operations", []))
                     new_operations = set(operation_strings)
+                    existing_version = existing_item.get("version")
 
-                    # Check if we have any new operations to add
+                    # Check if we need to update operations or version
                     operations_to_add = new_operations - existing_operations
-                    if operations_to_add:
+                    version_changed = (
+                        (version != existing_version) if version is not None else False
+                    )
+                    version_added = version is not None and existing_version is None
+
+                    if operations_to_add or version_changed or version_added:
                         # Merge operations (existing + new)
                         merged_operations = list(existing_operations | new_operations)
 
-                        # Update record with merged operations
+                        # Build update expression dynamically
+                        update_expression_parts = ["SET operations = :operations"]
+                        expression_attribute_values = {":operations": merged_operations}
+
+                        # Add version to update if it exists
+                        if version is not None:
+                            update_expression_parts.append("version = :version")
+                            expression_attribute_values[":version"] = version
+
+                        update_expression = ", ".join(update_expression_parts)
+
+                        # Update record with merged operations and version
                         try:
                             response = self.table.update_item(
                                 Key={"service_var_key": service_var_key},
-                                UpdateExpression="SET operations = :operations",
-                                ExpressionAttributeValues={
-                                    ":operations": merged_operations
-                                },
+                                UpdateExpression=update_expression,
+                                ExpressionAttributeValues=expression_attribute_values,
                                 ReturnValues="ALL_NEW",
                             )
+
+                            version_info = f", version: {version}" if version else ""
                             print(
                                 f"ENV_VAR_TRACKING: MERGED {service_var_key} - "
                                 f"added {list(operations_to_add)} → "
                                 f"now: {response['Attributes']['operations']}"
+                                f"{version_info}"
+                            )
+                            version_status = (
+                                "changed"
+                                if version_changed
+                                else "added" if version_added else "unchanged"
                             )
                             logger.debug(
-                                f"Merged operations for {service_var_key}: "
-                                f"{operations_to_add}"
+                                f"Updated {service_var_key}: "
+                                f"operations={list(operations_to_add)}, "
+                                f"version={version_status}"
                             )
                         except Exception as update_error:
                             print(
@@ -173,34 +202,31 @@ class EnvVarTracker:
                             )
                             # Fall through to create new record if update fails
                             raise
-                    else:
-                        # No new operations, skip update
-                        print(
-                            f"ENV_VAR_TRACKING: SKIPPED {service_var_key} - "
-                            f"no new operations to add"
-                        )
-                        logger.debug(
-                            f"Skipped update for {service_var_key} - no new operations"
-                        )
                     return
             except Exception:
                 pass  # Fall through to create new record
 
             # Create new tracking record (no last_accessed field)
-            self.table.put_item(
-                Item={
-                    "service_var_key": service_var_key,
-                    "service_name": self.service_name,
-                    "var_name": var_name,
-                    "resolved_value": resolved_value,
-                    "parameter_path": parameter_path,
-                    "operations": operation_strings,
-                    "first_accessed": timestamp,
-                }
-            )
+            record_item = {
+                "service_var_key": service_var_key,
+                "service_name": self.service_name,
+                "var_name": var_name,
+                "resolved_value": resolved_value,
+                "parameter_path": parameter_path,
+                "operations": operation_strings,
+                "first_accessed": timestamp,
+            }
+
+            # Only add version if it exists
+            if version is not None:
+                record_item["version"] = version
+
+            self.table.put_item(Item=record_item)
+
+            version_info = f", version: {version}" if version else ""
             print(
                 f"ENV_VAR_TRACKING: PUT NEW item for {service_var_key} - "
-                f"operations: {operation_strings}"
+                f"operations: {operation_strings}{version_info}"
             )
             logger.info(f"Created new tracking record for {service_var_key}")
 

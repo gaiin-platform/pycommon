@@ -385,6 +385,182 @@ class TestEnvVarTracker:
         assert call_args["service_var_key"] == "test-service#TEST_VAR"
         assert call_args["operations"] == ["dynamodb:GetItem"]
 
+    def test_track_env_var_with_version(self):
+        """Test tracking includes version when VERSION env var exists"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {}
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"VERSION": "1.2.3", "TEST_VAR": "test_value"}):
+            tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+        mock_table.put_item.assert_called_once()
+        call_args = mock_table.put_item.call_args[1]["Item"]
+
+        # Should include version
+        assert call_args["version"] == "1.2.3"
+        assert call_args["service_var_key"] == "test-service#TEST_VAR"
+
+    def test_track_env_var_without_version(self):
+        """Test tracking without version when VERSION env var doesn't exist"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {}
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        # Ensure VERSION is not set
+        env_without_version = {"TEST_VAR": "test_value"}
+        if "VERSION" in os.environ:
+            del os.environ["VERSION"]
+
+        with patch.dict(os.environ, env_without_version, clear=False):
+            tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+        mock_table.put_item.assert_called_once()
+        call_args = mock_table.put_item.call_args[1]["Item"]
+
+        # Should not include version
+        assert "version" not in call_args
+        assert call_args["service_var_key"] == "test-service#TEST_VAR"
+
+    def test_track_env_var_version_with_whitespace(self):
+        """Test tracking strips whitespace from version"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {}
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"VERSION": "  1.2.3  ", "TEST_VAR": "test_value"}):
+            tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+        mock_table.put_item.assert_called_once()
+        call_args = mock_table.put_item.call_args[1]["Item"]
+
+        # Should strip whitespace from version
+        assert call_args["version"] == "1.2.3"
+
+    def test_track_env_var_add_version_to_existing_record(self):
+        """Test adding version to existing record that didn't have one"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {
+            "Item": {
+                "operations": ["dynamodb:GetItem"],
+                "service_var_key": "test-service#TEST_VAR",
+                # No version in existing record
+            }
+        }
+        mock_table.update_item.return_value = {
+            "Attributes": {"operations": ["dynamodb:GetItem"], "version": "1.2.3"}
+        }
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"VERSION": "1.2.3", "TEST_VAR": "test_value"}):
+            tracker.track_env_var("TEST_VAR", [])  # No new operations
+
+        # Should update with version
+        mock_table.update_item.assert_called_once()
+        mock_table.put_item.assert_not_called()
+
+        call_args = mock_table.update_item.call_args[1]
+        assert "version = :version" in call_args["UpdateExpression"]
+        assert call_args["ExpressionAttributeValues"][":version"] == "1.2.3"
+
+    def test_track_env_var_update_existing_version(self):
+        """Test updating version in existing record when version changes"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {
+            "Item": {
+                "operations": ["dynamodb:GetItem"],
+                "service_var_key": "test-service#TEST_VAR",
+                "version": "1.2.2",  # Old version
+            }
+        }
+        mock_table.update_item.return_value = {
+            "Attributes": {"operations": ["dynamodb:GetItem"], "version": "1.2.3"}
+        }
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"VERSION": "1.2.3", "TEST_VAR": "test_value"}):
+            tracker.track_env_var("TEST_VAR", [])  # No new operations
+
+        # Should update with new version
+        mock_table.update_item.assert_called_once()
+        mock_table.put_item.assert_not_called()
+
+        call_args = mock_table.update_item.call_args[1]
+        assert "version = :version" in call_args["UpdateExpression"]
+        assert call_args["ExpressionAttributeValues"][":version"] == "1.2.3"
+
+    def test_track_env_var_no_update_when_version_same(self):
+        """Test no update when version hasn't changed"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {
+            "Item": {
+                "operations": ["dynamodb:GetItem"],
+                "service_var_key": "test-service#TEST_VAR",
+                "version": "1.2.3",  # Same version
+            }
+        }
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"VERSION": "1.2.3", "TEST_VAR": "test_value"}):
+            tracker.track_env_var("TEST_VAR", [])  # No new operations
+
+        # Should not update since version and operations are the same
+        mock_table.update_item.assert_not_called()
+        mock_table.put_item.assert_not_called()
+
+    def test_track_env_var_version_fallback_to_put(self):
+        """Test version handling in fallback scenario"""
+        mock_table = Mock()
+        mock_table.get_item.return_value = {
+            "Item": {
+                "operations": [],
+                "service_var_key": "test-service#TEST_VAR",
+            }
+        }
+        # Mock update_item to fail
+        mock_table.update_item.side_effect = Exception("Update failed")
+
+        tracker = EnvVarTracker()
+        tracker.tracking_enabled = True
+        tracker.table = mock_table
+        tracker.service_name = "test-service"
+
+        with patch.dict(os.environ, {"VERSION": "1.2.3", "TEST_VAR": "test_value"}):
+            tracker.track_env_var("TEST_VAR", [DynamoDBOperation.GET_ITEM])
+
+        # Should call update_item first, then fall back to put_item
+        mock_table.update_item.assert_called_once()
+        mock_table.put_item.assert_called_once()
+
+        # Check put_item was called with version
+        call_args = mock_table.put_item.call_args[1]["Item"]
+        assert call_args["version"] == "1.2.3"
+        assert call_args["service_var_key"] == "test-service#TEST_VAR"
+
 
 class TestRequiredEnvVarsDecorator:
     """Test cases for the required_env_vars decorator"""
