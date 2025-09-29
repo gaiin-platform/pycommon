@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
-from pycommon.api.user_data import load_user_data
+from pycommon.api.user_data import delete_user_data, load_user_data, save_user_data
 
 
 class TestLoadUserData:
@@ -217,3 +217,417 @@ class TestLoadUserData:
         )
 
         assert result == {"result": "test"}
+
+
+class TestSaveUserData:
+    """Test suite for save_user_data function."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.access_token = "test_access_token"
+        self.app_id = "test_app_id"
+        self.entity_type = "test_entity_type"
+        self.item_id = "test_item_id"
+        self.data = {"key": "value"}
+        self.api_base_url = "https://api.example.com"
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_save_user_data_success(self, mock_post):
+        """Test successful user data saving."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True, "data": {"saved": True}}
+        mock_response.content = b'{"success": true, "data": {"saved": true}}'
+        mock_post.return_value = mock_response
+
+        result = save_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, self.data
+        )
+
+        expected_endpoint = f"{self.api_base_url}/user-data/put"
+        expected_request_data = {
+            "data": {
+                "appId": self.app_id,
+                "entityType": self.entity_type,
+                "itemId": self.item_id,
+                "data": self.data,
+            }
+        }
+        expected_headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.access_token}",
+        }
+
+        mock_post.assert_called_once_with(
+            expected_endpoint,
+            headers=expected_headers,
+            data=json.dumps(expected_request_data),
+        )
+
+        assert result == {"success": True, "data": {"saved": True}}
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_save_user_data_success_with_range_key(self, mock_post):
+        """Test successful user data saving with range key."""
+        range_key = "test_range_key"
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True, "data": {"saved": True}}
+        mock_response.content = b'{"success": true, "data": {"saved": true}}'
+        mock_post.return_value = mock_response
+
+        result = save_user_data(
+            self.access_token,
+            self.app_id,
+            self.entity_type,
+            self.item_id,
+            self.data,
+            range_key,
+        )
+
+        expected_request_data = {
+            "data": {
+                "appId": self.app_id,
+                "entityType": self.entity_type,
+                "itemId": self.item_id,
+                "data": self.data,
+                "rangeKey": range_key,
+            }
+        }
+
+        mock_post.assert_called_once_with(
+            f"{self.api_base_url}/user-data/put",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.access_token}",
+            },
+            data=json.dumps(expected_request_data),
+        )
+
+        assert result == {"success": True, "data": {"saved": True}}
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_save_user_data_non_200_status(self, mock_post):
+        """Test response with non-200 status code."""
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_response.json.return_value = {"success": False, "error": "Not found"}
+        mock_response.content = b'{"success": false, "error": "Not found"}'
+        mock_post.return_value = mock_response
+
+        result = save_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, self.data
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_save_user_data_success_false(self, mock_post):
+        """Test response with success=False."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": False, "error": "Invalid data"}
+        mock_response.content = b'{"success": false, "error": "Invalid data"}'
+        mock_post.return_value = mock_response
+
+        result = save_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, self.data
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_save_user_data_request_exception(self, mock_post):
+        """Test handling of request exceptions."""
+        mock_post.side_effect = requests.exceptions.RequestException("Network error")
+
+        result = save_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, self.data
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_save_user_data_json_decode_error(self, mock_post):
+        """Test handling of JSON decode errors."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
+        mock_response.content = b"invalid json"
+        mock_post.return_value = mock_response
+
+        result = save_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, self.data
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_save_user_data_generic_exception(self, mock_post):
+        """Test handling of generic exceptions."""
+        mock_post.side_effect = Exception("Unexpected error")
+
+        result = save_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, self.data
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    @patch("builtins.print")
+    def test_save_user_data_prints_messages(self, mock_print, mock_post):
+        """Test that appropriate messages are printed."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True, "data": {"saved": True}}
+        mock_response.content = b'{"success": true, "data": {"saved": true}}'
+        mock_post.return_value = mock_response
+
+        save_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, self.data
+        )
+
+        print_calls = [call.args[0] for call in mock_print.call_args_list]
+        assert any("Initiate save user data call" in call for call in print_calls)
+        assert any("Response: " in call for call in print_calls)
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    @patch("builtins.print")
+    def test_save_user_data_prints_error_on_failure(self, mock_print, mock_post):
+        """Test that error messages are printed on failure response."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": False, "error": "Save failed"}
+        mock_response.content = b'{"success": false, "error": "Save failed"}'
+        mock_post.return_value = mock_response
+
+        save_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, self.data
+        )
+
+        print_calls = [call.args[0] for call in mock_print.call_args_list]
+        assert any("Error saving user data:" in call for call in print_calls)
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    @patch("builtins.print")
+    def test_save_user_data_prints_error_on_exception(self, mock_print, mock_post):
+        """Test that error messages are printed on exception."""
+        mock_post.side_effect = Exception("Test error")
+
+        save_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, self.data
+        )
+
+        print_calls = [call.args[0] for call in mock_print.call_args_list]
+        assert any("Error saving user data: Test error" in call for call in print_calls)
+
+
+class TestDeleteUserData:
+    """Test suite for delete_user_data function."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.access_token = "test_access_token"
+        self.app_id = "test_app_id"
+        self.entity_type = "test_entity_type"
+        self.item_id = "test_item_id"
+        self.api_base_url = "https://api.example.com"
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_delete_user_data_success(self, mock_post):
+        """Test successful user data deletion."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True, "data": {"deleted": True}}
+        mock_response.content = b'{"success": true, "data": {"deleted": true}}'
+        mock_post.return_value = mock_response
+
+        result = delete_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id
+        )
+
+        expected_endpoint = f"{self.api_base_url}/user-data/delete"
+        expected_request_data = {
+            "data": {
+                "appId": self.app_id,
+                "entityType": self.entity_type,
+                "itemId": self.item_id,
+            }
+        }
+        expected_headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.access_token}",
+        }
+
+        mock_post.assert_called_once_with(
+            expected_endpoint,
+            headers=expected_headers,
+            data=json.dumps(expected_request_data),
+        )
+
+        assert result == {"success": True, "data": {"deleted": True}}
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_delete_user_data_success_with_range_key(self, mock_post):
+        """Test successful user data deletion with range key."""
+        range_key = "test_range_key"
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True, "data": {"deleted": True}}
+        mock_response.content = b'{"success": true, "data": {"deleted": true}}'
+        mock_post.return_value = mock_response
+
+        result = delete_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id, range_key
+        )
+
+        expected_request_data = {
+            "data": {
+                "appId": self.app_id,
+                "entityType": self.entity_type,
+                "itemId": self.item_id,
+                "rangeKey": range_key,
+            }
+        }
+
+        mock_post.assert_called_once_with(
+            f"{self.api_base_url}/user-data/delete",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.access_token}",
+            },
+            data=json.dumps(expected_request_data),
+        )
+
+        assert result == {"success": True, "data": {"deleted": True}}
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_delete_user_data_non_200_status(self, mock_post):
+        """Test response with non-200 status code."""
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_response.json.return_value = {"success": False, "error": "Not found"}
+        mock_response.content = b'{"success": false, "error": "Not found"}'
+        mock_post.return_value = mock_response
+
+        result = delete_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_delete_user_data_success_false(self, mock_post):
+        """Test response with success=False."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": False, "error": "Delete failed"}
+        mock_response.content = b'{"success": false, "error": "Delete failed"}'
+        mock_post.return_value = mock_response
+
+        result = delete_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_delete_user_data_request_exception(self, mock_post):
+        """Test handling of request exceptions."""
+        mock_post.side_effect = requests.exceptions.RequestException("Network error")
+
+        result = delete_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_delete_user_data_json_decode_error(self, mock_post):
+        """Test handling of JSON decode errors."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
+        mock_response.content = b"invalid json"
+        mock_post.return_value = mock_response
+
+        result = delete_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    def test_delete_user_data_generic_exception(self, mock_post):
+        """Test handling of generic exceptions."""
+        mock_post.side_effect = Exception("Unexpected error")
+
+        result = delete_user_data(
+            self.access_token, self.app_id, self.entity_type, self.item_id
+        )
+
+        assert result is None
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    @patch("builtins.print")
+    def test_delete_user_data_prints_messages(self, mock_print, mock_post):
+        """Test that appropriate messages are printed."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True, "data": {"deleted": True}}
+        mock_response.content = b'{"success": true, "data": {"deleted": true}}'
+        mock_post.return_value = mock_response
+
+        delete_user_data(self.access_token, self.app_id, self.entity_type, self.item_id)
+
+        print_calls = [call.args[0] for call in mock_print.call_args_list]
+        assert any("Initiate delete user data call" in call for call in print_calls)
+        assert any("Response: " in call for call in print_calls)
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    @patch("builtins.print")
+    def test_delete_user_data_prints_error_on_failure(self, mock_print, mock_post):
+        """Test that error messages are printed on failure response."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": False, "error": "Delete failed"}
+        mock_response.content = b'{"success": false, "error": "Delete failed"}'
+        mock_post.return_value = mock_response
+
+        delete_user_data(self.access_token, self.app_id, self.entity_type, self.item_id)
+
+        print_calls = [call.args[0] for call in mock_print.call_args_list]
+        assert any("Error deleting user data:" in call for call in print_calls)
+
+    @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
+    @patch("pycommon.api.user_data.requests.post")
+    @patch("builtins.print")
+    def test_delete_user_data_prints_error_on_exception(self, mock_print, mock_post):
+        """Test that error messages are printed on exception."""
+        mock_post.side_effect = Exception("Test error")
+
+        delete_user_data(self.access_token, self.app_id, self.entity_type, self.item_id)
+
+        print_calls = [call.args[0] for call in mock_print.call_args_list]
+        assert any(
+            "Error deleting user data: Test error" in call for call in print_calls
+        )
