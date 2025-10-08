@@ -22,18 +22,16 @@ class AwsUser(UserABC):
         family_name: str | None = None,
         given_name: str | None = None,
         cust_saml_groups: str | None = None,
-        cust_vu_groups: str | None = None,
         updated_at: str | None = None,
     ) -> None:
 
         self._user_id = user_id
-        self._email = email
-        self._family_name = family_name
-        self._given_name = given_name
-        self._cust_saml_groups = cust_saml_groups
-        self._cust_vu_groups = cust_vu_groups
+        self.email = email
+        self.family_name = family_name
+        self.given_name = given_name
+        self.cust_saml_groups = cust_saml_groups
         self._updated_at = updated_at
-        self._version = 1
+        self.version = 1
 
     @classmethod
     def _user_table(cls):
@@ -77,6 +75,20 @@ class AwsUser(UserABC):
         """
         return self._user_id
 
+    @user_id.setter
+    def user_id(self, value: str) -> None:
+        """
+        Sets the user ID for the provider.
+
+        Args:
+            value (str): The user ID to set.
+        Raises:
+            TypeError: If the provided value is not a string.
+        """
+        if not isinstance(value, str):
+            raise TypeError("user_id must be str")
+        self._user_id = value
+
     @property
     def email(self) -> str | None:
         """
@@ -98,7 +110,7 @@ class AwsUser(UserABC):
         Raises:
             TypeError: If the provided value is not a string.
         """
-        if not isinstance(value, str):
+        if not isinstance(value, str) and value is not None:
             raise TypeError("email must be str")
         self._email = value
 
@@ -123,7 +135,7 @@ class AwsUser(UserABC):
         Raises:
             TypeError: If the provided value is not a string.
         """
-        if not isinstance(value, str):
+        if not isinstance(value, str) and value is not None:
             raise TypeError("family_name must be str")
         self._family_name = value
 
@@ -148,43 +160,9 @@ class AwsUser(UserABC):
         Raises:
             TypeError: If the provided value is not a string.
         """
-        if not isinstance(value, str):
+        if not isinstance(value, str) and value is not None:
             raise TypeError("given_name must be str")
         self._given_name = value
-
-    @property
-    def cust_vu_groups(self) -> str | None:
-        """
-        Returns the custom VU groups associated with the user.
-
-        Returns:
-            str | None: A string containing the custom VU groups
-                        if available, otherwise None.
-        """
-        return self._cust_vu_groups
-
-    @cust_vu_groups.setter
-    def cust_vu_groups(self, value: list[str] | None) -> None:
-        """
-        Sets the custom VU groups for the user.
-
-        Args:
-            value (list[str] | None): A list of group names as strings,
-                or None to clear the groups.
-
-        Raises:
-            TypeError: If value is not a list of strings.
-
-        Side Effects:
-            Updates the internal _cust_vu_groups attribute with a
-            JSON-encoded list (stringified) of group names or None.
-        """
-        if value is None:
-            self._cust_vu_groups = None
-            return
-        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
-            raise TypeError("cust_vu_groups must be a list of strings")
-        self._cust_vu_groups = json.dumps(value)
 
     @property
     def updated_at(self) -> str | None:
@@ -245,7 +223,7 @@ class AwsUser(UserABC):
 
         Returns:
             dict: A dictionary containing user information including user_id, email,
-                  family_name, given_name, custom SAML groups, custom VU groups,
+                  family_name, given_name, custom SAML groups
                   and updated_at.
         """
         return {
@@ -254,7 +232,6 @@ class AwsUser(UserABC):
             "family_name": self.family_name,
             "given_name": self.given_name,
             "custom:saml_groups": self.cust_saml_groups,
-            "custom:vu_groups": self.cust_vu_groups,
             "updated_at": self.updated_at,  # TODO(sam) make setter/getter
             "version": self.version,
         }
@@ -419,7 +396,6 @@ class AwsUser(UserABC):
                 updated_at=item.get("updated_at", None),
             )
             user.cust_saml_groups = item.get("custom:saml_groups", None)
-            user.cust_vu_groups = item.get("custom:vu_groups", None)
 
             return user
 

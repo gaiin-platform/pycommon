@@ -13,7 +13,6 @@ class UserABC(ABC):
         user_id (str): Unique identifier for the user.
         updated_at (str): Timestamp of the last update.
         cust_saml_groups (str | None): Custom SAML groups associated with the user.
-        cust_vu_groups (str | None): Custom VU groups associated with the user.
         family_name (str | None): User's family (last) name.
         given_name (str | None): User's given (first) name.
         email (str | None): User's email address.
@@ -46,7 +45,6 @@ class UserABC(ABC):
     user_id: str
     updated_at: str
     cust_saml_groups: str | None
-    cust_vu_groups: str | None
     family_name: str | None
     given_name: str | None
     email: str | None
@@ -60,7 +58,6 @@ class UserABC(ABC):
         family_name: str | None = None,
         given_name: str | None = None,
         cust_saml_groups: str | None = None,
-        cust_vu_groups: str | None = None,
         updated_at: str | None = None,
     ) -> None: ...
 

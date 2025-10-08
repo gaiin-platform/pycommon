@@ -35,17 +35,6 @@ def test_given_name_getter_and_setter():
         user.given_name = 123
 
 
-def test_cust_vu_groups_getter_and_setter():
-    user = make_user()
-    assert user.cust_vu_groups is None
-    user.cust_vu_groups = ["group1", "group2"]
-    assert json.loads(user.cust_vu_groups) == ["group1", "group2"]
-    user.cust_vu_groups = None
-    assert user.cust_vu_groups is None
-    with pytest.raises(TypeError):
-        user.cust_vu_groups = [1, 2]
-
-
 def test_cust_saml_groups_getter_and_setter():
     user = make_user()
     assert user.cust_saml_groups is None
@@ -191,7 +180,6 @@ def test_get_by_user_id_success(monkeypatch):
             "given_name": "John",
             "updated_at": "2024-01-01T00:00:00Z",
             "custom:saml_groups": None,
-            "custom:vu_groups": None,
         }
     }
     monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
@@ -200,12 +188,22 @@ def test_get_by_user_id_success(monkeypatch):
     assert user.email == "test@example.com"
 
 
+def test_set_user_id():
+    user = make_user()
+    user.user_id = "new_id"
+    assert user.user_id == "new_id"
+
+
+def test_set_user_id_bad_type():
+    user = make_user()
+    with pytest.raises(TypeError):
+        user.user_id = 12345
+
+
 def test_email_setter_type_error():
     user = make_user()
     with pytest.raises(TypeError):
         user.email = 123
-    with pytest.raises(TypeError):
-        user.email = None
 
 
 def test_email_setter_correct():
@@ -217,27 +215,13 @@ def test_email_setter_correct():
 def test_family_name_setter_type_error():
     user = make_user()
     with pytest.raises(TypeError):
-        user.family_name = None
-    with pytest.raises(TypeError):
         user.family_name = 123.45
 
 
 def test_given_name_setter_type_error():
     user = make_user()
     with pytest.raises(TypeError):
-        user.given_name = None
-    with pytest.raises(TypeError):
         user.given_name = ["not", "a", "string"]
-
-
-def test_cust_vu_groups_setter_type_error():
-    user = make_user()
-    with pytest.raises(TypeError):
-        user.cust_vu_groups = "not a list"
-    with pytest.raises(TypeError):
-        user.cust_vu_groups = [1, "valid", {}]
-    with pytest.raises(TypeError):
-        user.cust_vu_groups = [None, "valid"]
 
 
 def test_cust_saml_groups_setter_type_error():
@@ -366,14 +350,12 @@ def test_create_non_null_dynamodb_dict_excludes_none_fields():
         family_name="Smith",
         given_name=None,
         cust_saml_groups=None,
-        cust_vu_groups=None,
         updated_at=None,
     )
     d = user._create_non_null_dynamodb_dict()
     assert "email" not in d
     assert "given_name" not in d
     assert "cust_saml_groups" not in d or d["cust_saml_groups"] is None
-    assert "cust_vu_groups" not in d or d["cust_vu_groups"] is None
     assert "updated_at" not in d or d["updated_at"] is None
     assert d["family_name"] == "Smith"
     assert d["user_id"] == "u1"
@@ -458,7 +440,6 @@ def test_deletes_attributes_set_to_none(monkeypatch):
             "family_name": "Smith",
             "given_name": "John",
             "custom:saml_groups": '["abc"]',
-            "custom:vu_groups": None,
             "updated_at": None,
             "version": 1,
         }
@@ -501,7 +482,6 @@ def test_none_deletes_attr(monkeypatch):
             "family_name": "Smith",
             "given_name": "John",
             "custom:saml_groups": '["abc"]',
-            "custom:vu_groups": None,
             "updated_at": None,
             "version": 1,
         }
