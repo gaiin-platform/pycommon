@@ -195,8 +195,6 @@ def _get_jwks_for_url(oauth_issuer_base_url: str, fail_open: bool) -> dict:
 
 @required_env_vars(
     {
-        "OAUTH_ISSUER_BASE_URL": [],  # Configuration value, no AWS operations
-        "OAUTH_AUDIENCE": [],  # Configuration value, no AWS operations
         "ACCOUNTS_DYNAMO_TABLE": [
             DynamoDBOperation.GET_ITEM
         ],  # DynamoDB table for user accounts
