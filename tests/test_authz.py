@@ -119,8 +119,6 @@ def test_get_claims_success(
 @patch("pycommon.authz.os.getenv")
 def test_get_claims_missing_env(mock_get_env, mock_requests_get):
     required_env_vars = [
-        "OAUTH_ISSUER_BASE_URL",
-        "OAUTH_AUDIENCE",
         "ACCOUNTS_DYNAMO_TABLE",
     ]
 
@@ -128,12 +126,8 @@ def test_get_claims_missing_env(mock_get_env, mock_requests_get):
 
         def mock_getenv_side_effect(key, default=None, missing=missing_var):
             env_vars = {
-                "OAUTH_ISSUER_BASE_URL": (
-                    "mock_value" if missing != "OAUTH_ISSUER_BASE_URL" else None
-                ),
-                "OAUTH_AUDIENCE": (
-                    "mock_value" if missing != "OAUTH_AUDIENCE" else None
-                ),
+                "OAUTH_ISSUER_BASE_URL": "mock_value",
+                "OAUTH_AUDIENCE": "mock_value",
                 "ACCOUNTS_DYNAMO_TABLE": (
                     "mock_value" if missing != "ACCOUNTS_DYNAMO_TABLE" else None
                 ),
@@ -1586,15 +1580,13 @@ def test_is_rate_limited_unexpected_exception(mock_getenv, mock_boto3):
 @patch("pycommon.authz.requests.get")
 @patch("pycommon.authz.os.getenv")
 def test_get_claims_missing_env_vars(mock_get_env, _):
-    required_vars = ["OAUTH_ISSUER_BASE_URL", "OAUTH_AUDIENCE", "ACCOUNTS_DYNAMO_TABLE"]
+    required_vars = ["ACCOUNTS_DYNAMO_TABLE"]
     for missing_var in required_vars:
 
         def mock_getenv_side_effect(key, default=None, missing=missing_var):
             env_vars = {
-                "OAUTH_ISSUER_BASE_URL": (
-                    "value" if missing != "OAUTH_ISSUER_BASE_URL" else None
-                ),
-                "OAUTH_AUDIENCE": "value" if missing != "OAUTH_AUDIENCE" else None,
+                "OAUTH_ISSUER_BASE_URL": "value",
+                "OAUTH_AUDIENCE": "value",
                 "ACCOUNTS_DYNAMO_TABLE": (
                     "value" if missing != "ACCOUNTS_DYNAMO_TABLE" else None
                 ),
