@@ -1988,9 +1988,8 @@ def test_validate_data_with_invalid_compressed_data():
         }
     }
 
-    # Should detect compressed format but fail decompression, continue with original
-    # and fail JSON validation since raw compressed data is not a valid object
-    with pytest.raises(ValidationError, match="Invalid data"):
+    # Should detect compressed format but fail decompression and raise ValidationError
+    with pytest.raises(ValidationError, match="Failed to decompress data"):
         _validate_data(
             "/compressed", "test", {"data": invalid_compressed}, False, validator_rules
         )

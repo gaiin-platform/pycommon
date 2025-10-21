@@ -348,28 +348,40 @@ def _validate_data(
     if name in validator and op in validator[name]:
         print(f"Found validator for {name}/{op}")
         schema: dict = validator[name][op]
-        validate_data = data
-
         # Always check for compressed data first, regardless of schema
         if "data" in data and is_lzw_compressed_format(data["data"]):
             print("Compressed data detected in data['data'], decompressing...")
             try:
                 decompressed = lzw_uncompress(data["data"])
                 data["data"] = decompressed
-                print("Data decompressed successfully")
+                print(
+                    f"Data decompressed successfully. Type: \
+                    {type(decompressed).__name__}"
+                )
             except Exception as e:
                 print(f"Failed to decompress data['data']: {e}")
-                print("Continuing with original data")
+                raise ValidationError(f"Failed to decompress data: {e}")
 
         if schema != {}:
             validate_data = data["data"]
+        else:
+            validate_data = data
+
+        print(f"Validating data of type: {type(validate_data).__name__}")
+        print(f"Original data['data'] type: {type(data.get('data', 'N/A')).__name__}")
+        print(f"Schema empty: {schema == {}}")
         try:
             json_validate(instance=validate_data, schema=schema)
             print("JSON validation passed")
         except ValidationError as e:
             print(f"JSON validation failed: {e.message}")
             print(f"Schema Expected: {schema}")
-            print(f"Data Provided: {validate_data}")
+            print(f"Raw data['data']: {data.get('data', 'N/A')}")
+            print(f"Data being validated: {validate_data}")
+            validation_target = (
+                "full data object" if schema == {} else 'data["data"] only'
+            )
+            print(f"Validation target: {validation_target}")
             raise ValidationError(f"Invalid data: {e.message}")
         except SchemaError as e:
             print(f"Schema error: {e.message}")
