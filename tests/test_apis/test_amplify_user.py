@@ -26,13 +26,19 @@ class TestGetEmailSuggestions:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "emails": ["user1@example.com", "user2@example.com"]
+            "user_email_map": {
+                "user1@example.com": "user1@example.com",
+                "user2@example.com": "user2@example.com",
+            }
         }
         mock_get.return_value = mock_response
 
         result = get_email_suggestions("test_token")
 
-        assert result == ["user1@example.com", "user2@example.com"]
+        assert result == {
+            "user1@example.com": "user1@example.com",
+            "user2@example.com": "user2@example.com",
+        }
         mock_get.assert_called_once_with(
             "http://test-api.com/utilities/emails",
             headers={
@@ -49,13 +55,19 @@ class TestGetEmailSuggestions:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "emails": ["admin@example.com", "admin2@example.com"]
+            "user_email_map": {
+                "admin@example.com": "admin@example.com",
+                "admin2@example.com": "admin2@example.com",
+            }
         }
         mock_get.return_value = mock_response
 
         result = get_email_suggestions("test_token", "admin")
 
-        assert result == ["admin@example.com", "admin2@example.com"]
+        assert result == {
+            "admin@example.com": "admin@example.com",
+            "admin2@example.com": "admin2@example.com",
+        }
         mock_get.assert_called_once_with(
             "http://test-api.com/utilities/emails",
             headers={
@@ -74,31 +86,42 @@ class TestGetEmailSuggestions:
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "statusCode": 200,
-            "body": '{"emails": ["user1@example.com", "user2@example.com"]}',
+            "body": '{"user_email_map": {"user1@example.com": "user1@example.com", \
+                 "user2@example.com": "user2@example.com"}}',
         }
         mock_get.return_value = mock_response
 
         result = get_email_suggestions("test_token")
 
-        assert result == ["user1@example.com", "user2@example.com"]
+        assert result == {
+            "user1@example.com": "user1@example.com",
+            "user2@example.com": "user2@example.com",
+        }
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
     @patch("pycommon.api.amplify_users.requests.get")
-    def test_get_email_suggestions_nested_structure_empty_emails(self, mock_get):
-        """Test nested JSON structure with empty emails list."""
+    def test_get_email_suggestions_nested_structure_empty_user_email_map(
+        self, mock_get
+    ):
+        """Test nested JSON structure with empty user_email_map."""
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"statusCode": 200, "body": '{"emails": []}'}
+        mock_response.json.return_value = {
+            "statusCode": 200,
+            "body": '{"user_email_map": {}}',
+        }
         mock_get.return_value = mock_response
 
         result = get_email_suggestions("test_token")
 
-        assert result == []
+        assert result == {}
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
     @patch("pycommon.api.amplify_users.requests.get")
-    def test_get_email_suggestions_nested_structure_missing_emails(self, mock_get):
-        """Test nested JSON structure with missing emails key."""
+    def test_get_email_suggestions_nested_structure_missing_user_email_map(
+        self, mock_get
+    ):
+        """Test nested JSON structure with missing user_email_map key."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -109,7 +132,7 @@ class TestGetEmailSuggestions:
 
         result = get_email_suggestions("test_token")
 
-        assert result == []
+        assert result == {}
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
     @patch("pycommon.api.amplify_users.requests.get")
@@ -127,20 +150,20 @@ class TestGetEmailSuggestions:
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
     @patch("pycommon.api.amplify_users.requests.get")
     def test_get_email_suggestions_empty_response(self, mock_get):
-        """Test handling of empty email list in response."""
+        """Test handling of empty user_email_map in response."""
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"emails": []}
+        mock_response.json.return_value = {"user_email_map": {}}
         mock_get.return_value = mock_response
 
         result = get_email_suggestions("test_token", "nonexistent")
 
-        assert result == []
+        assert result == {}
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
     @patch("pycommon.api.amplify_users.requests.get")
-    def test_get_email_suggestions_missing_emails_key(self, mock_get):
-        """Test handling of response missing 'emails' key."""
+    def test_get_email_suggestions_missing_user_email_map_key(self, mock_get):
+        """Test handling of response missing 'user_email_map' key."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"other_key": "value"}
@@ -148,7 +171,7 @@ class TestGetEmailSuggestions:
 
         result = get_email_suggestions("test_token")
 
-        assert result == []
+        assert result == {}
 
     @patch.dict(os.environ, {"API_BASE_URL": "http://test-api.com"})
     @patch("pycommon.api.amplify_users.requests.get")
@@ -377,7 +400,10 @@ class TestAreValidAmplifyUsersOld:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        mock_get_emails.return_value = ["user1@example.com", "user2@example.com"]
+        mock_get_emails.return_value = {
+            "user1@example.com": "user1@example.com",
+            "user2@example.com": "user2@example.com",
+        }
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
             {"owner": "system2@example.com", "systemId": "sys2"},
@@ -403,7 +429,7 @@ class TestAreValidAmplifyUsersOld:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        mock_get_emails.return_value = ["User1@Example.com"]
+        mock_get_emails.return_value = {"User1@Example.com": "User1@Example.com"}
         mock_get_systems.return_value = [
             {"owner": "System1@Example.com", "systemId": "sys1"},
         ]
@@ -433,7 +459,10 @@ class TestAreValidAmplifyUsersOld:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        mock_get_emails.return_value = ["user1@example.com", "user2@example.com"]
+        mock_get_emails.return_value = {
+            "user1@example.com": "user1@example.com",
+            "user2@example.com": "user2@example.com",
+        }
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
@@ -460,7 +489,7 @@ class TestAreValidAmplifyUsersOld:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        mock_get_emails.return_value = []
+        mock_get_emails.return_value = {}
         mock_get_systems.return_value = []
 
         valid, invalid = are_valid_amplify_users("test_token", ["user@example.com"])
@@ -717,6 +746,7 @@ class TestAreValidAmplifyUsers:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
+        mock_get_emails.return_value = {}
         mock_get_systems.return_value = [
             {"owner": "System1@Example.com", "systemId": "sys1"},
         ]
@@ -743,6 +773,7 @@ class TestAreValidAmplifyUsers:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
+        mock_get_emails.return_value = {}
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]
@@ -823,6 +854,7 @@ class TestAreValidAmplifyUsers:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
+        mock_get_emails.return_value = None
         mock_get_systems.return_value = None
 
         valid, invalid = are_valid_amplify_users(
@@ -892,6 +924,7 @@ class TestAreValidAmplifyUsers:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
+        mock_get_emails.return_value = {}
         mock_get_systems.return_value = [
             {"owner": "system1@example.com", "systemId": "sys1"},
         ]

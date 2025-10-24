@@ -3,7 +3,7 @@
 
 import json
 import os
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import boto3
 import requests
@@ -12,17 +12,17 @@ from botocore.exceptions import ClientError
 
 def get_email_suggestions(
     access_token: str, email_prefix: str = "*"
-) -> Optional[List[str]]:
+) -> Optional[Dict[str, str]]:
     """
-    Fetch email suggestions based on a query prefix.
+    Fetch user email mapping based on a query prefix.
 
     Args:
         access_token: Bearer token for authentication
         email_prefix: Email prefix to search for, * defaults to get all emails
 
     Returns:
-        Optional[List[str]]: List of email addresses matching the prefix,
-                            or None if the request fails
+        Optional[Dict[str, str]]: Dictionary mapping user_id to email address,
+                                  or None if the request fails
     """
     print("Initiate get email suggestions call")
 
@@ -45,10 +45,10 @@ def get_email_suggestions(
             if "body" in response_content:
                 # Parse the body field as JSON
                 body_data = json.loads(response_content["body"])
-                return body_data.get("emails", [])
+                return body_data.get("user_email_map", {})
             else:
                 # Fallback for direct structure
-                return response_content.get("emails", [])
+                return response_content.get("user_email_map", {})
 
         print(f"Request failed with status code: {response.status_code}")
 
