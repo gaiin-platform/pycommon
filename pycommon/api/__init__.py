@@ -4,6 +4,7 @@
 # Import submodules for direct access
 from . import (
     amplify_groups,
+    amplify_users,
     api_key,
     assistants,
     credentials,
@@ -19,6 +20,11 @@ from .amplify_groups import (
     get_user_affiliated_groups,
     verify_member_of_ast_admin_group,
     verify_user_in_amp_group,
+)
+from .amplify_users import (
+    are_valid_amplify_users,
+    get_email_suggestions,
+    get_system_ids,
 )
 from .api_key import deactivate_key, get_api_keys
 from .assistants import (
@@ -90,6 +96,9 @@ __all__ = [
     "set_route_data",
     "set_permissions_by_state",
     "set_op_type",
+    "get_email_suggestions",
+    "get_system_ids",
+    "are_valid_amplify_users",
     # Submodules
     "secrets",
     "files",
@@ -99,6 +108,7 @@ __all__ = [
     "data_sources",
     "object_permissions",
     "amplify_groups",
+    "amplify_users",
     "api_key",
     "ses_email",
     "ops",
