@@ -41,7 +41,10 @@ from pycommon.exceptions import (
     HTTPUnauthorized,
     UnknownApiUserException,
 )
+from pycommon.logger import getLogger
 from pycommon.lzw import is_lzw_compressed_format, lzw_uncompress
+
+logger = getLogger("authz")
 
 ALGORITHMS = ["RS256"]
 # used to minimize the number of calls to OAuth issuer for JWKS
@@ -189,7 +192,7 @@ def _get_jwks_for_url(oauth_issuer_base_url: str, fail_open: bool) -> dict:
         jwks_data: dict = jwks_response.json()
         return jwks_data
     except json.JSONDecodeError as e:
-        print(f"Error decoding JSON response from JWKS: {e}")
+        logger.error(f"Error decoding JSON response from JWKS: {e}")
         raise ClaimException("Invalid JWKS response")
 
 
@@ -225,7 +228,7 @@ def get_claims(token: str) -> dict:
     # https://cognito-idp.<Region>.amazonaws.com/<userPoolId>/.well-known/jwks.json
 
     if token is None or not isinstance(token, str):
-        print("No valid access token found.")
+        logger.error("No valid access token found.")
         raise ClaimException("No Valid Access Token Found")
 
     # Guaranteed by required_env_vars decorator
@@ -248,7 +251,7 @@ def get_claims(token: str) -> dict:
             break
 
     if not rsa_key:
-        print(f"No RSA key found for kid: {header.get('kid')}")
+        logger.error(f"No RSA key found for kid: {header.get('kid')}")
         raise ClaimException("No valid RSA key found in JWKS")
 
     # Finally, decode
@@ -261,26 +264,26 @@ def get_claims(token: str) -> dict:
             issuer=oauth_issuer_base_url,
         )
     except ExpiredSignatureError as e:
-        print(f"JWT token has expired: {e}")
+        logger.error(f"JWT token has expired: {e}")
         raise ClaimException("JWT token has expired")
     except JWTClaimsError as e:
-        print(f"JWT claims error: {e}")
+        logger.error(f"JWT claims error: {e}")
         raise ClaimException("Invalid JWT claims")
     except JWTError as e:
-        print(f"JWT decoding error: {e}")
+        logger.error(f"JWT decoding error: {e}")
         raise ClaimException("Invalid JWT token")
 
-    print(f"IDP_PREFIX from env: {idp_prefix}")
-    print(f"Original username: {payload['username']}")
+    logger.debug(f"IDP_PREFIX from env: {idp_prefix}")
+    logger.debug(f"Original username: {payload['username']}")
     if payload.get("immutable_id"):
-        print(f"Using immutable_id for user: {payload['immutable_id']}")
+        logger.info(f"Using immutable_id for user: {payload['immutable_id']}")
         user = payload["immutable_id"]
     else:
         user = payload["username"]
         if len(idp_prefix) > 0 and user.startswith(idp_prefix + "_"):
             user = user.split(idp_prefix + "_", 1)[1]
-            print(f"User matched pattern, updated to: {user}")
-        print(f"Final user value: {user}")
+            logger.info(f"User matched pattern, updated to: {user}")
+        logger.info(f"Final user value: {user}")
 
     dynamodb = boto3.resource("dynamodb")
     table = dynamodb.Table(accounts_table_name)
@@ -288,7 +291,7 @@ def get_claims(token: str) -> dict:
     rate_limit: Optional[dict] = NO_RATE_LIMIT
     response = table.get_item(Key={"user": user})
     if "Item" not in response:
-        print(f"Note: User {user} has no accounts")
+        logger.warning(f"User {user} has no accounts")
 
     accounts: List[dict] = response.get("Item", {}).get("accounts", [])
     for acct in accounts:
@@ -298,7 +301,7 @@ def get_claims(token: str) -> dict:
                 rate_limit = acct["rateLimit"]
 
     if not account:
-        print("setting account to general_account")
+        logger.warning("Setting account to general_account")
         account = "general_account"
 
     payload["account"] = account
@@ -332,34 +335,36 @@ def _validate_data(
     Raises:
         ValidationError: If the data does not conform to the schema.
     """
-    print(
+    logger.debug(
         f"_validate_data called with name={name}, op={op}, api_accessed={api_accessed}"
     )
 
     validator: dict = validator_rules.get(
         "api_validators" if api_accessed else "validators", None
     )
-    print(f"Using {'api_validators' if api_accessed else 'validators'} from rules")
+    logger.debug(
+        f"Using {'api_validators' if api_accessed else 'validators'} from rules"
+    )
 
     if not validator:
-        print("No validator found, raising ValidationError")
+        logger.error("No validator found, raising ValidationError")
         raise ValidationError("No validator found for the operation")
 
     if name in validator and op in validator[name]:
-        print(f"Found validator for {name}/{op}")
+        logger.debug(f"Found validator for {name}/{op}")
         schema: dict = validator[name][op]
         # Always check for compressed data first, regardless of schema
         if "data" in data and is_lzw_compressed_format(data["data"]):
-            print("Compressed data detected in data['data'], decompressing...")
+            logger.debug("Compressed data detected in data['data'], decompressing...")
             try:
                 decompressed = lzw_uncompress(data["data"])
                 data["data"] = decompressed
-                print(
+                logger.debug(
                     f"Data decompressed successfully. Type: \
                     {type(decompressed).__name__}"
                 )
             except Exception as e:
-                print(f"Failed to decompress data['data']: {e}")
+                logger.error(f"Failed to decompress data['data']: {e}")
                 raise ValidationError(f"Failed to decompress data: {e}")
 
         if schema != {}:
@@ -367,27 +372,29 @@ def _validate_data(
         else:
             validate_data = data
 
-        print(f"Validating data of type: {type(validate_data).__name__}")
-        print(f"Original data['data'] type: {type(data.get('data', 'N/A')).__name__}")
-        print(f"Schema empty: {schema == {}}")
+        logger.debug(f"Validating data of type: {type(validate_data).__name__}")
+        logger.debug(
+            f"Original data['data'] type: {type(data.get('data', 'N/A')).__name__}"
+        )
+        logger.debug(f"Schema empty: {schema == {}}")
         try:
             json_validate(instance=validate_data, schema=schema)
-            print("JSON validation passed")
+            logger.debug("JSON validation passed")
         except ValidationError as e:
-            print(f"JSON validation failed: {e.message}")
-            print(f"Schema Expected: {schema}")
-            print(f"Raw data['data']: {data.get('data', 'N/A')}")
-            print(f"Data being validated: {validate_data}")
+            logger.error(f"JSON validation failed: {e.message}")
+            logger.debug(f"Schema Expected: {schema}")
+            logger.debug(f"Raw data['data']: {data.get('data', 'N/A')}")
+            logger.debug(f"Data being validated: {validate_data}")
             validation_target = (
                 "full data object" if schema == {} else 'data["data"] only'
             )
-            print(f"Validation target: {validation_target}")
+            logger.debug(f"Validation target: {validation_target}")
             raise ValidationError(f"Invalid data: {e.message}")
         except SchemaError as e:
-            print(f"Schema error: {e.message}")
+            logger.error(f"Schema error: {e.message}")
             raise ValidationError(f"Invalid schema: {e.message}")
     else:
-        print(f"Invalid data or path: {name} - op:{op} - data: {data}")
+        logger.error(f"Invalid data or path: {name} - op:{op} - data: {data}")
         raise ValidationError("Invalid data or path")
 
 
@@ -418,75 +425,75 @@ def _parse_and_validate(
         HTTPBadRequest: If the input is invalid or the user lacks permissions.
         HTTPUnauthorized: If the user does not have permission to perform the operation.
     """  # noqa: E501
-    print("Getting path from event...")
+    logger.debug("Getting path from event...")
     # Handle both API Gateway and Lambda Function URL events
     name: Optional[str] = None
 
     # First try API Gateway format
     if "path" in event:
-        print("API Gateway format detected")
+        logger.debug("API Gateway format detected")
         name = event.get("path")
     # Then try Lambda Function URL formats
     elif "rawPath" in event:
-        print("Lambda Function URL format detected")
+        logger.debug("Lambda Function URL format detected")
         name = event.get("rawPath")
     elif "requestContext" in event and "http" in event["requestContext"]:
-        print("Lambda Function URL alternative format detected")
+        logger.debug("Lambda Function URL alternative format detected")
         name = event["requestContext"]["http"].get("path")
     elif "requestContext" in event and "path" in event["requestContext"]:
-        print("Container Lambda Function URL format detected")
+        logger.debug("Container Lambda Function URL format detected")
         name = event["requestContext"].get("path")
 
-    print(
+    logger.debug(
         f"_parse_and_validate started for user: {current_user}, "
         f"op: {op}, path: {name}"
     )
-    print(f"api_accessed: {api_accessed}, validate_body: {validate_body}")
+    logger.debug(f"api_accessed: {api_accessed}, validate_body: {validate_body}")
 
     data: dict = {}
-    print("Parsing request body...")
+    logger.debug("Parsing request body...")
     try:
         data = json.loads(event["body"]) if event.get("body") else {}
-        print("Body parsed successfully")
+        logger.debug("Body parsed successfully")
     except json.decoder.JSONDecodeError:
-        print("JSON decode error in body parsing")
+        logger.error("JSON decode error in body parsing")
         raise HTTPBadRequest("Unable to parse JSON body.")
 
     if not name:
-        print("No path found in event")
+        logger.error("No path found in event")
         raise HTTPBadRequest("Unable to perform the operation, invalid request.")
 
     if validate_body:
-        print("Validating data...")
+        logger.debug("Validating data...")
         try:
             _validate_data(name, op, data, api_accessed, validator_rules)
-            print("Data validation completed successfully")
+            logger.debug("Data validation completed successfully")
         except ValidationError as e:
-            print(f"Validation error: {e}")
+            logger.error(f"Validation error: {e}")
             raise HTTPBadRequest(e.message)
 
-    print("Checking permissions...")
+    logger.debug("Checking permissions...")
     try:
         # If the permission checker exists, is callable, returns a callabe and
         # that callable returns False, then we raise an HTTPUnauthorized
         if permission_checker is not None:
-            print("Permission checker exists, calling it...")
+            logger.debug("Permission checker exists, calling it...")
             permission_result = permission_checker(current_user, name, op, data)
-            print("Permission checker returned, calling result function...")
+            logger.debug("Permission checker returned, calling result function...")
             if not permission_result(current_user, data):
-                print("User does not have permission to perform the operation.")
+                logger.error("User does not have permission to perform the operation.")
                 raise HTTPUnauthorized(
                     "User does not have permission to perform the operation."
                 )
-            print("Permission check passed")
+            logger.debug("Permission check passed")
         else:
-            print("No permission checker set")
+            logger.debug("No permission checker set")
     except (NameError, TypeError) as e:
         # This  means our permission checker is not defined
-        print(f"Permission checker error (expected): {e}")
+        logger.debug(f"Permission checker error (expected): {e}")
         pass
 
-    print(f"_parse_and_validate completed successfully, returning name={name}")
+    logger.debug(f"_parse_and_validate completed successfully, returning name={name}")
     return [name, data]
 
 
@@ -516,7 +523,7 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
         HTTPUnauthorized: If the rate limit is exceeded.
         RuntimeError: If an internal server error occurs during the database operation.
     """  # noqa: E501
-    print("API route was taken")
+    logger.info("API route was taken")
     api_keys_table_name: str = os.getenv("API_KEYS_DYNAMODB_TABLE")  # type: ignore
 
     # Set up DynamoDB connection
@@ -540,14 +547,14 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
     items = response.get("Items", [])
 
     if not items:
-        print("API key does not exist.")
+        logger.error("API key does not exist.")
         raise LookupError("API key not found.")
 
     item = items[0]
 
     # Check if the API key is active
     if not item.get("active", False):
-        print("API key is inactive.")
+        logger.error("API key is inactive.")
         raise PermissionError("API key is inactive.")
 
     # Optionally check the expiration date if applicable
@@ -556,13 +563,13 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
         expiration_date
         and datetime.strptime(expiration_date, "%Y-%m-%d") <= datetime.now()
     ):
-        print("API key has expired.")
+        logger.error("API key has expired.")
         raise PermissionError("API key has expired.")
 
     # Check for access rights
     access = item.get("accessTypes", [])
     if not any(access_type in access for access_type in _access_types):
-        print("API key doesn't have access to the functionality.")
+        logger.error("API key doesn't have access to the functionality.")
         raise PermissionError(
             "API key does not have access to the required functionality."
         )
@@ -583,7 +590,7 @@ def api_claims(event: Dict[str, Any], context: dict, token: str) -> Dict[str, An
         UpdateExpression="SET lastAccessed = :now",
         ExpressionAttributeValues={":now": datetime.now().isoformat()},
     )
-    print("Last Access updated.")
+    logger.info("Last Access updated.")
 
     return {
         "username": current_user,
@@ -629,7 +636,7 @@ def _determine_api_user(data: Dict[str, Any]) -> str:
     elif key_type == "system":
         user = data.get("systemId")
     else:
-        print("Unknown or missing key type in api_owner_id:", key_type)
+        logger.error(f"Unknown or missing key type in api_owner_id: {key_type}")
         raise UnknownApiUserException("Invalid or unrecognized key type.")
 
     if not user or not isinstance(user, str):
@@ -661,7 +668,7 @@ def is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
                           end-user should not see.
     """  # noqa: E501
 
-    print(rate_limit)
+    logger.debug(f"Rate limit config: {rate_limit}")
     period: Optional[str] = rate_limit.get("period")
     if period is None:
         return False, "Rate limit period is not specified in the rate_limit data"
@@ -673,7 +680,7 @@ def is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
     dynamodb = boto3.resource("dynamodb")
     table = dynamodb.Table(cost_calc_table)
     try:
-        print("Query cost calculation table")
+        logger.debug("Query cost calculation table")
         response = table.query(KeyConditionExpression=Key("id").eq(current_user))
         items = response.get("Items", [])
         if not items:
@@ -692,7 +699,7 @@ def is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
                 return False, "Hourly cost data is missing or malformed."
             spent = spent[current_hour]  # Get the current hour's usage
 
-        print(f"Amount spent {spent}")
+        logger.debug(f"Amount spent {spent}")
         rate_val: Optional[str] = rate_limit.get("rate")
         if rate_val is None:
             return False, "Rate value missing in rate_limit."
@@ -706,10 +713,10 @@ def is_rate_limited(current_user: str, rate_limit: dict) -> Tuple[bool, str]:
         return False, "Rate limit not exceeded"
 
     except boto3.exceptions.Boto3Error as error:
-        print(f"Boto3 error during rate limit DynamoDB operation: {error}")
+        logger.error(f"Boto3 error during rate limit DynamoDB operation: {error}")
         return False, "Error accessing DynamoDB for rate limit check"
     except Exception as error:
-        print(f"Unexpected error during rate limit DynamoDB operation: {error}")
+        logger.error(f"Unexpected error during rate limit DynamoDB operation: {error}")
         return False, "Unexpected error during rate limit check"
 
 
@@ -776,13 +783,15 @@ def validated(
                 )
 
                 current_user = claims["username"]
-                print(f"User: {current_user}")
+                logger.info(f"User: {current_user}")
                 if current_user is None:
                     raise HTTPUnauthorized("User not found.")
 
-                print("Prior to call _parse_and_validate...")
-                print(f"Validation rules available: {_validate_rules is not None}")
-                print(
+                logger.debug("Prior to call _parse_and_validate...")
+                logger.debug(
+                    f"Validation rules available: {_validate_rules is not None}"
+                )
+                logger.debug(
                     f"Permission checker available: {_permission_checker is not None}"
                 )
 
@@ -795,9 +804,9 @@ def validated(
                     validate_body,
                     _permission_checker,
                 )
-                print(f"_parse_and_validate completed successfully. name={name}")
+                logger.debug(f"_parse_and_validate completed successfully. name={name}")
 
-                print("Setting up data dictionary...")
+                logger.debug("Setting up data dictionary...")
                 data["access_token"] = token
                 data["account"] = claims["account"]
                 data["api_key_id"] = claims.get("api_key_id")
@@ -807,26 +816,26 @@ def validated(
                 data["purpose"] = claims.get(
                     "purpose"
                 )  # helps identify group system users for ex.
-                print("Data dictionary setup complete, calling main function...")
+                logger.debug("Data dictionary setup complete, calling main function...")
 
                 result = f(event, context, current_user, name, data)
-                print("Main function completed successfully")
+                logger.debug("Main function completed successfully")
 
                 return {
                     "statusCode": 200,
                     "body": json.dumps(result, cls=CustomPydanticJSONEncoder),
                 }
             except HTTPException as e:
-                print(f"HTTPException caught: {e.status_code} - {e}")
+                logger.error(f"HTTPException caught: {e.status_code} - {e}")
                 return {
                     "statusCode": e.status_code,
                     "body": json.dumps({"error": f"Error: {e.status_code} - {e}"}),
                 }
             except Exception as e:
-                print(f"Unexpected exception caught: {type(e).__name__} - {e}")
+                logger.error(f"Unexpected exception caught: {type(e).__name__} - {e}")
                 import traceback
 
-                print(f"Traceback: {traceback.format_exc()}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 raise
 
         return wrapper
