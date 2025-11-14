@@ -1630,6 +1630,61 @@ def test_function():
             finally:
                 os.chdir(original_cwd)
 
+    def test_resolve_ops_table_yaml_file_search_loop_coverage(self):
+        """Test resolve_ops_table YAML search loop to cover lines 403-423."""
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create single-level nested directory
+            nested_dir = os.path.join(temp_dir, "subdir")
+            os.makedirs(nested_dir)
+
+            # Create var directory at temp_dir level
+            var_dir = os.path.join(temp_dir, "var")
+            os.makedirs(var_dir)
+
+            # Create YAML file
+            yaml_file = os.path.join(var_dir, "test-stage-var.yml")
+            with open(yaml_file, "w") as f:
+                f.write("OPS_DYNAMODB_TABLE: test-ops-table\n")
+
+            # Change to nested directory so search has to go up one level
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(nested_dir)
+                # Clear env var to force YAML file search
+                with patch.dict(os.environ, {}, clear=True):
+                    result = resolve_ops_table("test-stage", None)
+                    assert result == "test-ops-table"
+            finally:
+                os.chdir(original_cwd)
+
+    def test_resolve_ops_table_yaml_io_error_coverage(self):
+        """Test resolve_ops_table YAML IOError exception handling."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            var_dir = os.path.join(temp_dir, "var")
+            os.makedirs(var_dir)
+            yaml_file = os.path.join(var_dir, "test-var.yml")
+
+            # Create file but make it unreadable by mocking open to raise IOError
+            with open(yaml_file, "w") as f:
+                f.write("OPS_DYNAMODB_TABLE: test\n")
+
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
+                with patch.dict(os.environ, {}, clear=True):
+                    with patch("os.path.exists", return_value=True):
+                        with patch(
+                            "builtins.open", side_effect=IOError("Permission denied")
+                        ):
+                            result = resolve_ops_table("test", None)
+                            # Should return None due to IOError
+                            assert result is None
+            finally:
+                os.chdir(original_cwd)
+
     def test_main_guard_register_exit_subprocess(self):
         """Test running pycommon/tools/ops.py as subprocess with
         register command and no valid table to cover
@@ -1641,6 +1696,8 @@ def test_function():
         # Ensure no env var or YAML file is present
         env = os.environ.copy()
         env.pop("OPS_DYNAMODB_TABLE", None)
+        # Add current directory to PYTHONPATH so subprocess can import pycommon
+        env["PYTHONPATH"] = os.getcwd()
 
         # Run from the project root directory where pycommon/tools/ops.py exists
         result = subprocess.run(
