@@ -13,7 +13,6 @@ Copyright (c) 2025 Vanderbilt University
 Authors: Jules White, Allen Karns, Karely Rodriguez, Max Moundas, Sam Hays
 """
 
-import logging
 import os
 from datetime import datetime
 from functools import wraps
@@ -32,8 +31,9 @@ from pycommon.dal.providers.aws.resource_perms import (  # noqa: F401
     SSMOperation,
 )
 from pycommon.exceptions import EnvVarError
+from pycommon.logger import getLogger
 
-logger = logging.getLogger(__name__)
+logger = getLogger("decorators")
 
 
 class EnvVarTracker:
@@ -179,7 +179,7 @@ class EnvVarTracker:
                             )
 
                             version_info = f", version: {version}" if version else ""
-                            print(
+                            logger.info(
                                 f"ENV_VAR_TRACKING: MERGED {service_var_key} - "
                                 f"added {list(operations_to_add)} → "
                                 f"now: {response['Attributes']['operations']}"
@@ -196,7 +196,7 @@ class EnvVarTracker:
                                 f"version={version_status}"
                             )
                         except Exception as update_error:
-                            print(
+                            logger.error(
                                 f"ENV_VAR_TRACKING: MERGE FAILED {service_var_key} - "
                                 f"{update_error}"
                             )
@@ -224,7 +224,7 @@ class EnvVarTracker:
             self.table.put_item(Item=record_item)
 
             version_info = f", version: {version}" if version else ""
-            print(
+            logger.info(
                 f"ENV_VAR_TRACKING: PUT NEW item for {service_var_key} - "
                 f"operations: {operation_strings}{version_info}"
             )

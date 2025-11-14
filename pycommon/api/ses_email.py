@@ -6,7 +6,10 @@ import os
 
 import requests
 
+from pycommon.logger import getLogger
 from pycommon.lzw import safe_compress
+
+logger = getLogger("ses_email")
 
 
 def send_email(
@@ -24,7 +27,7 @@ def send_email(
     Returns:
         bool: True if email was sent successfully, False otherwise
     """
-    print("Initiate email call")
+    logger.info("Initiate email call")
 
     endpoint = os.environ["API_BASE_URL"] + "/ses/send-email"
 
@@ -45,7 +48,7 @@ def send_email(
 
     try:
         response = requests.post(endpoint, headers=headers, data=json.dumps(request))
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = (
             response.json()
         )  # to adhere to object access return response dict
@@ -54,6 +57,6 @@ def send_email(
             return True
 
     except Exception as e:
-        print(f"Error sending email: {e}")
+        logger.error(f"Error sending email: {e}")
 
     return False

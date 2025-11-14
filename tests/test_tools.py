@@ -33,7 +33,8 @@ from pycommon.tools.ops import (
 class TestOpDecorator:
     """Test the @op decorator functionality."""
 
-    def test_op_decorator_basic(self, capsys):
+    @patch("pycommon.tools.ops.logger")
+    def test_op_decorator_basic(self, mock_logger):
         """Test basic op decorator functionality."""
 
         @op(
@@ -47,16 +48,16 @@ class TestOpDecorator:
             return "success"
 
         result = test_function()
-        captured = capsys.readouterr()
 
         assert result == "success"
-        assert "Path: /test" in captured.out
-        assert "Tags: ['test']" in captured.out
-        assert "Name: Test Operation" in captured.out
-        assert "Method: GET" in captured.out
-        assert "Description: A test operation" in captured.out
+        mock_logger.debug.assert_any_call("Path: /test")
+        mock_logger.debug.assert_any_call("Tags: ['test']")
+        mock_logger.debug.assert_any_call("Name: Test Operation")
+        mock_logger.debug.assert_any_call("Method: GET")
+        mock_logger.debug.assert_any_call("Description: A test operation")
 
-    def test_op_decorator_with_params(self, capsys):
+    @patch("pycommon.tools.ops.logger")
+    def test_op_decorator_with_params(self, mock_logger):
         """Test op decorator with parameters."""
         params = {"type": "object", "properties": {"name": {"type": "string"}}}
 
@@ -72,10 +73,9 @@ class TestOpDecorator:
             return "success"
 
         result = test_function()
-        captured = capsys.readouterr()
 
         assert result == "success"
-        assert str(params) in captured.out
+        mock_logger.debug.assert_any_call(f"Params: {params}")
 
 
 class TestOperationModel:
@@ -689,7 +689,8 @@ def regular_function():
         ops = extract_ops_from_file("/nonexistent/file.py")
         assert ops == []
 
-    def test_extract_ops_from_file_with_exception_in_parsing(self, capsys):
+    @patch("pycommon.tools.ops.logger")
+    def test_extract_ops_from_file_with_exception_in_parsing(self, mock_logger):
         """Test extracting operations when parsing raises an exception."""
         # Create a file with content that will cause an exception during parsing
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -702,10 +703,15 @@ def regular_function():
                     ops = extract_ops_from_file(f.name)
                     assert ops == []
 
-                    # Check that the exception was handled and message printed
-                    captured = capsys.readouterr()
-                    assert "Test exception" in captured.out
-                    assert f"Skipping {f.name} due to unparseable AST" in captured.out
+                    # Check that the exception was handled and message logged
+                    # The exception object itself is logged, not just the string
+                    logged_calls = [
+                        call.args[0] for call in mock_logger.error.call_args_list
+                    ]
+                    assert any("Test exception" in str(call) for call in logged_calls)
+                    mock_logger.warning.assert_any_call(
+                        f"Skipping {f.name} due to unparseable AST"
+                    )
             finally:
                 os.unlink(f.name)
 
@@ -1033,7 +1039,8 @@ def test_function():
             assert len(ops) == 1
             assert ops[0].name == "Test Operation"
 
-    def test_scan_and_print_ops(self, capsys):
+    @patch("pycommon.tools.ops.logger")
+    def test_scan_and_print_ops(self, mock_logger):
         """Test scanning and printing operations."""
         python_code = """
 from pycommon.api.ops import api_tool
@@ -1053,16 +1060,17 @@ def test_function():
                 f.write(python_code)
 
             scan_and_print_ops(temp_dir)
-            captured = capsys.readouterr()
 
-            assert "Test Operation" in captured.out
-            assert "/test" in captured.out
+            # Check that operation details were logged
+            mock_logger.info.assert_any_call("  Name       : Test Operation")
+            mock_logger.info.assert_any_call("  URL        : /test")
 
 
 class TestPrintOperations:
     """Test printing operations functionality."""
 
-    def test_print_pretty_ops(self, capsys):
+    @patch("pycommon.tools.ops.logger")
+    def test_print_pretty_ops(self, mock_logger):
         """Test pretty printing operations."""
         op_data = {
             "description": "Test operation",
@@ -1083,14 +1091,16 @@ class TestPrintOperations:
         op = OperationModel(**op_data)
         print_pretty_ops([op])
 
-        captured = capsys.readouterr()
-        assert "Test Op" in captured.out
-        assert "/test" in captured.out
-        assert "POST" in captured.out
-        assert "Test operation" in captured.out
-        assert "User name" in captured.out
+        # Check that operation details were logged
+        mock_logger.info.assert_any_call("  Name       : Test Op")
+        mock_logger.info.assert_any_call("  URL        : /test")
+        mock_logger.info.assert_any_call("  Method     : POST")
+        mock_logger.info.assert_any_call("  Description: Test operation")
+        # Check that parameter descriptions were logged
+        mock_logger.info.assert_any_call("    - name : User name")
 
-    def test_print_pretty_ops_no_parameters(self, capsys):
+    @patch("pycommon.tools.ops.logger")
+    def test_print_pretty_ops_no_parameters(self, mock_logger):
         """Test pretty printing operations without parameters."""
         op_data = {
             "description": "Test operation",
@@ -1105,11 +1115,18 @@ class TestPrintOperations:
         op = OperationModel(**op_data)
         print_pretty_ops([op])
 
-        captured = capsys.readouterr()
-        assert "Test Op" in captured.out
-        assert "Parameters (Input Schema):" not in captured.out
+        # Check that operation name was logged
+        mock_logger.info.assert_any_call("  Name       : Test Op")
+        # Check that Parameters section was NOT logged (no parameters)
+        parameter_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if "Parameters (Input Schema):" in str(call)
+        ]
+        assert len(parameter_calls) == 0
 
-    def test_print_pretty_ops_parameters_non_dict_property_corrected(self, capsys):
+    @patch("pycommon.tools.ops.logger")
+    def test_print_pretty_ops_parameters_non_dict_property_corrected(self, mock_logger):
         """Test pretty printing operations with non-dict property in parameters."""
         op_data = {
             "description": "Test operation",
@@ -1131,12 +1148,15 @@ class TestPrintOperations:
         op = OperationModel(**op_data)
         print_pretty_ops([op])
 
-        captured = capsys.readouterr()
-        assert "Test Op" in captured.out
+        # Check that operation name was logged
+        mock_logger.info.assert_any_call("  Name       : Test Op")
         # The function skips non-dict properties, so only 'age' should appear
-        assert "- age : User age" in captured.out
-        # Non-dict property should be skipped
-        assert "- name :" not in captured.out
+        mock_logger.info.assert_any_call("    - age : User age")
+        # Non-dict property 'name' should be skipped - verify it's not logged
+        name_calls = [
+            call for call in mock_logger.info.call_args_list if "- name :" in str(call)
+        ]
+        assert len(name_calls) == 0
 
 
 class TestDynamoDBOperations:
@@ -1266,7 +1286,8 @@ class TestDynamoDBOperations:
 
     @patch("pycommon.tools.ops.dynamodb")
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"})
-    def test_write_ops_add_to_existing_no_match(self, mock_dynamodb, capsys):
+    @patch("pycommon.tools.ops.logger")
+    def test_write_ops_add_to_existing_no_match(self, mock_logger, mock_dynamodb):
         """Test adding new operation when no existing operation matches ID."""
         # Mock table and its methods
         mock_table = MagicMock()
@@ -1292,9 +1313,11 @@ class TestDynamoDBOperations:
         assert result["success"] is True
         mock_table.update_item.assert_called()
 
-        # Check that print statements were called
-        captured = capsys.readouterr()
-        assert "Updated item in table" in captured.out
+        # Check that operation details and update message were logged
+        mock_logger.info.assert_any_call("  Name       : New Op")
+        mock_logger.info.assert_any_call(
+            "Updated item in table test-table for user system and tag test"
+        )
 
     @patch("pycommon.tools.ops.dynamodb")
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"})
@@ -1725,7 +1748,8 @@ def test_function():
                 # Should exit with code 1
                 assert exc_info.value.code == 1
 
-    def test_main_function_print_error_message(self):
+    @patch("pycommon.tools.ops.logger")
+    def test_main_function_print_error_message(self, mock_logger):
         """Test the print statement in main function
         when ops_table cannot be resolved."""
         test_args = ["pycommon/tools/ops.py", "register", "--stage", "nonexistent"]
@@ -1733,16 +1757,13 @@ def test_function():
         with patch("sys.argv", test_args):
             with patch("pycommon.tools.ops.resolve_ops_table", return_value=None):
                 with patch("sys.exit"):  # Prevent actual exit
-                    with patch("builtins.print") as mock_print:
-                        main()
-                        # Should print the error message
-                        mock_print.assert_called()
-                        # Check that the specific error message was printed
-                        call_args = mock_print.call_args[0][0]
-                        assert (
-                            "Error: OPS_DYNAMODB_TABLE could not be resolved"
-                            in call_args
-                        )
+                    main()
+                    # Should log the error message
+                    mock_logger.error.assert_called_once_with(
+                        "Error: OPS_DYNAMODB_TABLE could not be resolved. Add it to "
+                        "your var/<stage>-var.yml file or set it as an environment "
+                        "variable or pass it with --ops_table <table_name>."
+                    )
 
     def test_main_function_else_branch_register_success(self):
         """Test the else branch in main function when ops_table is resolved."""
@@ -1780,7 +1801,8 @@ def test_function():
                 # Should call scan_and_print_ops with custom directory
                 mock_scan.assert_called_once_with("/custom/path")
 
-    def test_scan_and_register_ops_print_statements(self):
+    @patch("pycommon.tools.ops.logger")
+    def test_scan_and_register_ops_print_statements(self, mock_logger):
         """Test the print statements in scan_and_register_ops function."""
 
         # Mock the scan_ops and write_ops functions
@@ -1788,7 +1810,6 @@ def test_function():
             with patch(
                 "pycommon.tools.ops.write_ops", return_value={"message": "Test message"}
             ):
-                with patch("builtins.print") as mock_print:
-                    scan_and_register_ops(".", current_user="test", tags=["test"])
-                    # Should print the result message
-                    mock_print.assert_called()
+                scan_and_register_ops(".", current_user="test", tags=["test"])
+                # Should log the result message
+                mock_logger.info.assert_called_with({"message": "Test message"})

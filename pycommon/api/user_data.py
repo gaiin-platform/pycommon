@@ -3,6 +3,10 @@ import os
 
 import requests
 
+from pycommon.logger import getLogger
+
+logger = getLogger("user_data")
+
 
 def load_user_data(access_token, app_id, entity_type, item_id):
     """Load user data from the API.
@@ -16,7 +20,7 @@ def load_user_data(access_token, app_id, entity_type, item_id):
     Returns:
         dict or None: User data if successful, None otherwise
     """
-    print("Initiate get user data call")
+    logger.info("Initiate get user data call")
 
     endpoint = os.environ["API_BASE_URL"] + "/user-data/get"
 
@@ -29,7 +33,7 @@ def load_user_data(access_token, app_id, entity_type, item_id):
 
     try:
         response = requests.post(endpoint, headers=headers, data=json.dumps(request))
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = (
             response.json()
         )  # to adhere to object access return response dict
@@ -38,7 +42,7 @@ def load_user_data(access_token, app_id, entity_type, item_id):
             return response_content.get("data", None)
 
     except Exception as e:
-        print(f"Error getting user data: {e}")
+        logger.error(f"Error getting user data: {e}")
 
     return None
 
@@ -57,7 +61,7 @@ def save_user_data(access_token, app_id, entity_type, item_id, data, range_key=N
     Returns:
         dict or None: Response data if successful, None otherwise
     """
-    print(f"Initiate save user data call for {entity_type}/{item_id}")
+    logger.info(f"Initiate save user data call for {entity_type}/{item_id}")
 
     endpoint = os.environ["API_BASE_URL"] + "/user-data/put"
 
@@ -82,17 +86,17 @@ def save_user_data(access_token, app_id, entity_type, item_id, data, range_key=N
         response = requests.post(
             endpoint, headers=headers, data=json.dumps(request_data)
         )
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = response.json()
 
         if response.status_code == 200 and response_content.get("success", False):
             return response_content
         else:
-            print(f"Error saving user data: {response_content}")
+            logger.error(f"Error saving user data: {response_content}")
             return None
 
     except Exception as e:
-        print(f"Error saving user data: {e}")
+        logger.error(f"Error saving user data: {e}")
         return None
 
 
@@ -109,7 +113,7 @@ def delete_user_data(access_token, app_id, entity_type, item_id, range_key=None)
     Returns:
         dict or None: Response data if successful, None otherwise
     """
-    print(f"Initiate delete user data call for {entity_type}/{item_id}")
+    logger.info(f"Initiate delete user data call for {entity_type}/{item_id}")
 
     endpoint = os.environ["API_BASE_URL"] + "/user-data/delete"
 
@@ -129,15 +133,15 @@ def delete_user_data(access_token, app_id, entity_type, item_id, range_key=None)
         response = requests.post(
             endpoint, headers=headers, data=json.dumps(request_data)
         )
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = response.json()
 
         if response.status_code == 200 and response_content.get("success", False):
             return response_content
         else:
-            print(f"Error deleting user data: {response_content}")
+            logger.error(f"Error deleting user data: {response_content}")
             return None
 
     except Exception as e:
-        print(f"Error deleting user data: {e}")
+        logger.error(f"Error deleting user data: {e}")
         return None

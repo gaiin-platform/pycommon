@@ -92,23 +92,24 @@ class TestApiToolsRegisterHandler:
             mock_list.assert_called_once_with([])
             assert result["success"] is True
 
-    def test_api_tools_register_handler_prints_debug_info(self, capsys):
-        """Test that handler prints appropriate debug information."""
+    @patch("pycommon.api.tools_ops.logger")
+    def test_api_tools_register_handler_prints_debug_info(self, mock_logger):
+        """Test that handler logs appropriate debug information."""
         with patch("pycommon.api.tools_ops.list_lambda_ops") as mock_list:
             mock_list.return_value = {"success": True, "operations_count": 0}
 
             api_tools_register_handler(command="ls")
-            captured = capsys.readouterr()
 
-            assert "Listing operations" in captured.out
+            mock_logger.info.assert_any_call("Listing operations")
+
+        mock_logger.reset_mock()  # Reset the mock for the next test
 
         with patch("pycommon.api.tools_ops.register_lambda_ops") as mock_register:
             mock_register.return_value = {"success": True, "operations_count": 0}
 
             api_tools_register_handler(command="register")
-            captured = capsys.readouterr()
 
-            assert "Registering operations" in captured.out
+            mock_logger.info.assert_any_call("Registering operations")
 
 
 class TestRegisterLambdaOps:
@@ -125,7 +126,8 @@ class TestRegisterLambdaOps:
 
     @patch("pycommon.api.tools_ops._scan_lambda_codebase")
     @patch("pycommon.api.tools_ops.write_ops")
-    def test_register_lambda_ops_success(self, mock_write_ops, mock_scan, capsys):
+    @patch("pycommon.api.tools_ops.logger")
+    def test_register_lambda_ops_success(self, mock_logger, mock_write_ops, mock_scan):
         """Test successful registration of operations."""
         # Mock environment variable
         with patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"}):
@@ -161,15 +163,19 @@ class TestRegisterLambdaOps:
             )
 
             # Check debug output
-            captured = capsys.readouterr()
-            assert "Register: Using DynamoDB table: test-table" in captured.out
-            assert "Register: About to register 1 operations" in captured.out
+            mock_logger.info.assert_any_call(
+                "Register: Using DynamoDB table: test-table"
+            )
+            mock_logger.info.assert_any_call(
+                "Register: About to register 1 operations with tags: ['all', 'custom']"
+            )
 
     @patch("os.path.exists")
     @patch("pycommon.api.tools_ops._scan_lambda_codebase")
     @patch("pycommon.api.tools_ops.write_ops")
+    @patch("pycommon.api.tools_ops.logger")
     def test_register_lambda_ops_success_var_task_exists(
-        self, mock_write_ops, mock_scan, mock_exists, capsys
+        self, mock_logger, mock_write_ops, mock_scan, mock_exists
     ):
         """Test successful registration when /var/task directory exists."""
         # Mock environment variable
@@ -196,10 +202,14 @@ class TestRegisterLambdaOps:
             # Verify scan was called with /var/task (no fallback)
             mock_scan.assert_called_once_with("/var/task", ["service"])
 
-            # Check that no fallback message appears
-            captured = capsys.readouterr()
-            assert "Register: Directory /var/task does not exist!" not in captured.out
-            assert "Register: Using current working directory:" not in captured.out
+            # Check that no fallback message appears in logs
+            # Verify fallback warning was NOT called (since /var/task exists)
+            mock_logger.warning.assert_not_called()
+            # Verify current directory info was NOT logged (since /var/task exists)
+            assert not any(
+                "Using current working directory:" in str(call)
+                for call in mock_logger.info.call_args_list
+            )
 
     @patch("pycommon.api.tools_ops._scan_lambda_codebase")
     def test_register_lambda_ops_no_operations_found(self, mock_scan):
@@ -215,7 +225,8 @@ class TestRegisterLambdaOps:
             assert result["operations"] == []
 
     @patch("pycommon.api.tools_ops._scan_lambda_codebase")
-    def test_register_lambda_ops_exception(self, mock_scan, capsys):
+    @patch("pycommon.api.tools_ops.logger")
+    def test_register_lambda_ops_exception(self, mock_logger, mock_scan):
         """Test register when an exception occurs."""
         with patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"}):
             mock_scan.side_effect = Exception("Scan error")
@@ -227,14 +238,14 @@ class TestRegisterLambdaOps:
             assert result["operations_count"] == 0
 
             # Check error was logged
-            captured = capsys.readouterr()
-            assert "Register: Error occurred: Scan error" in captured.out
+            mock_logger.error.assert_any_call("Register: Error occurred: Scan error")
 
     @patch("os.path.exists")
     @patch("os.getcwd")
     @patch("pycommon.api.tools_ops._scan_lambda_codebase")
+    @patch("pycommon.api.tools_ops.logger")
     def test_register_lambda_ops_fallback_directory(
-        self, mock_scan, mock_getcwd, mock_exists, capsys
+        self, mock_logger, mock_scan, mock_getcwd, mock_exists
     ):
         """Test register falls back to current directory
         when /var/task doesn't exist."""
@@ -246,11 +257,11 @@ class TestRegisterLambdaOps:
             result = register_lambda_ops(["service"])
 
             # Check fallback logic was used
-            captured = capsys.readouterr()
-            assert "Register: Directory /var/task does not exist!" in captured.out
-            assert (
+            mock_logger.warning.assert_any_call(
+                "Register: Directory /var/task does not exist!"
+            )
+            mock_logger.info.assert_any_call(
                 "Register: Using current working directory: /current/dir"
-                in captured.out
             )
 
             # Verify scan was called with fallback directory
@@ -270,7 +281,8 @@ class TestListLambdaOps:
     """Test cases for the list_lambda_ops function."""
 
     @patch("pycommon.api.tools_ops._scan_lambda_codebase")
-    def test_list_lambda_ops_success(self, mock_scan, capsys):
+    @patch("pycommon.api.tools_ops.logger")
+    def test_list_lambda_ops_success(self, mock_logger, mock_scan):
         """Test successful listing of operations."""
         # Mock operations
         mock_op = OperationModel(
@@ -308,9 +320,8 @@ class TestListLambdaOps:
         assert op_info["permissions"] == {"read": True}
 
         # Check debug output
-        captured = capsys.readouterr()
-        assert "Scanning directory: /var/task" in captured.out
-        assert "Including directories: ['service']" in captured.out
+        mock_logger.info.assert_any_call("Scanning directory: /var/task")
+        mock_logger.info.assert_any_call("Including directories: ['service']")
 
     @patch("os.path.exists")
     @patch("os.getcwd")
@@ -354,7 +365,8 @@ class TestListLambdaOps:
         assert result["success"] is True
 
     @patch("pycommon.api.tools_ops._scan_lambda_codebase")
-    def test_list_lambda_ops_exception(self, mock_scan, capsys):
+    @patch("pycommon.api.tools_ops.logger")
+    def test_list_lambda_ops_exception(self, mock_logger, mock_scan):
         """Test listing when an exception occurs."""
         mock_scan.side_effect = Exception("Scan error")
 
@@ -365,14 +377,14 @@ class TestListLambdaOps:
         assert result["operations_count"] == 0
 
         # Check error was logged
-        captured = capsys.readouterr()
-        assert "Error in list_lambda_ops: Scan error" in captured.out
+        mock_logger.error.assert_any_call("Error in list_lambda_ops: Scan error")
 
     @patch("os.path.exists")
     @patch("os.getcwd")
     @patch("pycommon.api.tools_ops._scan_lambda_codebase")
+    @patch("pycommon.api.tools_ops.logger")
     def test_list_lambda_ops_fallback_directory(
-        self, mock_scan, mock_getcwd, mock_exists, capsys
+        self, mock_logger, mock_scan, mock_getcwd, mock_exists
     ):
         """Test listing falls back to current directory when /var/task doesn't exist."""
         mock_exists.return_value = False
@@ -382,9 +394,10 @@ class TestListLambdaOps:
         result = list_lambda_ops(["service"])
 
         # Check fallback logic was used
-        captured = capsys.readouterr()
-        assert "Directory /var/task does not exist!" in captured.out
-        assert "Using current working directory: /current/dir" in captured.out
+        mock_logger.warning.assert_any_call("Directory /var/task does not exist!")
+        mock_logger.info.assert_any_call(
+            "Using current working directory: /current/dir"
+        )
 
         # Verify scan was called with fallback directory
         mock_scan.assert_called_once_with("/current/dir", ["service"])
@@ -396,9 +409,9 @@ class TestScanLambdaCodebase:
 
     @patch("pycommon.api.tools_ops.find_python_files")
     @patch("pycommon.api.tools_ops.extract_ops_from_file")
-    @patch("pycommon.api.tools_ops.print_pretty_ops")
+    @patch("pycommon.api.tools_ops.logger")
     def test_scan_lambda_codebase_success(
-        self, mock_print_pretty, mock_extract, mock_find_files, capsys
+        self, mock_logger, mock_extract, mock_find_files
     ):
         """Test successful scanning of lambda codebase."""
         # Mock file discovery
@@ -437,19 +450,25 @@ class TestScanLambdaCodebase:
         )
 
         # Check debug output
-        captured = capsys.readouterr()
-        assert "Starting scan of directory: /var/task" in captured.out
-        assert "Found 3 Python files total" in captured.out
-        assert "Including file: /var/task/service/handler.py" in captured.out
-        assert "Including file: /var/task/service/utils.py" in captured.out
-        assert "After filtering, scanning 2 files for operations" in captured.out
-        assert "Found 1 operations in /var/task/service/handler.py" in captured.out
-        assert "Total operations found: 1" in captured.out
+        mock_logger.info.assert_any_call("Starting scan of directory: /var/task")
+        mock_logger.info.assert_any_call("Found 3 Python files total")
+        mock_logger.debug.assert_any_call(
+            "Including file: /var/task/service/handler.py"
+        )
+        mock_logger.debug.assert_any_call("Including file: /var/task/service/utils.py")
+        mock_logger.info.assert_any_call(
+            "After filtering, scanning 2 files for operations"
+        )
+        mock_logger.debug.assert_any_call(
+            "Found 1 operations in /var/task/service/handler.py"
+        )
+        mock_logger.info.assert_any_call("Total operations found: 1")
 
     @patch("pycommon.api.tools_ops.find_python_files")
     @patch("pycommon.api.tools_ops.extract_ops_from_file")
+    @patch("pycommon.api.tools_ops.logger")
     def test_scan_lambda_codebase_extraction_error(
-        self, mock_extract, mock_find_files, capsys
+        self, mock_logger, mock_extract, mock_find_files
     ):
         """Test scanning when extraction fails for some files."""
         mock_find_files.return_value = [
@@ -478,14 +497,13 @@ class TestScanLambdaCodebase:
         assert result[0].name == "Test Operation"
 
         # Check warning was logged
-        captured = capsys.readouterr()
-        assert (
+        mock_logger.warning.assert_any_call(
             "Warning: Could not parse /var/task/service/bad.py: Parse error"
-            in captured.out
         )
 
     @patch("pycommon.api.tools_ops.find_python_files")
-    def test_scan_lambda_codebase_no_matching_files(self, mock_find_files, capsys):
+    @patch("pycommon.api.tools_ops.logger")
+    def test_scan_lambda_codebase_no_matching_files(self, mock_logger, mock_find_files):
         """Test scanning when no files match include directories."""
         mock_find_files.return_value = [
             "/var/task/other/file.py",
@@ -497,9 +515,10 @@ class TestScanLambdaCodebase:
         assert len(result) == 0
 
         # Check debug output
-        captured = capsys.readouterr()
-        assert "After filtering, scanning 0 files for operations" in captured.out
-        assert "Total operations found: 0" in captured.out
+        mock_logger.info.assert_any_call(
+            "After filtering, scanning 0 files for operations"
+        )
+        mock_logger.info.assert_any_call("Total operations found: 0")
 
     @patch("pycommon.api.tools_ops.find_python_files")
     def test_scan_lambda_codebase_include_patterns(self, mock_find_files):
@@ -528,8 +547,9 @@ class TestScanLambdaCodebase:
                 mock_extract.assert_any_call(expected_file)
 
     @patch("pycommon.api.tools_ops.find_python_files")
+    @patch("pycommon.api.tools_ops.logger")
     def test_scan_lambda_codebase_empty_include_dirs_uses_exclusion(
-        self, mock_find_files, capsys
+        self, mock_logger, mock_find_files
     ):
         """Test that empty include_dirs uses exclusion-based filtering."""
         mock_find_files.return_value = [
@@ -561,9 +581,15 @@ class TestScanLambdaCodebase:
             for excluded_file in excluded_calls:
                 assert call(excluded_file) not in mock_extract.call_args_list
 
-            # Check debug output
-            captured = capsys.readouterr()
-            assert "Using exclusion-based filtering" in captured.out
+            # Check debug output - the exclusion set order may vary
+            exclusion_calls = [
+                call
+                for call in mock_logger.info.call_args_list
+                if "Using exclusion-based filtering" in str(call)
+            ]
+            assert (
+                len(exclusion_calls) > 0
+            ), "Expected exclusion-based filtering message not found"
 
     def test_scan_lambda_codebase_integration_with_real_files(self):
         """Integration test with real temporary files."""

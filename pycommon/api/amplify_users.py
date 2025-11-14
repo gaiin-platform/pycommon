@@ -9,6 +9,10 @@ import boto3
 import requests
 from botocore.exceptions import ClientError
 
+from pycommon.logger import getLogger
+
+logger = getLogger("amplify_users")
+
 
 def get_email_suggestions(
     access_token: str, email_prefix: str = "*"
@@ -24,7 +28,7 @@ def get_email_suggestions(
         Optional[Dict[str, str]]: Dictionary mapping user_id to email address,
                                   or None if the request fails
     """
-    print("Initiate get email suggestions call")
+    logger.info("Initiate get email suggestions call")
 
     endpoint = os.environ["API_BASE_URL"] + "/utilities/emails"
 
@@ -37,7 +41,7 @@ def get_email_suggestions(
 
     try:
         response = requests.get(endpoint, headers=headers, params=params)
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
 
         if response.status_code == 200:
             response_content = response.json()
@@ -50,14 +54,14 @@ def get_email_suggestions(
                 # Fallback for direct structure
                 return response_content.get("user_email_map", {})
 
-        print(f"Request failed with status code: {response.status_code}")
+        logger.warning(f"Request failed with status code: {response.status_code}")
 
     except requests.RequestException as e:
-        print(f"Network error getting email suggestions: {e}")
+        logger.error(f"Network error getting email suggestions: {e}")
     except json.JSONDecodeError as e:
-        print(f"Error decoding JSON response: {e}")
+        logger.error(f"Error decoding JSON response: {e}")
     except Exception as e:
-        print(f"Unexpected error getting email suggestions: {e}")
+        logger.error(f"Unexpected error getting email suggestions: {e}")
     return None
 
 
@@ -72,7 +76,7 @@ def get_system_ids(access_token: str) -> Optional[List[dict]]:
         Optional[List[dict]]: List of system API key data,
                              or None if the request fails
     """
-    print("Initiate get system IDs call")
+    logger.info("Initiate get system IDs call")
 
     endpoint = os.environ["API_BASE_URL"] + "/apiKeys/get_system_ids"
 
@@ -83,21 +87,21 @@ def get_system_ids(access_token: str) -> Optional[List[dict]]:
 
     try:
         response = requests.get(endpoint, headers=headers)
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
 
         if response.status_code == 200:
             response_content = response.json()
             if response_content.get("success", False):
                 return response_content.get("data", [])
 
-        print(f"Request failed with status code: {response.status_code}")
+        logger.warning(f"Request failed with status code: {response.status_code}")
 
     except requests.RequestException as e:
-        print(f"Network error getting system IDs: {e}")
+        logger.error(f"Network error getting system IDs: {e}")
     except json.JSONDecodeError as e:
-        print(f"Error decoding JSON response: {e}")
+        logger.error(f"Error decoding JSON response: {e}")
     except Exception as e:
-        print(f"Unexpected error getting system IDs: {e}")
+        logger.error(f"Unexpected error getting system IDs: {e}")
     return None
 
 
@@ -116,7 +120,7 @@ def are_valid_amplify_users(
         (valid_users, invalid_users) where each list
         contains lowercase email addresses
     """
-    print(f"Checking if {user_emails} are valid Amplify users")
+    logger.info(f"Checking if {user_emails} are valid Amplify users")
 
     system_data = get_system_ids(access_token)
     system_users = []
@@ -126,7 +130,7 @@ def are_valid_amplify_users(
             item.get("owner", "").lower() for item in system_data if item.get("owner")
         ]
     else:
-        print("Failed to retrieve system users list")
+        logger.warning("Failed to retrieve system users list")
 
     # Convert system users to a set for O(1) lookup
     system_users_set = set(system_users)
@@ -162,10 +166,12 @@ def are_valid_amplify_users(
                 invalid.append(lower_user)
 
         except ClientError as e:
-            print(f"Error checking user {lower_user}: {e.response['Error']['Message']}")
+            logger.error(
+                f"Error checking user {lower_user}: {e.response['Error']['Message']}"
+            )
             # On error, treat as invalid to be safe
             invalid.append(lower_user)
 
-    print(f"Valid Users: {valid}")
-    print(f"Invalid Users: {invalid}")
+    logger.debug(f"Valid Users: {valid}")
+    logger.debug(f"Invalid Users: {invalid}")
     return valid, invalid

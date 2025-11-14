@@ -7,6 +7,10 @@ from typing import Any, List
 
 import requests
 
+from pycommon.logger import getLogger
+
+logger = getLogger("embeddings")
+
 
 def delete_embeddings(access_token: str, data_sources: List[str]) -> tuple[bool, Any]:
     """
@@ -38,16 +42,16 @@ def delete_embeddings(access_token: str, data_sources: List[str]) -> tuple[bool,
         )
 
         response_content = response.json()
-        print("Delete embeddings response: ", response_content)
+        logger.debug("Delete embeddings response: %s", response_content)
 
         if response.status_code != 200:
-            print(f"Error deleting embeddings: {response.status_code}")
+            logger.error(f"Error deleting embeddings: {response.status_code}")
             return False, response_content
         else:
             return True, response_content["result"]
 
     except Exception as e:
-        print(f"Error deleting embeddings: {e}")
+        logger.error(f"Error deleting embeddings: {e}")
         return False, str(e)
 
 
@@ -62,7 +66,7 @@ def check_embedding_completion(access_token: str, datasource_ids: List[str]) -> 
     Returns:
         bool: True if embedding completion check was successful, False otherwise
     """
-    print("Checking embedding completion for data sources", datasource_ids)
+    logger.info("Checking embedding completion for data sources: %s", datasource_ids)
 
     endpoint = os.environ.get("API_BASE_URL", "") + "/embedding/check-completion"
 
@@ -76,7 +80,7 @@ def check_embedding_completion(access_token: str, datasource_ids: List[str]) -> 
     try:
         response = requests.post(endpoint, headers=headers, data=json.dumps(request))
 
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = (
             response.json()
         )  # to adhere to object access return response dict
@@ -85,6 +89,6 @@ def check_embedding_completion(access_token: str, datasource_ids: List[str]) -> 
             return True
 
     except Exception as e:
-        print(f"Error checking embedding completion: {e}")
+        logger.error(f"Error checking embedding completion: {e}")
 
     return False

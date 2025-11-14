@@ -152,8 +152,8 @@ class TestLoadUserData:
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.user_data.requests.post")
-    @patch("builtins.print")
-    def test_load_user_data_prints_messages(self, mock_print, mock_post):
+    @patch("pycommon.api.user_data.logger")
+    def test_load_user_data_prints_messages(self, mock_logger, mock_post):
         """Test that appropriate messages are printed."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -163,25 +163,21 @@ class TestLoadUserData:
 
         load_user_data(self.access_token, self.app_id, self.entity_type, self.item_id)
 
-        # Check that print was called with expected messages
-        print_calls = [call.args[0] for call in mock_print.call_args_list]
-        assert "Initiate get user data call" in print_calls
-        assert any("Response: " in call for call in print_calls)
+        # Check that logger was called with expected messages
+        mock_logger.info.assert_any_call("Initiate get user data call")
+        mock_logger.debug.assert_any_call("Response: %s", mock_response.content)
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.user_data.requests.post")
-    @patch("builtins.print")
-    def test_load_user_data_prints_error(self, mock_print, mock_post):
+    @patch("pycommon.api.user_data.logger")
+    def test_load_user_data_prints_error(self, mock_logger, mock_post):
         """Test that error messages are printed on exception."""
         mock_post.side_effect = Exception("Test error")
 
         load_user_data(self.access_token, self.app_id, self.entity_type, self.item_id)
 
-        # Check that error message was printed
-        print_calls = [call.args[0] for call in mock_print.call_args_list]
-        assert any(
-            "Error getting user data: Test error" in call for call in print_calls
-        )
+        # Check that error message was logged
+        mock_logger.error.assert_any_call("Error getting user data: Test error")
 
     def test_load_user_data_missing_env_var(self):
         """Test behavior when API_BASE_URL environment variable is missing."""
@@ -382,8 +378,8 @@ class TestSaveUserData:
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.user_data.requests.post")
-    @patch("builtins.print")
-    def test_save_user_data_prints_messages(self, mock_print, mock_post):
+    @patch("pycommon.api.user_data.logger")
+    def test_save_user_data_prints_messages(self, mock_logger, mock_post):
         """Test that appropriate messages are printed."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -395,14 +391,16 @@ class TestSaveUserData:
             self.access_token, self.app_id, self.entity_type, self.item_id, self.data
         )
 
-        print_calls = [call.args[0] for call in mock_print.call_args_list]
-        assert any("Initiate save user data call" in call for call in print_calls)
-        assert any("Response: " in call for call in print_calls)
+        # Check that logger was called with expected messages
+        mock_logger.info.assert_any_call(
+            "Initiate save user data call for test_entity_type/test_item_id"
+        )
+        mock_logger.debug.assert_any_call("Response: %s", mock_response.content)
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.user_data.requests.post")
-    @patch("builtins.print")
-    def test_save_user_data_prints_error_on_failure(self, mock_print, mock_post):
+    @patch("pycommon.api.user_data.logger")
+    def test_save_user_data_prints_error_on_failure(self, mock_logger, mock_post):
         """Test that error messages are printed on failure response."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -414,13 +412,15 @@ class TestSaveUserData:
             self.access_token, self.app_id, self.entity_type, self.item_id, self.data
         )
 
-        print_calls = [call.args[0] for call in mock_print.call_args_list]
-        assert any("Error saving user data:" in call for call in print_calls)
+        # Check that error message was logged
+        mock_logger.error.assert_any_call(
+            "Error saving user data: {'success': False, 'error': 'Save failed'}"
+        )
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.user_data.requests.post")
-    @patch("builtins.print")
-    def test_save_user_data_prints_error_on_exception(self, mock_print, mock_post):
+    @patch("pycommon.api.user_data.logger")
+    def test_save_user_data_prints_error_on_exception(self, mock_logger, mock_post):
         """Test that error messages are printed on exception."""
         mock_post.side_effect = Exception("Test error")
 
@@ -428,8 +428,8 @@ class TestSaveUserData:
             self.access_token, self.app_id, self.entity_type, self.item_id, self.data
         )
 
-        print_calls = [call.args[0] for call in mock_print.call_args_list]
-        assert any("Error saving user data: Test error" in call for call in print_calls)
+        # Check that error message was logged
+        mock_logger.error.assert_any_call("Error saving user data: Test error")
 
 
 class TestDeleteUserData:
@@ -587,8 +587,8 @@ class TestDeleteUserData:
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.user_data.requests.post")
-    @patch("builtins.print")
-    def test_delete_user_data_prints_messages(self, mock_print, mock_post):
+    @patch("pycommon.api.user_data.logger")
+    def test_delete_user_data_prints_messages(self, mock_logger, mock_post):
         """Test that appropriate messages are printed."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -598,14 +598,16 @@ class TestDeleteUserData:
 
         delete_user_data(self.access_token, self.app_id, self.entity_type, self.item_id)
 
-        print_calls = [call.args[0] for call in mock_print.call_args_list]
-        assert any("Initiate delete user data call" in call for call in print_calls)
-        assert any("Response: " in call for call in print_calls)
+        # Check that logger was called with expected messages
+        mock_logger.info.assert_any_call(
+            "Initiate delete user data call for test_entity_type/test_item_id"
+        )
+        mock_logger.debug.assert_any_call("Response: %s", mock_response.content)
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.user_data.requests.post")
-    @patch("builtins.print")
-    def test_delete_user_data_prints_error_on_failure(self, mock_print, mock_post):
+    @patch("pycommon.api.user_data.logger")
+    def test_delete_user_data_prints_error_on_failure(self, mock_logger, mock_post):
         """Test that error messages are printed on failure response."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -615,19 +617,19 @@ class TestDeleteUserData:
 
         delete_user_data(self.access_token, self.app_id, self.entity_type, self.item_id)
 
-        print_calls = [call.args[0] for call in mock_print.call_args_list]
-        assert any("Error deleting user data:" in call for call in print_calls)
+        # Check that error message was logged
+        mock_logger.error.assert_any_call(
+            "Error deleting user data: {'success': False, 'error': 'Delete failed'}"
+        )
 
     @patch.dict(os.environ, {"API_BASE_URL": "https://api.example.com"})
     @patch("pycommon.api.user_data.requests.post")
-    @patch("builtins.print")
-    def test_delete_user_data_prints_error_on_exception(self, mock_print, mock_post):
+    @patch("pycommon.api.user_data.logger")
+    def test_delete_user_data_prints_error_on_exception(self, mock_logger, mock_post):
         """Test that error messages are printed on exception."""
         mock_post.side_effect = Exception("Test error")
 
         delete_user_data(self.access_token, self.app_id, self.entity_type, self.item_id)
 
-        print_calls = [call.args[0] for call in mock_print.call_args_list]
-        assert any(
-            "Error deleting user data: Test error" in call for call in print_calls
-        )
+        # Check that error message was logged
+        mock_logger.error.assert_any_call("Error deleting user data: Test error")

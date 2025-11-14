@@ -36,14 +36,16 @@ class TestChat:
         with patch(
             "pycommon.llm.chat.chat_streaming", side_effect=Exception("Network error")
         ):
-            with patch("builtins.print") as mock_print:
+            with patch("pycommon.llm.chat.logger") as mock_logger:
                 result, meta_events = chat(
                     "https://api.example.com/chat", "test_token", {"messages": []}
                 )
 
         assert result == "Error: Network error"
         assert meta_events == []
-        mock_print.assert_called_once_with("Error in chat function: Network error")
+        mock_logger.error.assert_called_once_with(
+            "Error in chat function: Network error"
+        )
 
     def test_chat_empty_response(self):
         """Test chat function with empty response."""
@@ -123,7 +125,7 @@ class TestChatStreaming:
         mock_response.json.return_value = {"error": "Invalid request format"}
 
         with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
-            with patch("builtins.print") as mock_print:
+            with patch("pycommon.llm.chat.logger") as mock_logger:
                 with pytest.raises(Exception) as exc_info:
                     chat_streaming(
                         "https://api.example.com/chat",
@@ -135,7 +137,7 @@ class TestChatStreaming:
         assert "Request failed with status 400: Invalid request format" in str(
             exc_info.value
         )
-        mock_print.assert_called_once_with(
+        mock_logger.error.assert_called_once_with(
             "Request failed with status 400: Invalid request format"
         )
 
@@ -187,7 +189,7 @@ class TestChatStreaming:
         ]
 
         with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
-            with patch("builtins.print") as mock_print:
+            with patch("pycommon.llm.chat.logger") as mock_logger:
                 with pytest.raises(Exception) as exc_info:
                     chat_streaming(
                         "https://api.example.com/chat",
@@ -197,7 +199,7 @@ class TestChatStreaming:
                     )
 
         assert "Service temporarily unavailable" in str(exc_info.value)
-        mock_print.assert_called_once_with(
+        mock_logger.error.assert_called_once_with(
             "Error detected from chat service: Service temporarily unavailable"
         )
 
@@ -217,7 +219,7 @@ class TestChatStreaming:
             content_events.append(data)
 
         with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
-            with patch("builtins.print") as mock_print:
+            with patch("pycommon.llm.chat.logger") as mock_logger:
                 chat_streaming(
                     "https://api.example.com/chat",
                     "test_token",
@@ -230,9 +232,9 @@ class TestChatStreaming:
         assert content_events[0]["d"] == "Hello"
         assert content_events[1]["d"] == " world"
 
-        # Should have printed JSON decode error
-        mock_print.assert_called_once()
-        assert "JSON decode error" in mock_print.call_args[0][0]
+        # Should have logged JSON decode error
+        mock_logger.warning.assert_called_once()
+        assert "JSON decode error" in str(mock_logger.warning.call_args[0][0])
 
     def test_chat_streaming_with_empty_lines(self):
         """Test chat_streaming with empty lines in response."""
@@ -374,7 +376,7 @@ class TestChatStreaming:
         mock_response.json.return_value = '{"error": "Double encoded error"}'
 
         with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
-            with patch("builtins.print") as mock_print:
+            with patch("pycommon.llm.chat.logger") as mock_logger:
                 with pytest.raises(Exception) as exc_info:
                     chat_streaming(
                         "https://api.example.com/chat",
@@ -386,7 +388,7 @@ class TestChatStreaming:
         assert "Request failed with status 400: Double encoded error" in str(
             exc_info.value
         )
-        mock_print.assert_called_once_with(
+        mock_logger.error.assert_called_once_with(
             "Request failed with status 400: Double encoded error"
         )
 

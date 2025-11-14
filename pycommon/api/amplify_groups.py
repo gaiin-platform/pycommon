@@ -7,6 +7,10 @@ from typing import List, Optional, Tuple
 
 import requests
 
+from pycommon.logger import getLogger
+
+logger = getLogger("amplify_groups")
+
 
 def verify_member_of_ast_admin_group(access_token: str, group_id: str) -> bool:
     """
@@ -19,7 +23,7 @@ def verify_member_of_ast_admin_group(access_token: str, group_id: str) -> bool:
     Returns:
         bool: True if user is a member of the group, False otherwise
     """
-    print("Initiate verify in ast admin group call")
+    logger.info("Initiate verify in ast admin group call")
 
     endpoint = os.environ["API_BASE_URL"] + "/groups/verify_ast_group_member"
 
@@ -32,7 +36,7 @@ def verify_member_of_ast_admin_group(access_token: str, group_id: str) -> bool:
 
     try:
         response = requests.post(endpoint, headers=headers, data=json.dumps(request))
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = (
             response.json()
         )  # to adhere to object access return response dict
@@ -41,7 +45,7 @@ def verify_member_of_ast_admin_group(access_token: str, group_id: str) -> bool:
             return response_content.get("isMember", False)
 
     except Exception as e:
-        print(f"Error verifying amp group membership: {e}")
+        logger.error(f"Error verifying amp group membership: {e}")
 
     return False
 
@@ -59,7 +63,7 @@ def verify_user_in_amp_group(access_token: str, groups: List[str]) -> bool:
     """
     if not groups or len(groups) == 0:
         return False
-    print("Initiate verify in amp group call")
+    logger.info("Initiate verify in amp group call")
 
     endpoint = os.environ["API_BASE_URL"] + "/amplifymin/verify_amp_member"
 
@@ -72,7 +76,7 @@ def verify_user_in_amp_group(access_token: str, groups: List[str]) -> bool:
 
     try:
         response = requests.post(endpoint, headers=headers, data=json.dumps(request))
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = (
             response.json()
         )  # to adhere to object access return response dict
@@ -81,7 +85,7 @@ def verify_user_in_amp_group(access_token: str, groups: List[str]) -> bool:
             return response_content.get("isMember", False)
 
     except Exception as e:
-        print(f"Error verifying amp group membership: {e}")
+        logger.error(f"Error verifying amp group membership: {e}")
 
     return False
 
@@ -98,7 +102,7 @@ def get_user_affiliated_groups(
     Returns:
         Tuple of (affiliated_groups, all_groups) on success, None on failure
     """
-    print("Initiate get user affiliated groups call")
+    logger.info("Initiate get user affiliated groups call")
 
     endpoint = os.environ["API_BASE_URL"] + "/amplifymin/amplify_groups/affiliated"
 
@@ -109,7 +113,7 @@ def get_user_affiliated_groups(
 
     try:
         response = requests.get(endpoint, headers=headers)
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = response.json()
 
         if response.status_code == 200 and response_content.get("success", False):
@@ -118,5 +122,5 @@ def get_user_affiliated_groups(
             )
 
     except Exception as e:
-        print(f"Error retrieving user affiliated groups: {e}")
+        logger.error(f"Error retrieving user affiliated groups: {e}")
     return None, None

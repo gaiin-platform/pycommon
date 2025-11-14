@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Union
 import boto3
 from boto3.dynamodb.types import TypeDeserializer
 
+from pycommon.logger import getLogger
+
+logger = getLogger("data_sources")
+
 
 def extract_key(source: str) -> str:
     """
@@ -70,7 +74,7 @@ def translate_user_data_sources_to_hash_data_sources(
                 }
                 ds["id"] = deserialized_item["textLocationKey"]
         except Exception as e:
-            print(e)
+            logger.error(f"Error processing data source: {e}")
             pass
 
         translated_data_sources.append(ds)
@@ -93,7 +97,7 @@ def get_data_source_keys(
         Union[List[str], Dict[str, str]]: List of processed data source keys,
             or error dict if processing fails
     """
-    print("Get keys from data sources")
+    logger.info("Get keys from data sources")
     data_sources_keys = []
     for i in range(len(data_sources)):
         ds = data_sources[i]
@@ -118,11 +122,11 @@ def get_data_source_keys(
                     "id"
                 ]  # cant
 
-            print("Updated Key: ", key)
+            logger.debug("Updated Key: %s", key)
 
         if not key:
             return {"success": "False", "error": "Could not extract key"}
         data_sources_keys.append(key)
 
-    print("Datasource Keys: ", data_sources_keys)
+    logger.debug("Datasource Keys: %s", data_sources_keys)
     return data_sources_keys

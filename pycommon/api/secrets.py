@@ -8,6 +8,10 @@ from typing import Any, Dict, Optional
 import boto3
 from botocore.exceptions import ClientError
 
+from pycommon.logger import getLogger
+
+logger = getLogger("secrets")
+
 DEFAULT_PREFIX = os.getenv("DEFAULT_SECRET_PARAMETER_PREFIX", "")
 
 
@@ -69,7 +73,7 @@ def store_secret_parameter(
         )
         return response
     except ClientError as e:
-        print(f"An error occurred: {e}")
+        logger.error(f"An error occurred: {e}")
         return None
 
 
@@ -97,7 +101,7 @@ def get_secret_parameter(
         )
         return response["Parameter"]["Value"]
     except ClientError as e:
-        print(f"An error occurred: {e}")
+        logger.error(f"An error occurred: {e}")
         return None
 
 
@@ -173,15 +177,15 @@ def delete_secret_parameter(parameter_name: str, prefix: str = DEFAULT_PREFIX) -
     bool: True if deletion was successful, False otherwise.
     """
     full_parameter_name = f"{prefix}/{parameter_name}"
-    print(f"Creating client to delete secret parameter '{full_parameter_name}'")
+    logger.info(f"Creating client to delete secret parameter '{full_parameter_name}'")
 
     ssm_client = boto3.client("ssm")
 
     try:
-        print(f"Deleting secret parameter '{full_parameter_name}'")
+        logger.info(f"Deleting secret parameter '{full_parameter_name}'")
         ssm_client.delete_parameter(Name=full_parameter_name)
-        print(f"Deleted secret parameter '{full_parameter_name}'")
+        logger.info(f"Deleted secret parameter '{full_parameter_name}'")
         return True
     except ClientError as e:
-        print(f"Failed to delete parameter {full_parameter_name}: {e}")
+        logger.error(f"Failed to delete parameter {full_parameter_name}: {e}")
     return False

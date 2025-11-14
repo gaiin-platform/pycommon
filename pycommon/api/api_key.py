@@ -7,6 +7,10 @@ from typing import Dict, Union
 
 import requests
 
+from pycommon.logger import getLogger
+
+logger = getLogger("api_key")
+
 
 def deactivate_key(access_token: str, api_owner_id: str) -> bool:
     """
@@ -19,7 +23,7 @@ def deactivate_key(access_token: str, api_owner_id: str) -> bool:
     Returns:
         bool: True if deactivation was successful, False otherwise
     """
-    print("Initiate deactivate key call")
+    logger.info("Initiate deactivate key call")
 
     api_key_endpoint = os.environ["API_BASE_URL"] + "/apiKeys/key/deactivate"
 
@@ -34,13 +38,13 @@ def deactivate_key(access_token: str, api_owner_id: str) -> bool:
             api_key_endpoint, headers=headers, data=json.dumps(data)
         )
         response_content = response.json()
-        print("Response: ", response_content)
+        logger.debug("Response: %s", response_content)
 
         if response.status_code == 200 and response_content.get("success", False):
             return True
 
     except Exception as e:
-        print(f"Error deactivating API key: {e}")
+        logger.error(f"Error deactivating API key: {e}")
 
     return False
 
@@ -58,7 +62,7 @@ def get_api_keys(token: str) -> Union[Dict, None]:
 
     api_base = os.environ.get("API_BASE_URL", None)
     if not api_base:
-        print("API_BASE_URL is not set.")
+        logger.error("API_BASE_URL is not set.")
         return None
 
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -68,8 +72,8 @@ def get_api_keys(token: str) -> Union[Dict, None]:
         response.raise_for_status()
         result = response.json()
 
-        print(f"Retrieved API Keys: {result}")
+        logger.debug(f"Retrieved API Keys: {result}")
         return result
     except Exception as e:
-        print(f"Failed to retrieve API keys: {str(e)}")
+        logger.error(f"Failed to retrieve API keys: {str(e)}")
         return None

@@ -6,7 +6,10 @@ import os
 
 import requests
 
+from pycommon.logger import getLogger
 from pycommon.lzw import safe_compress
+
+logger = getLogger("ast_admin_groups")
 
 
 def get_all_ast_admin_groups(access_token: str) -> dict:
@@ -19,7 +22,7 @@ def get_all_ast_admin_groups(access_token: str) -> dict:
     Returns:
         dict: Response containing all AST admin groups or error information
     """
-    print("Initiate get ast admin call")
+    logger.info("Initiate get ast admin call")
 
     endpoint = os.environ["API_BASE_URL"] + "/groups/list_all"
 
@@ -33,7 +36,7 @@ def get_all_ast_admin_groups(access_token: str) -> dict:
             endpoint,
             headers=headers,
         )
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = (
             response.json()
         )  # to adhere to object access return response dict
@@ -44,7 +47,7 @@ def get_all_ast_admin_groups(access_token: str) -> dict:
             return {"success": False, "data": None}
 
     except Exception as e:
-        print(f"Error getting ast admin groups: {e}")
+        logger.error(f"Error getting ast admin groups: {e}")
 
     return {"success": False, "data": None}
 
@@ -60,7 +63,7 @@ def update_ast_admin_groups(access_token: str, data: dict) -> dict:
     Returns:
         dict: Response containing success status and any relevant data or error messages
     """
-    print("Initiate update ast admin groups call")
+    logger.info("Initiate update ast admin groups call")
 
     endpoint = os.environ["API_BASE_URL"] + "/groups/update"
 
@@ -73,7 +76,7 @@ def update_ast_admin_groups(access_token: str, data: dict) -> dict:
 
     try:
         response = requests.post(endpoint, headers=headers, data=json.dumps(request))
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = (
             response.json()
         )  # to adhere to object access return response dict
@@ -89,6 +92,6 @@ def update_ast_admin_groups(access_token: str, data: dict) -> dict:
             }
 
     except Exception as e:
-        print(f"Error updating supported Models: {e}")
+        logger.error(f"Error updating supported Models: {e}")
 
     return {"success": False, "message": "Failed to make request"}

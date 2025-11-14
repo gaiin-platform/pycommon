@@ -2,6 +2,10 @@ import os
 
 import requests
 
+from pycommon.logger import getLogger
+
+logger = getLogger("models")
+
 
 def get_default_models(access_token):
     api_url = os.environ.get("API_BASE_URL") + "/default_models"
@@ -19,14 +23,14 @@ def get_default_models(access_token):
         # print(f"Data: {data}")
 
         if not data or not data.get("success") or not data.get("data"):
-            print("Missing data in default models response")
+            logger.error("Missing data in default models response")
             return {}
 
         data = data.get("data")
         default_model_id = data.get("user")
 
         if not default_model_id:
-            print("Missing default model")
+            logger.error("Missing default model")
             return {}
 
         cheapest_model_id = data.get("cheapest") or default_model_id
@@ -39,5 +43,5 @@ def get_default_models(access_token):
         }
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching default models: {str(e)}")
+        logger.error(f"Error fetching default models: {str(e)}")
     return {}

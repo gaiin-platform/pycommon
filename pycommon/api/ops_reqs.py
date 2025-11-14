@@ -7,7 +7,10 @@ from typing import Any, Dict, List
 
 import requests
 
+from pycommon.logger import getLogger
 from pycommon.lzw import safe_compress
+
+logger = getLogger("ops_reqs")
 
 
 def get_all_op(access_token: str) -> dict:
@@ -20,7 +23,7 @@ def get_all_op(access_token: str) -> dict:
     Returns:
         dict: Response containing all operations or error information
     """
-    print("Initiate get ops call")
+    logger.info("Initiate get ops call")
 
     endpoint = os.environ["API_BASE_URL"] + "/ops/get_all"
     headers = {
@@ -42,7 +45,7 @@ def get_all_op(access_token: str) -> dict:
             return response_content
 
     except Exception as e:
-        print(f"Error getting all ops: {e}")
+        logger.error(f"Error getting all ops: {e}")
 
     return {"success": False, "data": None}
 
@@ -72,7 +75,7 @@ def register_ops(
 
     try:
         response = requests.post(endpoint, headers=headers, data=json.dumps(request))
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = (
             response.json()
         )  # to adhere to object access return response dict
@@ -81,6 +84,6 @@ def register_ops(
             return True
 
     except Exception as e:
-        print(f"Error amplify assistants writing ops: {e}")
+        logger.error(f"Error amplify assistants writing ops: {e}")
 
     return False

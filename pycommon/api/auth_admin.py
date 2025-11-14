@@ -6,6 +6,10 @@ import os
 
 import requests
 
+from pycommon.logger import getLogger
+
+logger = getLogger("auth_admin")
+
 
 def verify_user_as_admin(access_token: str, purpose: str) -> bool:
     """
@@ -18,7 +22,7 @@ def verify_user_as_admin(access_token: str, purpose: str) -> bool:
     Returns:
         bool: True if user is verified as admin, False otherwise
     """
-    print("Initiate authenticate user as admin call")
+    logger.info("Initiate authenticate user as admin call")
 
     endpoint = os.environ["API_BASE_URL"] + "/amplifymin/auth"
 
@@ -31,7 +35,7 @@ def verify_user_as_admin(access_token: str, purpose: str) -> bool:
 
     try:
         response = requests.post(endpoint, headers=headers, data=json.dumps(request))
-        print("Response: ", response.content)
+        logger.debug("Response: %s", response.content)
         response_content = (
             response.json()
         )  # to adhere to object access return response dict
@@ -40,6 +44,6 @@ def verify_user_as_admin(access_token: str, purpose: str) -> bool:
             return response_content.get("isAdmin", False)
 
     except Exception as e:
-        print(f"Error authenticating user as admin: {e}")
+        logger.error(f"Error authenticating user as admin: {e}")
 
     return False

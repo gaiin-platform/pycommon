@@ -6,7 +6,10 @@ import os
 
 import requests
 
+from pycommon.logger import getLogger
 from pycommon.lzw import safe_compress
+
+logger = getLogger("assistants")
 
 
 def share_assistant(access_token: str, data: dict) -> bool:
@@ -21,7 +24,7 @@ def share_assistant(access_token: str, data: dict) -> bool:
     Returns:
         bool: True if assistant was shared successfully, False otherwise
     """
-    print("Initiate share assistant call")
+    logger.info("Initiate share assistant call")
 
     share_assistant_endpoint = os.environ["API_BASE_URL"] + "/assistant/share"
 
@@ -45,7 +48,7 @@ def share_assistant(access_token: str, data: dict) -> bool:
             return True
 
     except Exception as e:
-        print(f"Error updating permissions: {e}")
+        logger.error(f"Error updating permissions: {e}")
 
     return False
 
@@ -60,7 +63,7 @@ def list_assistants(access_token: str) -> dict:
     Returns:
         dict: Response containing list of assistants or error information
     """
-    print("Initiate list assistant call")
+    logger.info("Initiate list assistant call")
 
     assistant_endpoint = os.environ["API_BASE_URL"] + "/assistant/list"
 
@@ -78,13 +81,13 @@ def list_assistants(access_token: str) -> dict:
         )  # to adhere to object access return response dict
 
         if response.status_code != 200 or "success" not in response_content:
-            print("Response: ", response.content)
+            logger.debug("Response: %s", response.content)
             return {"success": False}
         else:
             return response_content
 
     except Exception as e:
-        print(f"Error listing asts: {e}")
+        logger.error(f"Error listing asts: {e}")
         return {"success": False}
 
 
@@ -99,7 +102,7 @@ def remove_astp_perms(access_token: str, data: dict) -> dict:
     Returns:
         dict: Response containing success status and any relevant data
     """
-    print("Initiate remove astp perms assistant call")
+    logger.info("Initiate remove astp perms assistant call")
 
     assistant_endpoint = (
         os.environ["API_BASE_URL"] + "/assistant/remove_astp_permissions"
@@ -126,7 +129,7 @@ def remove_astp_perms(access_token: str, data: dict) -> dict:
             return response_content
 
     except Exception as e:
-        print(f"Error updating permissions: {e}")
+        logger.error(f"Error updating permissions: {e}")
         return {"success": False}
 
 
@@ -142,7 +145,7 @@ def delete_assistant(access_token: str, data: dict) -> dict:
     Returns:
         dict: Response containing success status and any relevant data
     """
-    print("Initiate delete assistant call")
+    logger.info("Initiate delete assistant call")
 
     assistant_endpoint = os.environ["API_BASE_URL"] + "/assistant/delete"
 
@@ -167,7 +170,7 @@ def delete_assistant(access_token: str, data: dict) -> dict:
             return response_content
 
     except Exception as e:
-        print(f"Error deleting ast: {e}")
+        logger.error(f"Error deleting ast: {e}")
         return {"success": False}
 
 
@@ -183,7 +186,7 @@ def create_assistant(access_token: str, data: dict) -> dict:
     Returns:
         dict: Response containing success status and created assistant data
     """
-    print("Initiate create assistant call")
+    logger.info("Initiate create assistant call")
 
     assistant_endpoint = os.environ["API_BASE_URL"] + "/assistant/create"
 
@@ -209,7 +212,7 @@ def create_assistant(access_token: str, data: dict) -> dict:
             return response_content
 
     except Exception as e:
-        print(f"Error creating ast: {e}")
+        logger.error(f"Error creating ast: {e}")
         return {"success": False}
 
 
@@ -226,7 +229,7 @@ def add_assistant_path(access_token: str, data: dict) -> dict:
         dict: Response containing success status and any relevant data or
             error messages
     """
-    print("Initiate add assistant path call")
+    logger.info("Initiate add assistant path call")
 
     path_assistant_endpoint = os.environ["API_BASE_URL"] + "/assistant/add_path"
 
@@ -257,6 +260,6 @@ def add_assistant_path(access_token: str, data: dict) -> dict:
             }
 
     except Exception as e:
-        print(f"Error adding path to assistant: {e}")
+        logger.error(f"Error adding path to assistant: {e}")
 
     return {"success": False, "message": "Unexpected error occurred"}

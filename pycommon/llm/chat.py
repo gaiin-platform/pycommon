@@ -2,6 +2,10 @@ import json
 
 import requests
 
+from pycommon.logger import getLogger
+
+logger = getLogger("llm_chat")
+
 
 def chat(chat_url, access_token, payload):
     """
@@ -85,7 +89,7 @@ def chat(chat_url, access_token, payload):
     except Exception as e:
         # Return the error message in a format that can be handled by the caller
         error_msg = str(e)
-        print(f"Error in chat function: {error_msg}")
+        logger.error(f"Error in chat function: {error_msg}")
         return f"Error: {error_msg}", []
 
 
@@ -182,7 +186,7 @@ def chat_streaming(
 
             if error_message:
                 # Return a more descriptive error with the actual message
-                print(
+                logger.error(
                     f"Request failed with status {response.status_code}: "
                     f"{error_message}"
                 )
@@ -210,7 +214,9 @@ def chat_streaming(
                     # Check for error in the response
                     if "error" in data:
                         error_message = data["error"]
-                        print(f"Error detected from chat service: " f"{error_message}")
+                        logger.error(
+                            f"Error detected from chat service: " f"{error_message}"
+                        )
                         # Break the loop when error is detected
                         break
 
@@ -219,7 +225,7 @@ def chat_streaming(
                     else:
                         content_handler(data)
             except json.JSONDecodeError as e:
-                print(f"JSON decode error: {e} - Content: {line}")
+                logger.warning(f"JSON decode error: {e} - Content: {line}")
                 continue
 
     # If we found an error, raise an exception to propagate it back

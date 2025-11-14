@@ -3,7 +3,11 @@ from typing import List, Union
 
 import requests
 
+from pycommon.logger import getLogger
+
 from .data_sources import extract_key
+
+logger = getLogger("files")
 
 
 def upload_file(
@@ -65,21 +69,21 @@ def upload_file(
     presigned_url_response = get_file_presigned_url(access_token, payload)
 
     if not presigned_url_response.get("success"):
-        print(f"[✗] Failed to get presigned URL for: {file_name}")
+        logger.error(f"[✗] Failed to get presigned URL for: {file_name}")
         return
 
     key = presigned_url_response.get("key")
     upload_url = presigned_url_response.get("uploadUrl")
 
-    print(f"[✓] Uploading file: {file_name} to {upload_url}")
+    logger.info(f"[✓] Uploading file: {file_name} to {upload_url}")
 
     success = upload_to_presigned_url(upload_url, file_contents, file_type)
 
     if success:
-        print(f"[✓] Uploaded file: {file_name} to {upload_url}")
+        logger.info(f"[✓] Uploaded file: {file_name} to {upload_url}")
         return {"id": key, **payload["data"]}
 
-    print(f"[✗] Upload failed for: {file_name}")
+    logger.error(f"[✗] Upload failed for: {file_name}")
     return None
 
 
@@ -119,7 +123,7 @@ def get_file_presigned_url(access_token: str, payload: dict):
         )
 
         if response.status_code != 200:
-            print(f"[✗] API call failed: {response.status_code} " f"{response.text}")
+            logger.error(f"[✗] API call failed: {response.status_code} {response.text}")
             return {"success": False}
 
         response = response.json()
@@ -132,7 +136,7 @@ def get_file_presigned_url(access_token: str, payload: dict):
         }
 
     except Exception as e:
-        print(f"[✗] Error calling get presigned url API: {e}")
+        logger.error(f"[✗] Error calling get presigned url API: {e}")
 
     return {"success": False}
 
@@ -173,7 +177,7 @@ def upload_to_presigned_url(
         )
         return response.status_code == 200
     except Exception as e:
-        print(f"[✗] Upload failed: {e}")
+        logger.error(f"[✗] Upload failed: {e}")
         return False
 
 
@@ -214,7 +218,9 @@ def delete_file(access_token: str, key: str):
         )
 
         if response.status_code != 200:
-            print(f"[✗] Delete API call failed: {response.status_code} {response.text}")
+            logger.error(
+                f"[✗] Delete API call failed: {response.status_code} {response.text}"
+            )
             return {
                 "success": False,
                 "message": f"API call failed with status {response.status_code}",
@@ -226,13 +232,13 @@ def delete_file(access_token: str, key: str):
         message = response_data.get("message", "")
 
         if success:
-            print(f"[✓] Successfully deleted file with key: {key}")
+            logger.info(f"[✓] Successfully deleted file with key: {key}")
         else:
-            print(f"[✗] Failed to delete file with key: {key} - {message}")
+            logger.error(f"[✗] Failed to delete file with key: {key} - {message}")
 
         return {"success": success, "message": message}
 
     except Exception as e:
-        print(f"[✗] Error calling delete file API: {e}")
+        logger.error(f"[✗] Error calling delete file API: {e}")
 
     return {"success": False, "message": f"Failed to delete file with key: {key}"}

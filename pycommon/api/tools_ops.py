@@ -8,13 +8,15 @@ Lambda environments.
 import os
 from typing import Any, Dict, List, Optional
 
+from pycommon.logger import getLogger
 from pycommon.tools.ops import (
     OperationModel,
     extract_ops_from_file,
     find_python_files,
-    print_pretty_ops,
     write_ops,
 )
+
+logger = getLogger("tools_ops")
 
 
 def api_tools_register_handler(
@@ -43,10 +45,10 @@ def api_tools_register_handler(
     try:
         # Route to appropriate function
         if command == "ls":
-            print("Listing operations")
+            logger.info("Listing operations")
             result = list_lambda_ops(include_dirs)
         elif command == "register":
-            print("Registering operations")
+            logger.info("Registering operations")
             result = register_lambda_ops(include_dirs, data, current_user)
         else:
             result = {
@@ -97,22 +99,22 @@ def register_lambda_ops(
                 "operations_count": 0,
             }
 
-        print(f"Register: Using DynamoDB table: {table_name}")
+        logger.info(f"Register: Using DynamoDB table: {table_name}")
 
         # Scan specified directories
         code_dir = "/var/task"  # Lambda runtime directory
-        print(f"Register: Scanning directory: {code_dir}")
-        print(f"Register: Including directories: {include_dirs}")
+        logger.info(f"Register: Scanning directory: {code_dir}")
+        logger.info(f"Register: Including directories: {include_dirs}")
 
         # Check if directory exists (same as list function)
         if not os.path.exists(code_dir):
-            print(f"Register: Directory {code_dir} does not exist!")
+            logger.warning(f"Register: Directory {code_dir} does not exist!")
             # Fallback to current working directory
             code_dir = os.getcwd()
-            print(f"Register: Using current working directory: {code_dir}")
+            logger.info(f"Register: Using current working directory: {code_dir}")
 
         all_ops = _scan_lambda_codebase(code_dir, include_dirs)
-        print(f"Register: Found {len(all_ops)} operations after scanning")
+        logger.info(f"Register: Found {len(all_ops)} operations after scanning")
 
         if not all_ops:
             return {
@@ -125,12 +127,12 @@ def register_lambda_ops(
         # Use simple tags
         tags = ["all"] + additional_tags
 
-        print(
+        logger.info(
             f"Register: About to register {len(all_ops)} operations with "
             f"tags: {tags}"
         )
         for op in all_ops:
-            print(f"  - {op.name} ({op.url})")
+            logger.debug(f"  - {op.name} ({op.url})")
 
         # Register using existing write_ops function
         write_ops(current_user=current_user, tags=tags, ops=all_ops)
@@ -151,7 +153,7 @@ def register_lambda_ops(
         }
 
     except Exception as e:
-        print(f"Register: Error occurred: {str(e)}")
+        logger.error(f"Register: Error occurred: {str(e)}")
         return {
             "success": False,
             "error": f"Registration failed: {str(e)}",
@@ -172,18 +174,18 @@ def list_lambda_ops(include_dirs: List[str]) -> Dict[str, Any]:
     try:
         # Scan specified directories
         code_dir = "/var/task"  # Lambda runtime directory
-        print(f"Scanning directory: {code_dir}")
-        print(f"Including directories: {include_dirs}")
+        logger.info(f"Scanning directory: {code_dir}")
+        logger.info(f"Including directories: {include_dirs}")
 
         # Check if directory exists
         if not os.path.exists(code_dir):
-            print(f"Directory {code_dir} does not exist!")
+            logger.warning(f"Directory {code_dir} does not exist!")
             # Fallback to current working directory
             code_dir = os.getcwd()
-            print(f"Using current working directory: {code_dir}")
+            logger.info(f"Using current working directory: {code_dir}")
 
         all_ops = _scan_lambda_codebase(code_dir, include_dirs)
-        print(f"Found {len(all_ops)} operations after scanning")
+        logger.info(f"Found {len(all_ops)} operations after scanning")
 
         if not all_ops:
             return {
@@ -225,7 +227,7 @@ def list_lambda_ops(include_dirs: List[str]) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        print(f"Error in list_lambda_ops: {str(e)}")
+        logger.error(f"Error in list_lambda_ops: {str(e)}")
         return {
             "success": False,
             "error": f"Listing failed: {str(e)}",
@@ -251,11 +253,11 @@ def _scan_lambda_codebase(
     Raises:
         Exception: If file system operations or AST parsing fails
     """
-    print(f"Starting scan of directory: {directory}")
+    logger.info(f"Starting scan of directory: {directory}")
 
     # Get all Python files using existing function
     all_python_files = find_python_files(directory)
-    print(f"Found {len(all_python_files)} Python files total")
+    logger.info(f"Found {len(all_python_files)} Python files total")
 
     # Directories to exclude when include_dirs is empty (exclusion-based approach)
     EXCLUDED_DIRS = {
@@ -288,9 +290,9 @@ def _scan_lambda_codebase(
 
             if not should_exclude:
                 filtered_files.append(file_path)
-                print(f"Including file: {file_path}")
+                logger.debug(f"Including file: {file_path}")
 
-        print(f"Using exclusion-based filtering (excluded: {EXCLUDED_DIRS})")
+        logger.info(f"Using exclusion-based filtering (excluded: {EXCLUDED_DIRS})")
     else:
         # Inclusion-based: only include files in specified directories
         for file_path in all_python_files:
@@ -304,26 +306,26 @@ def _scan_lambda_codebase(
 
             if should_include:
                 filtered_files.append(file_path)
-                print(f"Including file: {file_path}")
+                logger.debug(f"Including file: {file_path}")
 
-    print(f"After filtering, scanning {len(filtered_files)} files for " f"operations")
+    logger.info(f"After filtering, scanning {len(filtered_files)} files for operations")
 
     # Extract operations from each file using existing function
     all_ops: List[OperationModel] = []
     for file_path in filtered_files:
         try:
-            print(f"Extracting operations from: {file_path}")
+            logger.debug(f"Extracting operations from: {file_path}")
             file_ops = extract_ops_from_file(file_path)
-            print(f"Found {len(file_ops)} operations in {file_path}")
+            logger.debug(f"Found {len(file_ops)} operations in {file_path}")
             for op in file_ops:
-                print(
+                logger.debug(
                     f"  - Operation: {op.name} ({op.method} {op.url}) "
                     f"tags: {op.tags}"
                 )
-                print_pretty_ops([op])  # Pass as list
+                logger.debug(f"Pretty format: {op.name} ({op.method} {op.url})")
             all_ops.extend(file_ops)
         except Exception as e:
-            print(f"Warning: Could not parse {file_path}: {e}")
+            logger.warning(f"Warning: Could not parse {file_path}: {e}")
 
-    print(f"Total operations found: {len(all_ops)}")
+    logger.info(f"Total operations found: {len(all_ops)}")
     return all_ops

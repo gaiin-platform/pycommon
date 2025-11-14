@@ -7,6 +7,10 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from pycommon.logger import getLogger
+
+logger = getLogger("object_permissions")
+
 
 def update_object_permissions(
     access_token: str,
@@ -68,7 +72,7 @@ def update_object_permissions(
             return True
 
     except Exception as e:
-        print(f"Error updating permissions: {e}")
+        logger.error(f"Error updating permissions: {e}")
 
     return False
 
@@ -89,7 +93,7 @@ def can_access_objects(
     Returns:
         bool: True if user has access to all data sources, False otherwise
     """
-    print(f"Checking access on data sources: {data_sources}")
+    logger.info(f"Checking access on data sources: {data_sources}")
 
     # Skip empty data sources
     if not data_sources:
@@ -115,7 +119,7 @@ def can_access_objects(
         id_key = ds["id"].split("://")[-1]
         access_levels[id_key] = permission_level
 
-    print(f"Checking access for non-web data sources: {access_levels}")
+    logger.debug(f"Checking access for non-web data sources: {access_levels}")
 
     request_data = {"data": {"dataSources": access_levels}}
     headers = {
@@ -135,13 +139,15 @@ def can_access_objects(
             response.status_code != 200
             or response_content.get("statusCode", None) != 200
         ):
-            print(f"User does not have access to data sources: {response.status_code}")
+            logger.warning(
+                f"User does not have access to data sources: {response.status_code}"
+            )
             return False
         else:
             return True
 
     except Exception as e:
-        print(f"Error checking access on data sources: {e}")
+        logger.error(f"Error checking access on data sources: {e}")
 
     return False
 
@@ -166,7 +172,7 @@ def simulate_can_access_objects(
     if permission_levels is None:
         permission_levels = ["read"]
 
-    print(f"Simulating access on data sources: {object_ids}")
+    logger.info(f"Simulating access on data sources: {object_ids}")
 
     access_levels = {id: permission_levels for id in object_ids}
 
@@ -174,7 +180,7 @@ def simulate_can_access_objects(
     # and permission level
     all_denied = {id: {pl: False for pl in permission_levels} for id in object_ids}
 
-    print(f"With access levels: {access_levels}")
+    logger.debug(f"With access levels: {access_levels}")
 
     request_data = {"data": {"objects": access_levels}}
 
@@ -207,10 +213,10 @@ def simulate_can_access_objects(
             else:
                 return all_denied
         else:
-            print("Error simulating user access")
+            logger.error("Error simulating user access")
             return all_denied
 
     except Exception as e:
-        print(f"Error simulating access on data sources: {e}")
+        logger.error(f"Error simulating access on data sources: {e}")
 
     return all_denied

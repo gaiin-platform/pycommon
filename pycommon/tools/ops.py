@@ -11,6 +11,10 @@ from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.types import TypeSerializer
 from pydantic import BaseModel, ValidationError, field_validator
 
+from pycommon.logger import getLogger
+
+logger = getLogger("tools_ops")
+
 dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 serializer = TypeSerializer()
 
@@ -22,12 +26,12 @@ def op(tags=None, path="", name="", description="", params=None, method="POST"):
     def decorator(func):
         def wrapper(*args, **kwargs):
             # You can do something with tags, name, description, and params here
-            print(f"Path: {path}")
-            print(f"Tags: {tags}")
-            print(f"Name: {name}")
-            print(f"Method: {method}")
-            print(f"Description: {description}")
-            print(f"Params: {params}")
+            logger.debug(f"Path: {path}")
+            logger.debug(f"Tags: {tags}")
+            logger.debug(f"Name: {name}")
+            logger.debug(f"Method: {method}")
+            logger.debug(f"Description: {description}")
+            logger.debug(f"Params: {params}")
             # Call the actual function
             result = func(*args, **kwargs)
             return result
@@ -247,8 +251,8 @@ def extract_ops_from_file(file_path: str) -> List[OperationModel]:
                             ops_found.append(operation)
         return ops_found
     except Exception as e:
-        print(e)
-        print(f"Skipping {file_path} due to unparseable AST")
+        logger.error(e)
+        logger.warning(f"Skipping {file_path} due to unparseable AST")
         return []
 
 
@@ -257,29 +261,29 @@ def scan_and_register_ops(
 ):
     all_ops = scan_ops(path)
     response = write_ops(current_user=current_user, tags=tags, ops=all_ops)
-    print(response)
+    logger.info(response)
 
 
 def print_pretty_ops(ops: List[OperationModel]):
     for op in ops:
-        print("_" * 80)
-        print("Operation Details:")
-        print(f"  Name       : {op.name}")
-        print(f"  URL        : {op.url}")
-        print(f"  Method     : {op.method}")
-        print(f"  Description: {op.description}")
-        print(f"  ID         : {op.id}")
+        logger.info("_" * 80)
+        logger.info("Operation Details:")
+        logger.info(f"  Name       : {op.name}")
+        logger.info(f"  URL        : {op.url}")
+        logger.info(f"  Method     : {op.method}")
+        logger.info(f"  Description: {op.description}")
+        logger.info(f"  ID         : {op.id}")
         if op.parameters:
-            print("  Parameters (Input Schema):")
+            logger.info("  Parameters (Input Schema):")
             properties = op.parameters.get("properties", {})
             for prop_name, prop_def in properties.items():
                 if isinstance(prop_def, dict):
                     description = prop_def.get("description", prop_name)
-                    print(f"    - {prop_name} : {description}")
-        print(f"  Include Access Token: {op.includeAccessToken}")
-        print(f"  Type       : {op.type}")
-        print(f"  Tags       : {op.tags}")
-        print("")
+                    logger.info(f"    - {prop_name} : {description}")
+        logger.info(f"  Include Access Token: {op.includeAccessToken}")
+        logger.info(f"  Type       : {op.type}")
+        logger.info(f"  Tags       : {op.tags}")
+        logger.info("")
 
 
 def scan_ops(path=".") -> List[OperationModel]:
@@ -364,7 +368,7 @@ def write_ops(
                             ":ops": existing_ops,
                         },
                     )
-                    print(
+                    logger.info(
                         f"Updated item in table {table_name} for user {current_user} "
                         f"and tag {tag}"
                     )
@@ -377,7 +381,7 @@ def write_ops(
                     "ops": [op_dict],
                 }
                 table.put_item(Item=item)
-                print(
+                logger.info(
                     f"Put item into table {table_name} for user {current_user} "
                     f"and tag {tag}"
                 )
@@ -439,7 +443,7 @@ def main():
         # Resolve the DynamoDB table name
         ops_table = resolve_ops_table(args.stage, args.ops_table)
         if not ops_table:
-            print(
+            logger.error(
                 "Error: OPS_DYNAMODB_TABLE could not be resolved. Add it to your "
                 "var/<stage>-var.yml file or set it as an environment variable or "
                 "pass it with --ops_table <table_name>."

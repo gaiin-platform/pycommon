@@ -284,8 +284,10 @@ def get_claims(token: str) -> dict:
     dal = DAL(Backend.AWS)
     user = None
 
-    # First try sub - check if it exists in cognito table
-    if payload.get("sub"):
+    if payload.get("immutable_id"):
+        logger.info(f"Using immutable_id for user: {payload['immutable_id']}")
+        user = payload["immutable_id"]
+    elif payload.get("sub"):
         try:
             dal.User.get_by_user_id(user_id=payload["sub"])
             user = payload["sub"]
