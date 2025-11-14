@@ -75,13 +75,20 @@ def clear_jwks_cache():
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.jwt.get_unverified_header")
 @patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
 def test_get_claims_success(
-    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
 ):
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
         "IDP_PREFIX": "mockprefix",
     }.get(key, default)
 
@@ -92,6 +99,11 @@ def test_get_claims_success(
 
     mock_get_header.return_value = {"kid": "mock_kid"}
     mock_decode.return_value = {"username": "mockprefix_mockuser"}
+
+    # Mock DAL to find user by processed username
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.return_value = {"user_id": "mockuser"}
 
     mock_table = MagicMock()
     mock_table.get_item.return_value = {
@@ -120,6 +132,7 @@ def test_get_claims_success(
 def test_get_claims_missing_env(mock_get_env, mock_requests_get):
     required_env_vars = [
         "ACCOUNTS_DYNAMO_TABLE",
+        "COGNITO_USERS_DYNAMODB_TABLE",
     ]
 
     for missing_var in required_env_vars:
@@ -130,6 +143,9 @@ def test_get_claims_missing_env(mock_get_env, mock_requests_get):
                 "OAUTH_AUDIENCE": "mock_value",
                 "ACCOUNTS_DYNAMO_TABLE": (
                     "mock_value" if missing != "ACCOUNTS_DYNAMO_TABLE" else None
+                ),
+                "COGNITO_USERS_DYNAMODB_TABLE": (
+                    "mock_value" if missing != "COGNITO_USERS_DYNAMODB_TABLE" else None
                 ),
                 "STAGE": "test",
                 "SERVICE_NAME": "test-service",
@@ -151,6 +167,7 @@ def test_get_claims_token_is_none(mock_get_env):
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
         "IDP_PREFIX": "mockprefix",
     }.get(key, default)
     with pytest.raises(ClaimException, match="No Valid Access Token Found"):
@@ -164,6 +181,7 @@ def test_get_claims_invalid_jwks(mock_get_env, mock_requests_get):
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
     mock_requests_get.return_value = MagicMock(
@@ -183,6 +201,7 @@ def test_get_claims_missing_rsa_key(mock_get_header, mock_get_env, mock_requests
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
     mock_requests_get.return_value = MagicMock(
@@ -200,13 +219,20 @@ def test_get_claims_missing_rsa_key(mock_get_header, mock_get_env, mock_requests
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.jwt.get_unverified_header")
 @patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
 def test_get_claims_with_rsa_key(
-    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
 ):
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
     mock_table = MagicMock()
@@ -222,6 +248,11 @@ def test_get_claims_with_rsa_key(
     }
 
     mock_boto3.return_value.Table.return_value = mock_table
+
+    # Mock DAL to find user by username
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.return_value = {"user_id": "mockuser"}
 
     mock_requests_get.return_value = MagicMock(
         ok=True, json=MagicMock(return_value={"keys": [{"kid": "mock_kid"}]})
@@ -248,6 +279,7 @@ def test_get_claims_with_no_kid_found(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
     mock_requests_get.return_value = MagicMock(
@@ -266,13 +298,20 @@ def test_get_claims_with_no_kid_found(
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.jwt.get_unverified_header")
 @patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
 def test_get_claims_no_dynamodb_item(
-    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
 ):
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
     mock_requests_get.return_value = MagicMock(
@@ -282,6 +321,11 @@ def test_get_claims_no_dynamodb_item(
 
     mock_get_header.return_value = {"kid": "mock_kid"}
     mock_decode.return_value = {"username": "mockuser"}
+
+    # Mock DAL to find user by username
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.return_value = {"user_id": "mockuser"}
 
     mock_table = MagicMock()
     mock_table.get_item.return_value = {}
@@ -302,6 +346,7 @@ def test_get_claims_jwks_request_failed(mock_get_env, mock_requests_get):
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
     mock_requests_get.return_value = MagicMock(ok=False, status_code=500)
@@ -318,13 +363,20 @@ def test_get_claims_jwks_request_failed(mock_get_env, mock_requests_get):
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.jwt.get_unverified_header")
 @patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
 def test_get_claims_default_account(
-    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
 ):
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, None)
     mock_requests_get.return_value = MagicMock(
         ok=True,
@@ -332,6 +384,12 @@ def test_get_claims_default_account(
     )
     mock_get_header.return_value = {"kid": "mock_kid"}
     mock_decode.return_value = {"username": "mockuser"}
+
+    # Mock DAL to find user by username
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.return_value = {"user_id": "mockuser"}
+
     mock_table = MagicMock()
     mock_table.get_item.return_value = {
         "Item": {
@@ -354,13 +412,20 @@ def test_get_claims_default_account(
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.jwt.get_unverified_header")
 @patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
 def test_get_claims_no_default_account(
-    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
 ):
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
         ok=True,
@@ -368,6 +433,12 @@ def test_get_claims_no_default_account(
     )
     mock_get_header.return_value = {"kid": "mock_kid"}
     mock_decode.return_value = {"username": "mockuser"}
+
+    # Mock DAL to find user by username
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.return_value = {"user_id": "mockuser"}
+
     mock_table = MagicMock()
     mock_table.get_item.return_value = {
         "Item": {
@@ -390,8 +461,14 @@ def test_get_claims_no_default_account(
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.jwt.get_unverified_header")
 @patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
 def test_get_claims_no_accounts_list(
-    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
 ):
     """Test the case where no default account is found and the print statement is
     executed."""
@@ -399,6 +476,7 @@ def test_get_claims_no_accounts_list(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
         ok=True,
@@ -406,6 +484,12 @@ def test_get_claims_no_accounts_list(
     )
     mock_get_header.return_value = {"kid": "mock_kid"}
     mock_decode.return_value = {"username": "mockuser"}
+
+    # Mock DAL to find user by username
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.return_value = {"user_id": "mockuser"}
+
     mock_table = MagicMock()
     mock_table.get_item.return_value = {
         "Item": {
@@ -2049,13 +2133,21 @@ def test_get_jwks_with_connection_exception_fail_open_with_cache():
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.jwt.get_unverified_header")
 @patch("pycommon.authz.jwt.decode")
-def test_get_claims_uses_immutable_id_if_present(
-    mock_decode, mock_get_header, mock_boto3, mock_get_env, mock_requests_get
+@patch("pycommon.dal.DAL")
+def test_get_claims_uses_sub_field_when_found_in_cognito(
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
 ):
+    """Test get_claims uses 'sub' field when user is found in cognito table."""
     mock_get_env.side_effect = lambda key, default: {
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
         "IDP_PREFIX": "mockprefix",
     }.get(key, default)
 
@@ -2067,7 +2159,136 @@ def test_get_claims_uses_immutable_id_if_present(
     mock_get_header.return_value = {"kid": "mock_kid"}
     mock_decode.return_value = {
         "username": "mockprefix_mockuser",
-        "immutable_id": "12345",
+        "sub": "sub12345",
+    }
+
+    # Mock DAL to find user by sub
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.return_value = {"user_id": "sub12345"}
+
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [
+                {
+                    "id": "mock_account",
+                    "isDefault": True,
+                    "rateLimit": {"rate": 42, "period": "Hourly"},
+                }
+            ],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    result = get_claims("mock_token")
+
+    # Should use sub field as username
+    assert result["username"] == "sub12345"
+    assert result["account"] == "mock_account"
+    assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}
+
+    # Verify DAL was called with sub
+    mock_dal_instance.User.get_by_user_id.assert_called_with(user_id="sub12345")
+
+
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
+def test_get_claims_falls_back_to_username_when_sub_not_found(
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
+):
+    """Test get_claims falls back to username when sub is not found in cognito table."""
+    mock_get_env.side_effect = lambda key, default: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+        "IDP_PREFIX": "mockprefix",
+    }.get(key, default)
+
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {
+        "username": "mockprefix_mockuser",
+        "sub": "sub12345",
+    }
+
+    # Mock DAL to NOT find user by sub, fallback to username
+    # (no DAL validation for username)
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.side_effect = Exception("User not found")
+
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [
+                {
+                    "id": "mock_account",
+                    "isDefault": True,
+                    "rateLimit": {"rate": 42, "period": "Hourly"},
+                }
+            ],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    result = get_claims("mock_token")
+
+    # Should fall back to processed username (without prefix)
+    assert result["username"] == "mockuser"
+    assert result["account"] == "mock_account"
+    assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}
+
+    # Verify DAL was only called with sub (username is not validated with DAL anymore)
+    mock_dal_instance.User.get_by_user_id.assert_called_once_with(user_id="sub12345")
+
+
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
+def test_get_claims_no_sub_field_uses_username_directly(
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
+):
+    """Test get_claims uses username directly when no sub field is present."""
+    mock_get_env.side_effect = lambda key, default: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+        "IDP_PREFIX": "mockprefix",
+    }.get(key, default)
+
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {
+        "username": "mockprefix_mockuser",
+        # No 'sub' field
     }
 
     mock_table = MagicMock()
@@ -2086,7 +2307,8 @@ def test_get_claims_uses_immutable_id_if_present(
 
     result = get_claims("mock_token")
 
-    assert result["username"] == "12345"  # Should use immutable_id
+    # Should use processed username (without prefix)
+    assert result["username"] == "mockuser"
     assert result["account"] == "mock_account"
     assert result["allowed_access"] == ["full_access"]
     assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}

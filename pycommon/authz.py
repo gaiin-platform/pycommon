@@ -201,6 +201,9 @@ def _get_jwks_for_url(oauth_issuer_base_url: str, fail_open: bool) -> dict:
         "ACCOUNTS_DYNAMO_TABLE": [
             DynamoDBOperation.GET_ITEM
         ],  # DynamoDB table for user accounts
+        "COGNITO_USERS_DYNAMODB_TABLE": [
+            DynamoDBOperation.GET_ITEM
+        ],  # DynamoDB table for cognito users
     }
 )
 def get_claims(token: str) -> dict:
@@ -274,16 +277,31 @@ def get_claims(token: str) -> dict:
         raise ClaimException("Invalid JWT token")
 
     logger.debug(f"IDP_PREFIX from env: {idp_prefix}")
-    logger.debug(f"Original username: {payload['username']}")
-    if payload.get("immutable_id"):
-        logger.info(f"Using immutable_id for user: {payload['immutable_id']}")
-        user = payload["immutable_id"]
-    else:
+    logger.debug(f"Original username: {payload.get('username')}")
+
+    from pycommon.dal import DAL, Backend
+
+    dal = DAL(Backend.AWS)
+    user = None
+
+    # First try sub - check if it exists in cognito table
+    if payload.get("sub"):
+        try:
+            dal.User.get_by_user_id(user_id=payload["sub"])
+            user = payload["sub"]
+            logger.info(f"Using sub for user: {user}")
+        except Exception:
+            logger.debug(
+                f"Sub {payload['sub']} not found in cognito table, "
+                "falling back to username"
+            )
+
+    # If sub not found, fallback to old IDP prefix username logic
+    if not user:
         user = payload["username"]
         if len(idp_prefix) > 0 and user.startswith(idp_prefix + "_"):
             user = user.split(idp_prefix + "_", 1)[1]
-            logger.info(f"User matched pattern, updated to: {user}")
-        logger.info(f"Final user value: {user}")
+            logger.info(f"User matched IDP prefix pattern, updated to: {user}")
 
     dynamodb = boto3.resource("dynamodb")
     table = dynamodb.Table(accounts_table_name)
