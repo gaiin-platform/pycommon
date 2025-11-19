@@ -361,7 +361,13 @@ class TestGetSystemIds:
 class TestAreValidAmplifyUsersOld:
     """Test cases for are_valid_amplify_users function - legacy single email tests."""
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_valid_email_in_emails(
@@ -385,7 +391,13 @@ class TestAreValidAmplifyUsersOld:
         assert invalid == []
         mock_get_systems.assert_called_once_with("test_token")
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -414,7 +426,13 @@ class TestAreValidAmplifyUsersOld:
         assert valid == ["system1@example.com"]
         assert invalid == []
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -444,7 +462,13 @@ class TestAreValidAmplifyUsersOld:
         assert valid == ["system1@example.com"]
         assert invalid == []
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -474,7 +498,13 @@ class TestAreValidAmplifyUsersOld:
         assert valid == []
         assert invalid == ["nonexistent@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -497,7 +527,13 @@ class TestAreValidAmplifyUsersOld:
         assert valid == []
         assert invalid == ["user@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -522,7 +558,13 @@ class TestAreValidAmplifyUsersOld:
         assert valid == ["system1@example.com"]
         assert invalid == []
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_systems_fail_emails_work(
@@ -543,7 +585,13 @@ class TestAreValidAmplifyUsersOld:
         assert valid == ["user1@example.com"]
         assert invalid == []
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -566,7 +614,13 @@ class TestAreValidAmplifyUsersOld:
         assert valid == []
         assert invalid == ["user@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_system_data_without_owner(
@@ -602,7 +656,13 @@ class TestAreValidAmplifyUsersOld:
         assert valid == []
         assert invalid == ["nonexistent@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_duplicate_emails(
@@ -647,7 +707,13 @@ class TestAreValidAmplifyUsersOld:
 class TestAreValidAmplifyUsers:
     """Test cases for are_valid_amplify_users function."""
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_all_valid_emails(
@@ -673,7 +739,13 @@ class TestAreValidAmplifyUsers:
         assert invalid == []
         mock_get_systems.assert_called_once_with("test_token")
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_all_invalid_emails(
@@ -698,7 +770,13 @@ class TestAreValidAmplifyUsers:
         assert valid == []
         assert invalid == ["invalid1@example.com", "invalid2@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_mixed_validity(
@@ -731,7 +809,13 @@ class TestAreValidAmplifyUsers:
         assert valid == ["user1@example.com", "system1@example.com"]
         assert invalid == ["invalid@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -758,7 +842,13 @@ class TestAreValidAmplifyUsers:
         assert valid == ["user1@example.com", "system1@example.com"]
         assert invalid == []
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -783,7 +873,13 @@ class TestAreValidAmplifyUsers:
         assert valid == []
         assert invalid == []
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -809,7 +905,13 @@ class TestAreValidAmplifyUsers:
         assert valid == ["system1@example.com"]
         assert invalid == ["invalid@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_systems_fail_emails_work(
@@ -839,7 +941,13 @@ class TestAreValidAmplifyUsers:
         assert valid == ["user1@example.com"]
         assert invalid == ["invalid@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -864,7 +972,13 @@ class TestAreValidAmplifyUsers:
         assert valid == []
         assert invalid == ["user@example.com", "another@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_system_data_without_owner(
@@ -909,7 +1023,13 @@ class TestAreValidAmplifyUsers:
         ]
         assert invalid == ["invalid@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     @patch("pycommon.api.amplify_users.get_email_suggestions")
@@ -948,7 +1068,13 @@ class TestAreValidAmplifyUsers:
         ]
         assert invalid == []
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_duplicate_emails_across_sources(
@@ -992,7 +1118,13 @@ class TestAreValidAmplifyUsers:
         ]
         assert invalid == ["invalid@example.com"]
 
-    @patch.dict(os.environ, {"COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table"})
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
     @patch("pycommon.api.amplify_users.boto3.resource")
     @patch("pycommon.api.amplify_users.get_system_ids")
     def test_are_valid_amplify_users_dynamodb_error(
@@ -1014,3 +1146,243 @@ class TestAreValidAmplifyUsers:
 
         assert valid == []
         assert invalid == ["test@example.com"]
+
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
+    @patch("pycommon.api.amplify_users.boto3.resource")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    def test_are_valid_amplify_users_group_system_id_valid(
+        self, mock_get_systems, mock_boto3_resource
+    ):
+        """Test validation of valid group system ID."""
+        # Mock DynamoDB tables
+        mock_cognito_table = MagicMock()
+        mock_cognito_table.get_item.return_value = {}
+
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.get_item.return_value = {
+            "Item": {
+                "api_owner_id": "NewTestGroup/systemKey/"
+                "9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"
+            }
+        }
+
+        def table_side_effect(table_name):
+            if table_name == "test-cognito-table":
+                return mock_cognito_table
+            elif table_name == "test-api-keys-table":
+                return mock_api_keys_table
+            return MagicMock()
+
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.side_effect = table_side_effect
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        mock_get_systems.return_value = []
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["NewTestGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"]
+        )
+
+        assert valid == [
+            "NewTestGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"
+        ]  # Case preserved
+        assert invalid == []
+
+        # Verify the API keys table was called with correct api_owner_id
+        mock_api_keys_table.get_item.assert_called_once_with(
+            Key={
+                "api_owner_id": "NewTestGroup/systemKey/"
+                "9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"
+            },
+            ProjectionExpression="api_owner_id",
+        )
+
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
+    @patch("pycommon.api.amplify_users.boto3.resource")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    def test_are_valid_amplify_users_group_system_id_invalid(
+        self, mock_get_systems, mock_boto3_resource
+    ):
+        """Test validation of invalid group system ID."""
+        # Mock DynamoDB tables
+        mock_cognito_table = MagicMock()
+        mock_cognito_table.get_item.return_value = {}
+
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.get_item.return_value = {}  # No item found
+
+        def table_side_effect(table_name):
+            if table_name == "test-cognito-table":
+                return mock_cognito_table
+            elif table_name == "test-api-keys-table":
+                return mock_api_keys_table
+            return MagicMock()
+
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.side_effect = table_side_effect
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        mock_get_systems.return_value = []
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["InvalidGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"]
+        )
+
+        assert valid == []
+        assert invalid == [
+            "InvalidGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"
+        ]  # Case preserved
+
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
+    @patch("pycommon.api.amplify_users.boto3.resource")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    def test_are_valid_amplify_users_mixed_emails_and_group_system_ids(
+        self, mock_get_systems, mock_boto3_resource
+    ):
+        """Test validation of mixed emails and group system IDs."""
+        # Mock DynamoDB tables
+        mock_cognito_table = MagicMock()
+
+        def cognito_get_item_side_effect(**kwargs):
+            user_id = kwargs.get("Key", {}).get("user_id", "")
+            if user_id == "user@example.com":
+                return {"Item": {"user_id": user_id}}
+            return {}
+
+        mock_cognito_table.get_item.side_effect = cognito_get_item_side_effect
+
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.get_item.return_value = {
+            "Item": {
+                "api_owner_id": "TestGroup/systemKey/"
+                "9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"
+            }
+        }
+
+        def table_side_effect(table_name):
+            if table_name == "test-cognito-table":
+                return mock_cognito_table
+            elif table_name == "test-api-keys-table":
+                return mock_api_keys_table
+            return MagicMock()
+
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.side_effect = table_side_effect
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        mock_get_systems.return_value = []
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token",
+            [
+                "user@example.com",  # Valid email (should be lowercase)
+                "TestGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304",  # Valid group ID
+                "invalid@example.com",  # Invalid email
+            ],
+        )
+
+        assert valid == [
+            "user@example.com",
+            "TestGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304",
+        ]
+        assert invalid == ["invalid@example.com"]
+
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
+    @patch("pycommon.api.amplify_users.boto3.resource")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    def test_are_valid_amplify_users_group_system_id_client_error(
+        self, mock_get_systems, mock_boto3_resource
+    ):
+        """Test validation when DynamoDB raises ClientError for group system ID."""
+        # Mock DynamoDB tables
+        mock_cognito_table = MagicMock()
+        mock_cognito_table.get_item.return_value = {}
+
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.get_item.side_effect = ClientError(
+            {"Error": {"Message": "Access denied"}}, "GetItem"
+        )
+
+        def table_side_effect(table_name):
+            if table_name == "test-cognito-table":
+                return mock_cognito_table
+            elif table_name == "test-api-keys-table":
+                return mock_api_keys_table
+            return MagicMock()
+
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.side_effect = table_side_effect
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        mock_get_systems.return_value = []
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["TestGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"]
+        )
+
+        assert valid == []
+        assert invalid == ["TestGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"]
+
+    @patch.dict(
+        os.environ,
+        {
+            "COGNITO_USERS_DYNAMODB_TABLE": "test-cognito-table",
+            "API_KEYS_DYNAMODB_TABLE": "test-api-keys-table",
+        },
+    )
+    @patch("pycommon.api.amplify_users.boto3.resource")
+    @patch("pycommon.api.amplify_users.get_system_ids")
+    def test_are_valid_amplify_users_group_system_id_general_exception(
+        self, mock_get_systems, mock_boto3_resource
+    ):
+        """Test validation when general exception occurs during group ID validation."""
+        # Mock DynamoDB tables
+        mock_cognito_table = MagicMock()
+        mock_cognito_table.get_item.return_value = {}
+
+        mock_api_keys_table = MagicMock()
+        mock_api_keys_table.get_item.side_effect = Exception("Unexpected error")
+
+        def table_side_effect(table_name):
+            if table_name == "test-cognito-table":
+                return mock_cognito_table
+            elif table_name == "test-api-keys-table":
+                return mock_api_keys_table
+            return MagicMock()
+
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.side_effect = table_side_effect
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        mock_get_systems.return_value = []
+
+        valid, invalid = are_valid_amplify_users(
+            "test_token", ["TestGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"]
+        )
+
+        assert valid == []
+        assert invalid == ["TestGroup_9b97a48b-e2f3-4095-9ae9-62a0ec7a6304"]

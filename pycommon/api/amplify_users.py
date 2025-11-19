@@ -3,12 +3,15 @@
 
 import json
 import os
+import re
 from typing import Dict, List, Optional
 
 import boto3
 import requests
 from botocore.exceptions import ClientError
 
+from pycommon.dal.providers.aws.resource_perms import DynamoDBOperation
+from pycommon.decorators import required_env_vars
 from pycommon.logger import getLogger
 
 logger = getLogger("amplify_users")
@@ -105,22 +108,35 @@ def get_system_ids(access_token: str) -> Optional[List[dict]]:
     return None
 
 
+@required_env_vars(
+    {
+        "COGNITO_USERS_DYNAMODB_TABLE": [DynamoDBOperation.GET_ITEM],
+        "API_KEYS_DYNAMODB_TABLE": [DynamoDBOperation.GET_ITEM],
+    }
+)
 def are_valid_amplify_users(
     access_token: str, user_emails: List[str]
 ) -> tuple[List[str], List[str]]:
     """
-    Check if given emails are valid Amplify users using efficient direct lookups.
+    Check if given emails and group system IDs are valid Amplify users
+    using efficient direct lookups.
 
     Args:
         access_token: Bearer token for authentication
-        user_emails: Email addresses to validate
+        user_emails: Email addresses and group system IDs to validate
 
     Returns:
         tuple[List[str], List[str]]: A tuple containing
-        (valid_users, invalid_users) where each list
-        contains lowercase email addresses
+        (valid_users, invalid_users) where emails are lowercase
+        and group system IDs preserve original case
     """
     logger.info(f"Checking if {user_emails} are valid Amplify users")
+
+    # Regex pattern for group system IDs: GroupName_uuid
+    group_system_id_pattern = re.compile(
+        r"^[A-Z][a-zA-Z0-9]*_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}"
+        r"-[a-f0-9]{12}$"
+    )
 
     system_data = get_system_ids(access_token)
     system_users = []
@@ -142,8 +158,50 @@ def are_valid_amplify_users(
     valid = []
     invalid = []
 
-    for user_email in user_emails:
-        lower_user = user_email.lower()
+    for user_identifier in user_emails:
+        # Check if it's a group system ID
+        if group_system_id_pattern.match(user_identifier):
+            # Handle group system ID - preserve original case
+            try:
+                # Parse GroupName_uuid to extract components
+                group_name, uuid_part = user_identifier.split("_", 1)
+                # Construct api_owner_id: GroupName/systemKey/uuid
+                api_owner_id = f"{group_name}/systemKey/{uuid_part}"
+
+                # Initialize API keys table only when needed
+                api_keys_table = dynamodb.Table(os.environ["API_KEYS_DYNAMODB_TABLE"])
+
+                # Check API_KEYS_DYNAMODB_TABLE
+                response = api_keys_table.get_item(
+                    Key={"api_owner_id": api_owner_id},
+                    ProjectionExpression="api_owner_id",
+                )
+
+                if "Item" in response:
+                    # Group system ID exists
+                    logger.info(
+                        f"Group system ID {user_identifier} validated successfully "
+                        f"with api_owner_id: {api_owner_id}"
+                    )
+                    valid.append(user_identifier)  # Preserve original case
+                else:
+                    # Group system ID doesn't exist
+                    invalid.append(user_identifier)
+
+            except ClientError as e:
+                logger.error(
+                    f"Error checking group system ID {user_identifier}: "
+                    f"{e.response['Error']['Message']}"
+                )
+                # On error, treat as invalid to be safe
+                invalid.append(user_identifier)
+            except Exception as e:
+                logger.error(f"Error parsing group system ID {user_identifier}: {e}")
+                invalid.append(user_identifier)
+            continue
+
+        # Handle as email user - convert to lowercase
+        lower_user = user_identifier.lower()
 
         # First check if it's a system user (fast set lookup)
         if lower_user in system_users_set:

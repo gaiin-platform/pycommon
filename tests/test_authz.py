@@ -1689,11 +1689,12 @@ def test_get_claims_missing_env_vars(mock_get_env, _):
 @patch("pycommon.authz.requests.get")
 @patch("pycommon.authz.os.environ.get")
 def test_get_claims_jwks_invalid_json(mock_get_env, mock_requests_get):
-    mock_get_env.side_effect = lambda key, default=None: (
-        "issuer"
-        if key == "OAUTH_ISSUER_BASE_URL"
-        else "aud" if key == "OAUTH_AUDIENCE" else "table"
-    )
+    mock_get_env.side_effect = lambda key, default=None: {
+        "OAUTH_ISSUER_BASE_URL": "issuer",
+        "OAUTH_AUDIENCE": "aud",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+    }.get(key, default)
     mock_requests_get.return_value = MagicMock(
         ok=True,
         json=MagicMock(side_effect=json.JSONDecodeError("Expecting value", "", 0)),
@@ -1709,11 +1710,12 @@ def test_get_claims_jwks_invalid_json(mock_get_env, mock_requests_get):
 def test_get_claims_jwt_decode_error(
     mock_decode, mock_get_header, mock_get_env, mock_requests_get
 ):
-    mock_get_env.side_effect = lambda key, default=None: (
-        "issuer"
-        if key == "OAUTH_ISSUER_BASE_URL"
-        else "aud" if key == "OAUTH_AUDIENCE" else "table"
-    )
+    mock_get_env.side_effect = lambda key, default=None: {
+        "OAUTH_ISSUER_BASE_URL": "issuer",
+        "OAUTH_AUDIENCE": "aud",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+    }.get(key, default)
     mock_requests_get.return_value = MagicMock(
         ok=True,
         json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
@@ -1731,11 +1733,12 @@ def test_get_claims_jwt_decode_error(
 def test_get_claims_jwt_expired_sigs_error(
     mock_decode, mock_get_header, mock_get_env, mock_requests_get
 ):
-    mock_get_env.side_effect = lambda key, default=None: (
-        "issuer"
-        if key == "OAUTH_ISSUER_BASE_URL"
-        else "aud" if key == "OAUTH_AUDIENCE" else "table"
-    )
+    mock_get_env.side_effect = lambda key, default=None: {
+        "OAUTH_ISSUER_BASE_URL": "issuer",
+        "OAUTH_AUDIENCE": "aud",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+    }.get(key, default)
     mock_requests_get.return_value = MagicMock(
         ok=True,
         json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
@@ -1753,11 +1756,12 @@ def test_get_claims_jwt_expired_sigs_error(
 def test_get_claims_jwt_expired_claims_error(
     mock_decode, mock_get_header, mock_get_env, mock_requests_get
 ):
-    mock_get_env.side_effect = lambda key, default=None: (
-        "issuer"
-        if key == "OAUTH_ISSUER_BASE_URL"
-        else "aud" if key == "OAUTH_AUDIENCE" else "table"
-    )
+    mock_get_env.side_effect = lambda key, default=None: {
+        "OAUTH_ISSUER_BASE_URL": "issuer",
+        "OAUTH_AUDIENCE": "aud",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+    }.get(key, default)
     mock_requests_get.return_value = MagicMock(
         ok=True,
         json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
