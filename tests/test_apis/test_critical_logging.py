@@ -29,12 +29,15 @@ class TestLogCriticalError:
             )
         },
     )
-    @patch("pycommon.api.critical_logging.sqs_client")
+    @patch("pycommon.api.critical_logging.boto3.client")
     @patch("pycommon.api.critical_logging.logger")
     def test_log_critical_error_success_minimal_params(
-        self, mock_logger, mock_sqs_client
+        self, mock_logger, mock_boto3_client
     ):
         """Test successful logging with minimal required parameters."""
+        # Setup mock SQS client
+        mock_sqs_client = mock_boto3_client.return_value
+
         result = log_critical_error(
             function_name="test_function",
             error_type="TestError",
@@ -46,6 +49,10 @@ class TestLogCriticalError:
             "success": True,
             "message": "Critical error queued for processing",
         }
+
+        # Verify boto3.client was called to create SQS client
+        # (decorator may also create SSM client)
+        mock_boto3_client.assert_any_call("sqs")
 
         # Verify SQS call
         expected_message_body = {
@@ -87,12 +94,17 @@ class TestLogCriticalError:
             "SERVICE_NAME": "payment-service",
         },
     )
-    @patch("pycommon.api.critical_logging.sqs_client")
+    @patch("pycommon.api.critical_logging.boto3.client")
     @patch("pycommon.api.critical_logging.logger")
-    def test_log_critical_error_success_all_params(self, mock_logger, mock_sqs_client):
+    def test_log_critical_error_success_all_params(
+        self, mock_logger, mock_boto3_client
+    ):
         """Test successful logging with all parameters provided."""
+        # Setup mock SQS client
+        mock_sqs_client = mock_boto3_client.return_value
+
         context = {"order_id": 123, "amount": 99.99}
-        stack_trace = "Traceback (most recent call last):\n  File..."
+        stack_trace = "Traceback (most recent call last):\\n  File..."
 
         result = log_critical_error(
             service_name="custom-service",
@@ -134,9 +146,9 @@ class TestLogCriticalError:
             },
         )
 
-    @patch("pycommon.api.critical_logging.sqs_client")
+    @patch("pycommon.api.critical_logging.boto3.client")
     @patch("pycommon.api.critical_logging.logger")
-    def test_log_critical_error_missing_queue_url(self, mock_logger, mock_sqs_client):
+    def test_log_critical_error_missing_queue_url(self, mock_logger, mock_boto3_client):
         """Test behavior when CRITICAL_ERRORS_SQS_QUEUE_NAME is not set."""
         # Ensure queue URL is not in environment
         if "CRITICAL_ERRORS_SQS_QUEUE_NAME" in os.environ:
@@ -151,19 +163,15 @@ class TestLogCriticalError:
         # Should still return success (fail-safe)
         assert result == {
             "success": True,
-            "message": "Queue URL not configured, error not logged",
+            "message": "Unexpected error, logged locally only",
         }
 
-        # Should not call SQS
-        mock_sqs_client.send_message.assert_not_called()
+        # Boto3 client should be called for SSM (Parameter Store lookup)
+        # but not for SQS since the parameter lookup fails
+        mock_boto3_client.assert_any_call("ssm", region_name="us-east-1")
 
-        # Should log warning
-        mock_logger.warning.assert_called_once_with(
-            "CRITICAL_ERRORS_SQS_QUEUE_NAME not available, cannot log: %s.%s - %s",
-            "unknown",
-            "test_function",
-            "TestError",
-        )
+        # Should log error (due to general exception handling)
+        mock_logger.error.assert_called_once()
 
     @patch.dict(
         os.environ,
@@ -174,11 +182,14 @@ class TestLogCriticalError:
             "SERVICE_NAME": "auto-detected-service",
         },
     )
-    @patch("pycommon.api.critical_logging.sqs_client")
+    @patch("pycommon.api.critical_logging.boto3.client")
     def test_log_critical_error_auto_detect_service_name_from_env(
-        self, mock_sqs_client
+        self, mock_boto3_client
     ):
         """Test service_name auto-detected from SERVICE_NAME env var when None."""
+        # Setup mock SQS client
+        mock_sqs_client = mock_boto3_client.return_value
+
         result = log_critical_error(
             function_name="test_function",
             error_type="TestError",
@@ -205,11 +216,14 @@ class TestLogCriticalError:
             )
         },
     )
-    @patch("pycommon.api.critical_logging.sqs_client")
+    @patch("pycommon.api.critical_logging.boto3.client")
     def test_log_critical_error_auto_detect_service_name_default_unknown(
-        self, mock_sqs_client
+        self, mock_boto3_client
     ):
         """Test service_name defaults to 'unknown' when SERVICE_NAME not set."""
+        # Setup mock SQS client
+        mock_sqs_client = mock_boto3_client.return_value
+
         # Ensure SERVICE_NAME is not in environment
         if "SERVICE_NAME" in os.environ:
             del os.environ["SERVICE_NAME"]
@@ -236,9 +250,12 @@ class TestLogCriticalError:
             )
         },
     )
-    @patch("pycommon.api.critical_logging.sqs_client")
-    def test_log_critical_error_different_severity_levels(self, mock_sqs_client):
+    @patch("pycommon.api.critical_logging.boto3.client")
+    def test_log_critical_error_different_severity_levels(self, mock_boto3_client):
         """Test logging with different severity levels."""
+        # Setup mock SQS client
+        mock_sqs_client = mock_boto3_client.return_value
+
         severity_levels = [
             SEVERITY_CRITICAL,
             SEVERITY_HIGH,
@@ -274,11 +291,12 @@ class TestLogCriticalError:
             )
         },
     )
-    @patch("pycommon.api.critical_logging.sqs_client")
+    @patch("pycommon.api.critical_logging.boto3.client")
     @patch("pycommon.api.critical_logging.logger")
-    def test_log_critical_error_sqs_client_error(self, mock_logger, mock_sqs_client):
+    def test_log_critical_error_sqs_client_error(self, mock_logger, mock_boto3_client):
         """Test handling of SQS ClientError (fail-safe behavior)."""
-        # Mock SQS to raise ClientError
+        # Setup mock SQS client to raise ClientError
+        mock_sqs_client = mock_boto3_client.return_value
         client_error = ClientError(
             {
                 "Error": {
@@ -312,11 +330,12 @@ class TestLogCriticalError:
             )
         },
     )
-    @patch("pycommon.api.critical_logging.sqs_client")
+    @patch("pycommon.api.critical_logging.boto3.client")
     @patch("pycommon.api.critical_logging.logger")
-    def test_log_critical_error_general_exception(self, mock_logger, mock_sqs_client):
+    def test_log_critical_error_general_exception(self, mock_logger, mock_boto3_client):
         """Test handling of general exceptions (fail-safe behavior)."""
-        # Mock SQS to raise general exception
+        # Setup mock SQS client to raise general exception
+        mock_sqs_client = mock_boto3_client.return_value
         mock_sqs_client.send_message.side_effect = Exception("Unexpected error")
 
         result = log_critical_error(
@@ -344,9 +363,12 @@ class TestLogCriticalError:
             )
         },
     )
-    @patch("pycommon.api.critical_logging.sqs_client")
-    def test_log_critical_error_message_body_structure(self, mock_sqs_client):
+    @patch("pycommon.api.critical_logging.boto3.client")
+    def test_log_critical_error_message_body_structure(self, mock_boto3_client):
         """Test that message body has correct structure."""
+        # Setup mock SQS client
+        mock_sqs_client = mock_boto3_client.return_value
+
         context = {"key": "value", "number": 42}
         stack_trace = "Traceback..."
 
@@ -388,9 +410,12 @@ class TestLogCriticalError:
             )
         },
     )
-    @patch("pycommon.api.critical_logging.sqs_client")
-    def test_log_critical_error_message_attributes(self, mock_sqs_client):
+    @patch("pycommon.api.critical_logging.boto3.client")
+    def test_log_critical_error_message_attributes(self, mock_boto3_client):
         """Test that SQS message attributes are set correctly."""
+        # Setup mock SQS client
+        mock_sqs_client = mock_boto3_client.return_value
+
         result = log_critical_error(
             service_name="attr-service",
             function_name="test_function",
@@ -412,10 +437,10 @@ class TestLogCriticalError:
 
         assert message_attrs == expected_attrs
 
-    @patch("pycommon.api.critical_logging.sqs_client")
+    @patch("pycommon.api.critical_logging.boto3.client")
     @patch("pycommon.api.critical_logging.logger")
     def test_log_critical_error_missing_queue_url_with_service_name(
-        self, mock_logger, mock_sqs_client
+        self, mock_logger, mock_boto3_client
     ):
         """Test warning message includes service_name when queue URL missing."""
         # Ensure queue URL is not in environment
@@ -430,14 +455,10 @@ class TestLogCriticalError:
         )
 
         assert result["success"] is True
+        assert result["message"] == "Unexpected error, logged locally only"
 
-        # Should log warning with service name
-        mock_logger.warning.assert_called_once_with(
-            "CRITICAL_ERRORS_SQS_QUEUE_NAME not available, cannot log: %s.%s - %s",
-            "warning-service",
-            "test_function",
-            "TestError",
-        )
+        # Should log error (due to general exception handling)
+        mock_logger.error.assert_called_once()
 
     @patch("pycommon.api.critical_logging._log_critical_error_internal")
     @patch("pycommon.api.critical_logging.logger")

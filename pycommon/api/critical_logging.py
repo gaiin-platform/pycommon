@@ -26,8 +26,6 @@ from pycommon.logger import getLogger
 
 logger = getLogger("critical_logging")
 
-# SQS client for sending critical errors to queue
-sqs_client = boto3.client("sqs")
 
 # Constants
 STATUS_ACTIVE = "ACTIVE"
@@ -58,6 +56,9 @@ def _log_critical_error_internal(
 
     # Get SQS queue URL (guaranteed to be available due to decorator)
     queue_url = os.environ["CRITICAL_ERRORS_SQS_QUEUE_NAME"]
+
+    # Create SQS client when needed (lazy initialization)
+    sqs_client = boto3.client("sqs")
 
     # Prepare message payload
     message_body = {
