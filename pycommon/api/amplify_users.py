@@ -132,24 +132,48 @@ def are_valid_amplify_users(
     """
     logger.info(f"Checking if {user_emails} are valid Amplify users")
 
-    # Regex pattern for group system IDs: GroupName_uuid
+    # Regex patterns for system IDs (more comprehensive to avoid unnecessary API calls)
+    # Pattern 1: GroupName_UUID format (original group system IDs)
     group_system_id_pattern = re.compile(
         r"^[A-Z][a-zA-Z0-9]*_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}"
         r"-[a-f0-9]{12}$"
     )
 
-    system_data = get_system_ids(access_token)
-    system_users = []
+    # Pattern 2: General system ID patterns (includes various dash/number combinations)
+    # Matches: GroupName-Numbers, GroupName--Numbers, GroupName-Text-Numbers, etc.
+    general_system_id_pattern = re.compile(
+        r"^[A-Za-z][A-Za-z0-9]*(?:-+[A-Za-z0-9]+)*-[0-9]+$"
+    )
+
+    # Separate checks for different system ID types
+    def is_group_system_id(identifier):
+        return group_system_id_pattern.match(identifier) is not None
+
+    def is_general_system_id(identifier):
+        return general_system_id_pattern.match(identifier) is not None
+
+    # Smart optimization: Skip get_system_ids() unless we have general system IDs
+    # - Group system IDs (GroupName_UUID): use direct API keys table lookup
+    # - Regular emails/cognito subs: use direct cognito table lookup
+    # - General system IDs (THK-265484 style): need system owner data from API
+    has_general_system_ids = any(is_general_system_id(email) for email in user_emails)
+
+    system_data = None
+    system_users_set = set()
+
+    # Only call API if we have general system IDs (which need system owner lookup)
+    if has_general_system_ids:
+        system_data = get_system_ids(access_token)
+
     if system_data is not None:
         # Extract owner emails from system data
         system_users = [
             item.get("owner", "").lower() for item in system_data if item.get("owner")
         ]
+        # Convert system users to a set for O(1) lookup
+        system_users_set = set(system_users)
     else:
         logger.warning("Failed to retrieve system users list")
-
-    # Convert system users to a set for O(1) lookup
-    system_users_set = set(system_users)
 
     # Initialize DynamoDB client
     dynamodb = boto3.resource("dynamodb")
@@ -159,9 +183,9 @@ def are_valid_amplify_users(
     invalid = []
 
     for user_identifier in user_emails:
-        # Check if it's a group system ID
-        if group_system_id_pattern.match(user_identifier):
-            # Handle group system ID - preserve original case
+        # Check if it's a UUID-based group system ID (direct DynamoDB lookup)
+        if is_group_system_id(user_identifier):
+            # Handle UUID-based group system ID - preserve original case
             try:
                 # Parse GroupName_uuid to extract components
                 group_name, uuid_part = user_identifier.split("_", 1)
@@ -200,35 +224,54 @@ def are_valid_amplify_users(
                 invalid.append(user_identifier)
             continue
 
-        # Handle as email user - convert to lowercase
-        lower_user = user_identifier.lower()
+        # Check if it's a general system ID pattern (dash-number format)
+        elif is_general_system_id(user_identifier):
+            if system_data is not None:
+                system_id_found = False
+                for system_item in system_data:
+                    system_id = system_item.get("systemId", "")
+                    if (
+                        user_identifier == system_id
+                        or user_identifier.lower() in system_users_set
+                    ):
+                        valid.append(user_identifier)  # Preserve case
+                        system_id_found = True
+                        break
 
-        # First check if it's a system user (fast set lookup)
-        if lower_user in system_users_set:
-            valid.append(lower_user)
+                if system_id_found:
+                    continue
+
+            # If not found in system data, it's invalid
+            invalid.append(user_identifier)
             continue
 
-        # Check if it exists in cognito_users table using direct GetItem
-        try:
-            response = cognito_user_table.get_item(
-                Key={"user_id": lower_user},
-                ProjectionExpression="user_id",
-                # Only get the key back to minimize data transfer
-            )
+        # Handle as email - convert to lowercase
+        else:
+            lower_user = user_identifier.lower()
 
-            if "Item" in response:
-                # User exists in cognito table
+            # First check if it's a system user (fast set lookup)
+            if lower_user in system_users_set:
                 valid.append(lower_user)
-            else:
-                # User doesn't exist in either place
-                invalid.append(lower_user)
+                continue
 
-        except ClientError as e:
-            logger.error(
-                f"Error checking user {lower_user}: {e.response['Error']['Message']}"
-            )
-            # On error, treat as invalid to be safe
-            invalid.append(lower_user)
+            # Check if it exists in cognito_users table using direct GetItem
+            try:
+                response = cognito_user_table.get_item(
+                    Key={"user_id": lower_user},
+                    ProjectionExpression="user_id",
+                )
+
+                if "Item" in response:
+                    valid.append(lower_user)
+                else:
+                    invalid.append(lower_user)
+
+            except ClientError as e:
+                logger.error(
+                    f"Error checking user {lower_user}: "
+                    f"{e.response['Error']['Message']}"
+                )
+                invalid.append(lower_user)
 
     logger.debug(f"Valid Users: {valid}")
     logger.debug(f"Invalid Users: {invalid}")

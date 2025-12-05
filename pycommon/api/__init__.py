@@ -8,6 +8,7 @@ from . import (
     api_key,
     assistants,
     credentials,
+    critical_logging,
     data_sources,
     embeddings,
     files,
@@ -34,6 +35,7 @@ from .assistants import (
     share_assistant,
 )
 from .credentials import get_credentials, get_endpoint, get_json_credentials
+from .critical_logging import log_critical_error
 from .data_sources import (
     extract_key,
     get_data_source_keys,
@@ -70,6 +72,7 @@ __all__ = [
     "get_credentials",
     "delete_embeddings",
     "extract_key",
+    "log_critical_error",
     "update_object_permissions",
     "can_access_objects",
     "verify_member_of_ast_admin_group",
@@ -104,6 +107,7 @@ __all__ = [
     "files",
     "assistants",
     "credentials",
+    "critical_logging",
     "embeddings",
     "data_sources",
     "object_permissions",
