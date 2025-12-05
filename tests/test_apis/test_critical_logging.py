@@ -24,7 +24,7 @@ class TestLogCriticalError:
     @patch.dict(
         os.environ,
         {
-            "CRITICAL_ERRORS_SQS_QUEUE_URL": (
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME": (
                 "https://sqs.us-east-1.amazonaws.com/123456789012/critical-errors"
             )
         },
@@ -81,7 +81,7 @@ class TestLogCriticalError:
     @patch.dict(
         os.environ,
         {
-            "CRITICAL_ERRORS_SQS_QUEUE_URL": (
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME": (
                 "https://sqs.us-east-1.amazonaws.com/123456789012/critical-errors"
             ),
             "SERVICE_NAME": "payment-service",
@@ -137,10 +137,10 @@ class TestLogCriticalError:
     @patch("pycommon.api.critical_logging.sqs_client")
     @patch("pycommon.api.critical_logging.logger")
     def test_log_critical_error_missing_queue_url(self, mock_logger, mock_sqs_client):
-        """Test behavior when CRITICAL_ERRORS_SQS_QUEUE_URL is not set."""
+        """Test behavior when CRITICAL_ERRORS_SQS_QUEUE_NAME is not set."""
         # Ensure queue URL is not in environment
-        if "CRITICAL_ERRORS_SQS_QUEUE_URL" in os.environ:
-            del os.environ["CRITICAL_ERRORS_SQS_QUEUE_URL"]
+        if "CRITICAL_ERRORS_SQS_QUEUE_NAME" in os.environ:
+            del os.environ["CRITICAL_ERRORS_SQS_QUEUE_NAME"]
 
         result = log_critical_error(
             function_name="test_function",
@@ -159,7 +159,7 @@ class TestLogCriticalError:
 
         # Should log warning
         mock_logger.warning.assert_called_once_with(
-            "CRITICAL_ERRORS_SQS_QUEUE_URL not available, cannot log error: %s.%s - %s",
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME not available, cannot log: %s.%s - %s",
             "unknown",
             "test_function",
             "TestError",
@@ -168,7 +168,7 @@ class TestLogCriticalError:
     @patch.dict(
         os.environ,
         {
-            "CRITICAL_ERRORS_SQS_QUEUE_URL": (
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME": (
                 "https://sqs.us-east-1.amazonaws.com/123456789012/critical-errors"
             ),
             "SERVICE_NAME": "auto-detected-service",
@@ -200,7 +200,7 @@ class TestLogCriticalError:
     @patch.dict(
         os.environ,
         {
-            "CRITICAL_ERRORS_SQS_QUEUE_URL": (
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME": (
                 "https://sqs.us-east-1.amazonaws.com/123456789012/critical-errors"
             )
         },
@@ -231,7 +231,7 @@ class TestLogCriticalError:
     @patch.dict(
         os.environ,
         {
-            "CRITICAL_ERRORS_SQS_QUEUE_URL": (
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME": (
                 "https://sqs.us-east-1.amazonaws.com/123456789012/critical-errors"
             )
         },
@@ -269,7 +269,7 @@ class TestLogCriticalError:
     @patch.dict(
         os.environ,
         {
-            "CRITICAL_ERRORS_SQS_QUEUE_URL": (
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME": (
                 "https://sqs.us-east-1.amazonaws.com/123456789012/critical-errors"
             )
         },
@@ -307,7 +307,7 @@ class TestLogCriticalError:
     @patch.dict(
         os.environ,
         {
-            "CRITICAL_ERRORS_SQS_QUEUE_URL": (
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME": (
                 "https://sqs.us-east-1.amazonaws.com/123456789012/critical-errors"
             )
         },
@@ -339,7 +339,7 @@ class TestLogCriticalError:
     @patch.dict(
         os.environ,
         {
-            "CRITICAL_ERRORS_SQS_QUEUE_URL": (
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME": (
                 "https://sqs.us-east-1.amazonaws.com/123456789012/critical-errors"
             )
         },
@@ -383,7 +383,7 @@ class TestLogCriticalError:
     @patch.dict(
         os.environ,
         {
-            "CRITICAL_ERRORS_SQS_QUEUE_URL": (
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME": (
                 "https://sqs.us-east-1.amazonaws.com/123456789012/critical-errors"
             )
         },
@@ -419,8 +419,8 @@ class TestLogCriticalError:
     ):
         """Test warning message includes service_name when queue URL missing."""
         # Ensure queue URL is not in environment
-        if "CRITICAL_ERRORS_SQS_QUEUE_URL" in os.environ:
-            del os.environ["CRITICAL_ERRORS_SQS_QUEUE_URL"]
+        if "CRITICAL_ERRORS_SQS_QUEUE_NAME" in os.environ:
+            del os.environ["CRITICAL_ERRORS_SQS_QUEUE_NAME"]
 
         result = log_critical_error(
             service_name="warning-service",
@@ -433,7 +433,7 @@ class TestLogCriticalError:
 
         # Should log warning with service name
         mock_logger.warning.assert_called_once_with(
-            "CRITICAL_ERRORS_SQS_QUEUE_URL not available, cannot log error: %s.%s - %s",
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME not available, cannot log: %s.%s - %s",
             "warning-service",
             "test_function",
             "TestError",
@@ -447,7 +447,7 @@ class TestLogCriticalError:
         """Test fail-safe behavior when @required_env_vars raises EnvVarError."""
         # Mock the internal function to raise EnvVarError
         mock_internal_function.side_effect = EnvVarError(
-            "Environment variable 'CRITICAL_ERRORS_SQS_QUEUE_URL' not found"
+            "Environment variable 'CRITICAL_ERRORS_SQS_QUEUE_NAME' not found"
         )
 
         result = log_critical_error(
@@ -477,7 +477,7 @@ class TestLogCriticalError:
 
         # Should log warning about environment variable not being available
         mock_logger.warning.assert_called_once_with(
-            "CRITICAL_ERRORS_SQS_QUEUE_URL not available, cannot log error: %s.%s - %s",
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME not available, cannot log: %s.%s - %s",
             "test-service",
             "test_function",
             "TestError",

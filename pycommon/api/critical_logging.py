@@ -37,7 +37,7 @@ SEVERITY_MEDIUM = "MEDIUM"
 SEVERITY_LOW = "LOW"
 
 
-@required_env_vars({"CRITICAL_ERRORS_SQS_QUEUE_URL": [SQSOperation.SEND_MESSAGE]})
+@required_env_vars({"CRITICAL_ERRORS_SQS_QUEUE_NAME": [SQSOperation.SEND_MESSAGE]})
 def _log_critical_error_internal(
     function_name: str,
     error_type: str,
@@ -50,14 +50,14 @@ def _log_critical_error_internal(
 ) -> Dict[str, Any]:
     """
     Internal function with environment variable resolution and tracking.
-    This function assumes CRITICAL_ERRORS_SQS_QUEUE_URL is available.
+    This function assumes CRITICAL_ERRORS_SQS_QUEUE_NAME is available.
     """
     # Auto-detect service name if not provided
     if service_name is None:
         service_name = os.getenv("SERVICE_NAME", "unknown")
 
     # Get SQS queue URL (guaranteed to be available due to decorator)
-    queue_url = os.environ["CRITICAL_ERRORS_SQS_QUEUE_URL"]
+    queue_url = os.environ["CRITICAL_ERRORS_SQS_QUEUE_NAME"]
 
     # Prepare message payload
     message_body = {
@@ -157,7 +157,7 @@ def log_critical_error(
         >>>     )
 
     Environment Variables Required:
-        CRITICAL_ERRORS_SQS_QUEUE_URL: SQS queue URL for critical errors
+        CRITICAL_ERRORS_SQS_QUEUE_NAME: SQS queue URL for critical errors
         SERVICE_NAME (optional): Auto-detected service name
 
     Note: This function uses @required_env_vars decorator internally for Parameter
@@ -180,7 +180,7 @@ def log_critical_error(
         # Environment variable not available (no Parameter Store fallback worked)
         # Fall back to graceful handling
         logger.warning(
-            "CRITICAL_ERRORS_SQS_QUEUE_URL not available, cannot log error: %s.%s - %s",
+            "CRITICAL_ERRORS_SQS_QUEUE_NAME not available, cannot log: %s.%s - %s",
             service_name or "unknown",
             function_name,
             error_type,
