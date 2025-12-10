@@ -324,7 +324,7 @@ class UsageTracker:
             execution_id = f"{metrics.user}#lambda#{uuid.uuid4()}"
 
             # Calculate cost (top-level for easy querying)
-            cost = float(metrics.estimated_cost_usd())
+            cost = metrics.estimated_cost_usd()
 
             # Calculate TTL: 90 days from now (Lambda records are temporary)
             ttl = int(time.time()) + (90 * 24 * 60 * 60)
@@ -338,7 +338,7 @@ class UsageTracker:
                     "operation": metrics.operation,
                     "endpoint": metrics.endpoint,
                     "event_source": getattr(metrics, "event_source", None),
-                    "duration_ms": float(metrics.duration_ms),
+                    "duration_ms": Decimal(str(metrics.duration_ms)),
                     "memory_limit_mb": metrics.memory_limit_mb,
                     "estimated_cost_usd": cost,  # Also keep in details for reference
                     "status_code": metrics.status_code,

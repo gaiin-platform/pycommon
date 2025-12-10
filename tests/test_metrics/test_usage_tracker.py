@@ -470,6 +470,12 @@ class TestUsageTracker:
         assert "time" in item
         assert "requestId" in item
 
+        # Verify Decimal types (DynamoDB requires Decimal, not float)
+        from decimal import Decimal
+
+        assert isinstance(item["cost"], Decimal)
+        assert isinstance(item["details"]["execution"]["duration_ms"], Decimal)
+
     @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
     @patch("pycommon.metrics.usage_tracker.boto3")
     def test_record_metrics_with_error_type(self, mock_boto3):
