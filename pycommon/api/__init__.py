@@ -14,6 +14,7 @@ from . import (
     files,
     object_permissions,
     ops,
+    request_state,
     secrets,
     ses_email,
 )
@@ -49,6 +50,7 @@ from .object_permissions import (
     update_object_permissions,
 )
 from .ops import api_tool, set_op_type, set_permissions_by_state, set_route_data
+from .request_state import request_killed
 
 # Import most commonly used functions from each API module
 from .secrets import (
@@ -80,6 +82,7 @@ __all__ = [
     "send_email",
     "api_tool",
     "api_tools_register_handler",
+    "request_killed",
     # All other functions
     "update_dict_with_secrets",
     "delete_secret_parameter",
@@ -116,4 +119,5 @@ __all__ = [
     "api_key",
     "ses_email",
     "ops",
+    "request_state",
 ]

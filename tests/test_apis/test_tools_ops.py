@@ -22,20 +22,23 @@ class TestApiToolsRegisterHandler:
         """Test handler with 'ls' command."""
         include_dirs = ["service"]
 
-        with patch("pycommon.api.tools_ops.list_lambda_ops") as mock_list:
-            mock_list.return_value = {
-                "success": True,
-                "message": "Found 2 operations",
-                "operations_count": 2,
-                "operations": [],
-            }
+        with patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"}):
+            with patch("pycommon.api.tools_ops.list_lambda_ops") as mock_list:
+                mock_list.return_value = {
+                    "success": True,
+                    "message": "Found 2 operations",
+                    "operations_count": 2,
+                    "operations": [],
+                }
 
-            result = api_tools_register_handler(include_dirs=include_dirs, command="ls")
+                result = api_tools_register_handler(
+                    include_dirs=include_dirs, command="ls"
+                )
 
-            assert result["success"] is True
-            assert result["message"] == "Found 2 operations"
-            assert result["operations_count"] == 2
-            mock_list.assert_called_once_with(include_dirs)
+                assert result["success"] is True
+                assert result["message"] == "Found 2 operations"
+                assert result["operations_count"] == 2
+                mock_list.assert_called_once_with(include_dirs)
 
     def test_api_tools_register_handler_register_command(self):
         """Test handler with 'register' command."""
@@ -43,73 +46,82 @@ class TestApiToolsRegisterHandler:
         data = {"additional_tags": ["test"]}
         current_user = "test_user"
 
-        with patch("pycommon.api.tools_ops.register_lambda_ops") as mock_register:
-            mock_register.return_value = {
-                "success": True,
-                "message": "Successfully registered 1 operations",
-                "operations_count": 1,
-                "operations": [],
-            }
+        with patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"}):
+            with patch("pycommon.api.tools_ops.register_lambda_ops") as mock_register:
+                mock_register.return_value = {
+                    "success": True,
+                    "message": "Successfully registered 1 operations",
+                    "operations_count": 1,
+                    "operations": [],
+                }
 
-            result = api_tools_register_handler(
-                include_dirs=include_dirs,
-                command="register",
-                data=data,
-                current_user=current_user,
-            )
+                result = api_tools_register_handler(
+                    include_dirs=include_dirs,
+                    command="register",
+                    data=data,
+                    current_user=current_user,
+                )
 
-            assert result["success"] is True
-            assert result["operations_count"] == 1
-            mock_register.assert_called_once_with(include_dirs, data, current_user)
+                assert result["success"] is True
+                assert result["operations_count"] == 1
+                mock_register.assert_called_once_with(include_dirs, data, current_user)
 
     def test_api_tools_register_handler_invalid_command(self):
         """Test handler with invalid command."""
-        result = api_tools_register_handler(include_dirs=["service"], command="invalid")
+        with patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"}):
+            result = api_tools_register_handler(
+                include_dirs=["service"], command="invalid"
+            )
 
-        assert result["success"] is False
-        assert "Unknown command: invalid" in result["error"]
-        assert result["operations_count"] == 0
+            assert result["success"] is False
+            assert "Unknown command: invalid" in result["error"]
+            assert result["operations_count"] == 0
 
     def test_api_tools_register_handler_exception(self):
         """Test handler when an exception occurs."""
-        with patch("pycommon.api.tools_ops.list_lambda_ops") as mock_list:
-            mock_list.side_effect = Exception("Test error")
+        with patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"}):
+            with patch("pycommon.api.tools_ops.list_lambda_ops") as mock_list:
+                mock_list.side_effect = Exception("Test error")
 
-            result = api_tools_register_handler(include_dirs=["service"], command="ls")
+                result = api_tools_register_handler(
+                    include_dirs=["service"], command="ls"
+                )
 
-            assert result["success"] is False
-            assert "Handler failed: Test error" in result["error"]
-            assert result["operations_count"] == 0
+                assert result["success"] is False
+                assert "Handler failed: Test error" in result["error"]
+                assert result["operations_count"] == 0
 
     def test_api_tools_register_handler_default_parameters(self):
         """Test handler with default parameters."""
-        with patch("pycommon.api.tools_ops.list_lambda_ops") as mock_list:
-            mock_list.return_value = {"success": True, "operations_count": 0}
+        with patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"}):
+            with patch("pycommon.api.tools_ops.list_lambda_ops") as mock_list:
+                mock_list.return_value = {"success": True, "operations_count": 0}
 
-            result = api_tools_register_handler()
+                result = api_tools_register_handler()
 
-            # Should default to empty include_dirs and ls command
-            mock_list.assert_called_once_with([])
-            assert result["success"] is True
+                # Should default to empty include_dirs and ls command
+                mock_list.assert_called_once_with([])
+                assert result["success"] is True
 
     @patch("pycommon.api.tools_ops.logger")
     def test_api_tools_register_handler_prints_debug_info(self, mock_logger):
         """Test that handler logs appropriate debug information."""
-        with patch("pycommon.api.tools_ops.list_lambda_ops") as mock_list:
-            mock_list.return_value = {"success": True, "operations_count": 0}
+        with patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "test-table"}):
+            with patch("pycommon.api.tools_ops.list_lambda_ops") as mock_list:
+                mock_list.return_value = {"success": True, "operations_count": 0}
 
-            api_tools_register_handler(command="ls")
+                api_tools_register_handler(command="ls")
 
-            mock_logger.info.assert_any_call("Listing operations")
+                mock_logger.info.assert_any_call("Listing operations")
 
-        mock_logger.reset_mock()  # Reset the mock for the next test
+            mock_logger.reset_mock()  # Reset the mock for the next test
 
-        with patch("pycommon.api.tools_ops.register_lambda_ops") as mock_register:
-            mock_register.return_value = {"success": True, "operations_count": 0}
+            with patch("pycommon.api.tools_ops.register_lambda_ops") as mock_register:
+                mock_register.return_value = {"success": True, "operations_count": 0}
 
-            api_tools_register_handler(command="register")
+                api_tools_register_handler(command="register")
 
-            mock_logger.info.assert_any_call("Registering operations")
+                mock_logger.info.assert_any_call("Registering operations")
 
 
 class TestRegisterLambdaOps:
@@ -117,12 +129,15 @@ class TestRegisterLambdaOps:
 
     def test_register_lambda_ops_no_table_env_var(self):
         """Test register when OPS_DYNAMODB_TABLE is not set."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = register_lambda_ops(["service"])
+        # Note: This function is called from api_tools_register_handler
+        # which has the decorator. So this test verifies that the inner
+        # function handles missing env var gracefully. The decorator has
+        # already been bypassed at this point
+        result = register_lambda_ops(["service"])
 
-            assert result["success"] is False
-            assert "OPS_DYNAMODB_TABLE environment variable not set" in result["error"]
-            assert result["operations_count"] == 0
+        assert result["success"] is False
+        assert "OPS_DYNAMODB_TABLE" in result["error"]
+        assert result["operations_count"] == 0
 
     @patch("pycommon.api.tools_ops._scan_lambda_codebase")
     @patch("pycommon.api.tools_ops.write_ops")

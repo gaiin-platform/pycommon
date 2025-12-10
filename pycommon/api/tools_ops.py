@@ -8,6 +8,8 @@ Lambda environments.
 import os
 from typing import Any, Dict, List, Optional
 
+from pycommon.dal.providers.aws.resource_perms import DynamoDBOperation
+from pycommon.decorators import required_env_vars
 from pycommon.logger import getLogger
 from pycommon.tools.ops import (
     OperationModel,
@@ -19,6 +21,15 @@ from pycommon.tools.ops import (
 logger = getLogger("tools_ops")
 
 
+@required_env_vars(
+    {
+        "OPS_DYNAMODB_TABLE": [
+            DynamoDBOperation.PUT_ITEM,
+            DynamoDBOperation.UPDATE_ITEM,
+            DynamoDBOperation.SCAN,
+        ]
+    }
+)
 def api_tools_register_handler(
     include_dirs: List[str] = None,
     command: str = "ls",
@@ -83,6 +94,10 @@ def register_lambda_ops(
 
     Returns:
         Dictionary with registration results
+
+    Note:
+        OPS_DYNAMODB_TABLE environment variable is validated by @required_env_vars
+        decorator on the parent function.
     """
     if data is None:
         data = {}
@@ -90,14 +105,8 @@ def register_lambda_ops(
     additional_tags = data.get("additional_tags", [])
 
     try:
-        # Verify DynamoDB table is configured
-        table_name = os.environ.get("OPS_DYNAMODB_TABLE")
-        if not table_name:
-            return {
-                "success": False,
-                "error": "OPS_DYNAMODB_TABLE environment variable not set",
-                "operations_count": 0,
-            }
+        # Environment variable guaranteed by @required_env_vars decorator
+        table_name = os.environ["OPS_DYNAMODB_TABLE"]
 
         logger.info(f"Register: Using DynamoDB table: {table_name}")
 

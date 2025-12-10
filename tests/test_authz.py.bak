@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -89,7 +88,6 @@ def test_get_claims_success(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
         "IDP_PREFIX": "mockprefix",
     }.get(key, default)
@@ -169,7 +167,6 @@ def test_get_claims_token_is_none(mock_get_env):
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
         "IDP_PREFIX": "mockprefix",
     }.get(key, default)
@@ -184,7 +181,6 @@ def test_get_claims_invalid_jwks(mock_get_env, mock_requests_get):
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
@@ -205,7 +201,6 @@ def test_get_claims_missing_rsa_key(mock_get_header, mock_get_env, mock_requests
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
@@ -237,7 +232,6 @@ def test_get_claims_with_rsa_key(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
@@ -285,7 +279,6 @@ def test_get_claims_with_no_kid_found(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
@@ -318,7 +311,6 @@ def test_get_claims_no_dynamodb_item(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
@@ -354,7 +346,6 @@ def test_get_claims_jwks_request_failed(mock_get_env, mock_requests_get):
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
 
@@ -385,7 +376,6 @@ def test_get_claims_default_account(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, None)
     mock_requests_get.return_value = MagicMock(
@@ -435,7 +425,6 @@ def test_get_claims_no_default_account(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
@@ -487,7 +476,6 @@ def test_get_claims_no_accounts_list(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
@@ -1188,7 +1176,6 @@ def test_validated_api_access_success(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
         ok=True,
@@ -1706,7 +1693,6 @@ def test_get_claims_jwks_invalid_json(mock_get_env, mock_requests_get):
         "OAUTH_ISSUER_BASE_URL": "issuer",
         "OAUTH_AUDIENCE": "aud",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
@@ -1728,7 +1714,6 @@ def test_get_claims_jwt_decode_error(
         "OAUTH_ISSUER_BASE_URL": "issuer",
         "OAUTH_AUDIENCE": "aud",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
@@ -1752,7 +1737,6 @@ def test_get_claims_jwt_expired_sigs_error(
         "OAUTH_ISSUER_BASE_URL": "issuer",
         "OAUTH_AUDIENCE": "aud",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
@@ -1776,7 +1760,6 @@ def test_get_claims_jwt_expired_claims_error(
         "OAUTH_ISSUER_BASE_URL": "issuer",
         "OAUTH_AUDIENCE": "aud",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
     }.get(key, default)
     mock_requests_get.return_value = MagicMock(
@@ -2168,7 +2151,6 @@ def test_get_claims_uses_sub_field_when_found_in_cognito(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
         "IDP_PREFIX": "mockprefix",
     }.get(key, default)
@@ -2234,7 +2216,6 @@ def test_get_claims_falls_back_to_username_when_sub_not_found(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
         "IDP_PREFIX": "mockprefix",
     }.get(key, default)
@@ -2299,7 +2280,6 @@ def test_get_claims_no_sub_field_uses_username_directly(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
         "IDP_PREFIX": "mockprefix",
     }.get(key, default)
@@ -2355,7 +2335,6 @@ def test_get_claims_uses_immutable_id_when_present(
         "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
         "OAUTH_AUDIENCE": "mock-audience",
         "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
-        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
         "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
         "IDP_PREFIX": "mockprefix",
     }.get(key, default)
@@ -2393,176 +2372,3 @@ def test_get_claims_uses_immutable_id_when_present(
     assert result["account"] == "mock_account"
     assert result["allowed_access"] == ["full_access"]
     assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}
-
-
-@patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-charges-table"})
-@patch("pycommon.authz._parse_and_validate")
-@patch("pycommon.authz.get_claims")
-@patch("pycommon.authz._parse_token")
-@patch("pycommon.metrics.get_usage_tracker")
-def test_validated_server_exception_with_tracking(
-    mock_get_tracker, mock_parse_token, mock_get_claims, mock_parse_and_validate
-):
-    """Test that ServerException triggers tracking of failed request"""
-    # Mock token parsing
-    mock_parse_token.return_value = "user-token"
-
-    # Mock get_claims to return valid claims
-    mock_get_claims.return_value = {
-        "username": "mockuser",
-        "account": "test-account",
-        "allowed_access": ["full_access"],
-        "rate_limit": {},
-    }
-
-    # Mock parse_and_validate to bypass validation
-    mock_parse_and_validate.return_value = ["/test_operation", {}]
-
-    # Setup usage tracker mock
-    mock_tracker = MagicMock()
-    mock_tracker.start_tracking.return_value = {"start_time": "2024-01-01"}
-    mock_tracker.end_tracking.return_value = MagicMock(user="mockuser")
-    mock_get_tracker.return_value = mock_tracker
-
-    # Setup validated decorator with empty rules and always-allow permission checker
-    setup_validated({}, always_allow_permission_checker)
-
-    # Create a handler that raises HTTPException with 500 status
-    @validated("test_operation", True)  # validate_body=True enables tracking
-    def handler(event, context, user, name, data):
-        from pycommon.exceptions import HTTPException
-
-        raise HTTPException(500, "Test server error")
-
-    event = {
-        "headers": {"Authorization": "Bearer user-token"},
-        "body": json.dumps({}),
-        "path": "/test_operation",
-    }
-    context = MagicMock()
-
-    result = handler(event, context)
-
-    # Verify error response
-    assert result["statusCode"] == 500
-    assert "error" in json.loads(result["body"])
-
-    # Verify tracking happened
-    assert mock_tracker.start_tracking.called
-    assert mock_tracker.end_tracking.called
-    assert mock_tracker.record_metrics.called
-
-    # Verify error_type was passed
-    end_tracking_call = mock_tracker.end_tracking.call_args
-    assert end_tracking_call[1]["error_type"] == "HTTPException"
-
-
-@patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-charges-table"})
-@patch("pycommon.authz._parse_and_validate")
-@patch("pycommon.authz.get_claims")
-@patch("pycommon.authz._parse_token")
-@patch("pycommon.metrics.get_usage_tracker")
-def test_validated_without_tracking_success(
-    mock_get_tracker, mock_parse_token, mock_get_claims, mock_parse_and_validate
-):
-    """Test validate_body=False skips tracking (branch 858->867, 877->886)"""
-    # Mock token parsing
-    mock_parse_token.return_value = "user-token"
-
-    # Mock get_claims to return valid claims
-    mock_get_claims.return_value = {
-        "username": "mockuser",
-        "account": "test-account",
-        "allowed_access": ["full_access"],
-        "rate_limit": {},
-    }
-
-    # Mock parse_and_validate to bypass validation
-    mock_parse_and_validate.return_value = ["/test_operation", {}]
-
-    # Setup usage tracker mock (should NOT be called since validate_body=False)
-    mock_tracker = MagicMock()
-    mock_tracker.start_tracking.return_value = {"start_time": "2024-01-01"}
-    mock_tracker.end_tracking.return_value = MagicMock(user="mockuser")
-    mock_get_tracker.return_value = mock_tracker
-
-    # Setup validated decorator with empty rules and always-allow permission checker
-    setup_validated({}, always_allow_permission_checker)
-
-    # Create a handler with validate_body=False (disables tracking)
-    @validated("test_operation", False)  # validate_body=False disables tracking
-    def handler(event, context, user, name, data):
-        return {"success": True}
-
-    event = {
-        "headers": {"Authorization": "Bearer user-token"},
-        "body": json.dumps({}),
-        "path": "/test_operation",
-    }
-    context = MagicMock()
-
-    result = handler(event, context)
-
-    # Verify success response
-    assert result["statusCode"] == 200
-    assert json.loads(result["body"])["success"] is True
-
-    # Verify tracking was NOT called (validate_body=False skips tracking)
-    assert not mock_tracker.start_tracking.called
-    assert not mock_tracker.end_tracking.called
-    assert not mock_tracker.record_metrics.called
-
-
-@patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-charges-table"})
-@patch("pycommon.authz._parse_and_validate")
-@patch("pycommon.authz.get_claims")
-@patch("pycommon.authz._parse_token")
-@patch("pycommon.metrics.get_usage_tracker")
-def test_validated_without_tracking_exception(
-    mock_get_tracker, mock_parse_token, mock_get_claims, mock_parse_and_validate
-):
-    """Test validate_body=False skips tracking on exception (branch 915->930)"""
-    # Mock token parsing
-    mock_parse_token.return_value = "user-token"
-
-    # Mock get_claims to return valid claims
-    mock_get_claims.return_value = {
-        "username": "mockuser",
-        "account": "test-account",
-        "allowed_access": ["full_access"],
-        "rate_limit": {},
-    }
-
-    # Mock parse_and_validate to bypass validation
-    mock_parse_and_validate.return_value = ["/test_operation", {}]
-
-    # Setup usage tracker mock (should NOT be called since validate_body=False)
-    mock_tracker = MagicMock()
-    mock_tracker.start_tracking.return_value = {"start_time": "2024-01-01"}
-    mock_tracker.end_tracking.return_value = MagicMock(user="mockuser")
-    mock_get_tracker.return_value = mock_tracker
-
-    # Setup validated decorator with empty rules and always-allow permission checker
-    setup_validated({}, always_allow_permission_checker)
-
-    # Create a handler with validate_body=False that raises an exception
-    @validated("test_operation", False)  # validate_body=False disables tracking
-    def handler(event, context, user, name, data):
-        raise ValueError("Test exception")
-
-    event = {
-        "headers": {"Authorization": "Bearer user-token"},
-        "body": json.dumps({}),
-        "path": "/test_operation",
-    }
-    context = MagicMock()
-
-    # Should raise the exception (not caught by decorator)
-    with pytest.raises(ValueError, match="Test exception"):
-        handler(event, context)
-
-    # Verify tracking was NOT called even during exception handling
-    # (validate_body=False skips tracking in exception handler too)
-    assert not mock_tracker.start_tracking.called
-    assert not mock_tracker.end_tracking.called
-    assert not mock_tracker.record_metrics.called

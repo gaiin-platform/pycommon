@@ -772,6 +772,13 @@ def _parse_token(event: Dict[str, Any]) -> str:
     return token
 
 
+@required_env_vars(
+    {
+        "ADDITIONAL_CHARGES_TABLE": [
+            DynamoDBOperation.PUT_ITEM
+        ],  # DynamoDB table for additional charges (includes Lambda usage tracking)
+    }
+)
 def validated(
     op: str,
     validate_body: bool = True,
@@ -792,6 +799,15 @@ def validated(
 
     def decorator(f: Callable) -> Callable:
         def wrapper(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+            # Initialize usage tracker
+            from pycommon.metrics import get_usage_tracker
+
+            tracker = get_usage_tracker()
+            tracking_context = {}
+
+            # Skip tracking if validate_body=False (agent loop routing)
+            should_track = validate_body
+
             try:
                 token = _parse_token(event)
                 api_accessed = token[:4] == "amp-"
@@ -838,24 +854,79 @@ def validated(
                 )  # helps identify group system users for ex.
                 logger.debug("Data dictionary setup complete, calling main function...")
 
+                # Start tracking (skip if validate_body=False for agent loop)
+                if should_track:
+                    tracking_context = tracker.start_tracking(
+                        user=current_user,
+                        operation=op,
+                        endpoint=name,
+                        api_accessed=api_accessed,
+                        context=context,
+                    )
+
                 result = f(event, context, current_user, name, data)
                 logger.debug("Main function completed successfully")
 
-                return {
+                # Create response dictionary
+                result_dict = {
                     "statusCode": 200,
                     "body": json.dumps(result, cls=CustomPydanticJSONEncoder),
                 }
+
+                # End tracking and record metrics
+                if should_track and tracking_context:
+                    metrics = tracker.end_tracking(
+                        tracking_context=tracking_context,
+                        result=result_dict,
+                        claims=claims,
+                        error_type=None,
+                    )
+                    tracker.record_metrics(metrics)
+
+                return result_dict
             except HTTPException as e:
                 logger.error(f"HTTPException caught: {e.status_code} - {e}")
-                return {
+
+                result_dict = {
                     "statusCode": e.status_code,
                     "body": json.dumps({"error": f"Error: {e.status_code} - {e}"}),
                 }
+
+                # Track failed request
+                if should_track and tracking_context:
+                    metrics = tracker.end_tracking(
+                        tracking_context=tracking_context,
+                        result=result_dict,
+                        claims=(
+                            claims if "claims" in locals() else {"account": "unknown"}
+                        ),
+                        error_type=type(e).__name__,
+                    )
+                    tracker.record_metrics(metrics)
+
+                return result_dict
             except Exception as e:
                 logger.error(f"Unexpected exception caught: {type(e).__name__} - {e}")
                 import traceback
 
                 logger.error(f"Traceback: {traceback.format_exc()}")
+
+                # Track unexpected errors before re-raising
+                if should_track and tracking_context:
+                    result_dict = {
+                        "statusCode": 500,
+                        "body": json.dumps({"error": "Internal server error"}),
+                    }
+                    metrics = tracker.end_tracking(
+                        tracking_context=tracking_context,
+                        result=result_dict,
+                        claims=(
+                            claims if "claims" in locals() else {"account": "unknown"}
+                        ),
+                        error_type=type(e).__name__,
+                    )
+                    tracker.record_metrics(metrics)
+
                 raise
 
         return wrapper

@@ -350,3 +350,268 @@ def required_env_vars(env_vars_dict: Dict[str, List]) -> Callable:
         return wrapper
 
     return decorator
+
+
+def track_execution(
+    operation_name: str,
+    account: str = "system",
+    user: str = "system",
+    extract_from_event: bool = True,
+) -> Callable:
+    """
+    Decorator for tracking event-driven Lambda executions (non-HTTP).
+
+    Use this decorator for Lambda functions triggered by:
+    - SQS messages
+    - EventBridge/CloudWatch Events (scheduled tasks)
+    - SNS notifications
+    - S3 events
+    - DynamoDB Streams
+    - Email events (SES)
+    - Any non-HTTP Lambda invocation
+
+    This decorator tracks execution metrics including:
+    - Duration and cost
+    - Success/failure status
+    - Event source information
+    - Account and user attribution
+
+    Args:
+        operation_name: Name of the operation (e.g., "process_email_event",
+                       "daily_cleanup_cron", "process_sqs_message")
+        account: Default account to attribute costs to. Use "system" for
+                system operations, or specify an account ID.
+        user: Default user to attribute costs to. Use "system" for system
+             operations, or specify a user ID.
+        extract_from_event: If True, attempts to extract account/user from
+                           the event payload (default: True)
+
+    Example:
+        # SQS handler with system account
+        @track_execution(operation_name="process_sqs_message", account="system")
+        def sqs_handler(event, context):
+            for record in event["Records"]:
+                # Process SQS message
+                pass
+            return {"success": True}
+
+        # Scheduled task (cron)
+        @track_execution(operation_name="daily_cleanup_cron")
+        def daily_cleanup_handler(event, context):
+            # Your cleanup logic
+            return {"success": True}
+
+        # Email event handler with user extraction
+        @track_execution(operation_name="process_email_event", extract_from_event=True)
+        def email_handler(event, context):
+            # Event should contain {"user": "user123", "account": "acct456"}
+            # These will be automatically extracted
+            return {"success": True}
+
+    Returns:
+        Decorated function with usage tracking
+
+    Note:
+        - If tracking fails, the function continues normally (fail-safe)
+        - Metrics are recorded to ADDITIONAL_CHARGES_TABLE
+        - Requires ADDITIONAL_CHARGES_TABLE environment variable
+    """
+
+    @required_env_vars(
+        {
+            "ADDITIONAL_CHARGES_TABLE": [
+                DynamoDBOperation.PUT_ITEM
+            ],  # DynamoDB table for additional charges (includes Lambda usage tracking)
+        }
+    )
+    def decorator(f: Callable) -> Callable:
+        @wraps(f)
+        def wrapper(event: Dict[str, Any], context: Any, *args, **kwargs) -> Any:
+            # Import here to avoid circular dependencies
+            from pycommon.metrics import get_usage_tracker
+
+            tracker = get_usage_tracker()
+
+            # Extract account/user from event if enabled
+            actual_account = account
+            actual_user = user
+
+            if extract_from_event and isinstance(event, dict):
+                # Try various event structures
+                actual_account = event.get("account", event.get("accountId", account))
+                actual_user = event.get(
+                    "user", event.get("currentUser", event.get("userId", user))
+                )
+
+                # Check if it's an SQS/SNS message with nested data
+                if "Records" in event and event["Records"]:
+                    record = event["Records"][0]
+                    event_source = record.get("eventSource", "")
+
+                    # Handle SQS messages
+                    if "body" in record:
+                        import json
+                        import urllib.parse
+
+                        try:
+                            body = (
+                                json.loads(record["body"])
+                                if isinstance(record["body"], str)
+                                else record["body"]
+                            )
+                            actual_account = body.get("account", actual_account)
+                            actual_user = body.get(
+                                "user",
+                                body.get(
+                                    "currentUser", body.get("username", actual_user)
+                                ),
+                            )
+
+                            # Check if SQS body contains S3 event (embedding pattern)
+                            if "Records" in body and body["Records"]:
+                                s3_record = body["Records"][0]
+                                if "s3" in s3_record:
+                                    # Extract user from S3 key: format is
+                                    # typically user/filename or user/date/filename
+                                    s3_key = urllib.parse.unquote(
+                                        s3_record["s3"]["object"]["key"]
+                                    )
+                                    key_parts = s3_key.split("/")
+                                    if (
+                                        len(key_parts) > 0 and actual_user == user
+                                    ):  # Only if not already found
+                                        # First part of key is usually the user
+                                        potential_user = key_parts[0]
+                                        # Validate it looks like a user
+                                        # (email or UUID format)
+                                        if "@" in potential_user or (
+                                            "-" in potential_user
+                                            and len(potential_user) > 20
+                                        ):
+                                            actual_user = potential_user
+                        except (json.JSONDecodeError, AttributeError, IndexError):
+                            pass
+
+                    # Handle DynamoDB Streams
+                    elif event_source == "aws:dynamodb" and "dynamodb" in record:
+                        dynamodb_data = record["dynamodb"]
+                        # Check NewImage for user/account
+                        if "NewImage" in dynamodb_data:
+                            new_image = dynamodb_data["NewImage"]
+                            # DynamoDB format: {"user": {"S": "value"}}
+                            if "user" in new_image:
+                                actual_user = new_image["user"].get("S", actual_user)
+                            elif "user_id" in new_image:
+                                actual_user = new_image["user_id"].get("S", actual_user)
+                            elif "username" in new_image:
+                                actual_user = new_image["username"].get(
+                                    "S", actual_user
+                                )
+
+                            if "account" in new_image:
+                                actual_account = new_image["account"].get(
+                                    "S", actual_account
+                                )
+                            elif "accountId" in new_image:
+                                actual_account = new_image["accountId"].get(
+                                    "S", actual_account
+                                )
+
+                    # Handle direct S3 events (not wrapped in SQS)
+                    elif event_source == "aws:s3" and "s3" in record:
+                        import urllib.parse
+
+                        try:
+                            s3_key = urllib.parse.unquote(record["s3"]["object"]["key"])
+                            key_parts = s3_key.split("/")
+                            if len(key_parts) > 0:
+                                # First part of key is usually the user
+                                potential_user = key_parts[0]
+                                if "@" in potential_user or (
+                                    "-" in potential_user and len(potential_user) > 20
+                                ):
+                                    actual_user = potential_user
+                        except (AttributeError, IndexError):
+                            pass
+
+            # Determine event source for better tracking
+            event_source = "unknown"
+
+            if isinstance(event, dict):
+                # SQS, SNS, S3, DynamoDB Streams
+                if "Records" in event and event["Records"]:
+                    record = event["Records"][0]
+                    event_source = record.get("eventSource", "unknown")
+                # EventBridge/CloudWatch Events
+                elif "source" in event:
+                    event_source = event["source"]
+                # API Gateway (shouldn't use decorator, handle gracefully)
+                elif "requestContext" in event:
+                    event_source = "apigateway"
+
+            # Create endpoint identifier for tracking
+            endpoint = f"event://{event_source}/{operation_name}"
+
+            tracking_context = tracker.start_tracking(
+                user=actual_user,
+                operation=operation_name,
+                endpoint=endpoint,
+                api_accessed=False,
+                context=context,
+            )
+
+            try:
+                # Execute the wrapped function
+                result = f(event, context, *args, **kwargs)
+
+                # Determine success from result
+                success = True
+                error_type = None
+
+                if isinstance(result, dict):
+                    success = result.get("success", True)
+                    if not success:
+                        error_type = result.get("error", "OperationFailed")
+
+                # Create result dictionary for tracking
+                result_dict = {"statusCode": 200 if success else 500}
+
+                # End tracking
+                metrics = tracker.end_tracking(
+                    tracking_context=tracking_context,
+                    result=result_dict,
+                    claims={
+                        "account": actual_account,
+                        "username": actual_user,
+                    },
+                    error_type=error_type,
+                )
+
+                # Record metrics (async/fire-and-forget)
+                tracker.record_metrics(metrics)
+
+                return result
+
+            except Exception as e:
+                # Track failed execution
+                result_dict = {"statusCode": 500}
+
+                metrics = tracker.end_tracking(
+                    tracking_context=tracking_context,
+                    result=result_dict,
+                    claims={
+                        "account": actual_account,
+                        "username": actual_user,
+                    },
+                    error_type=type(e).__name__,
+                )
+
+                # Record metrics even on failure
+                tracker.record_metrics(metrics)
+
+                # Re-raise the exception
+                raise
+
+        return wrapper
+
+    return decorator

@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Union
 import boto3
 from boto3.dynamodb.types import TypeDeserializer
 
+from pycommon.dal.providers.aws.resource_perms import DynamoDBOperation
+from pycommon.decorators import required_env_vars
 from pycommon.logger import getLogger
 
 logger = getLogger("data_sources")
@@ -29,6 +31,7 @@ def extract_key(source: str) -> str:
     return source.split("://")[1] if "://" in source else source
 
 
+@required_env_vars({"HASH_FILES_DYNAMO_TABLE": [DynamoDBOperation.GET_ITEM]})
 def translate_user_data_sources_to_hash_data_sources(
     data_sources: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
@@ -43,8 +46,13 @@ def translate_user_data_sources_to_hash_data_sources(
     Returns:
         List[Dict[str, Any]]: List of translated data sources with updated
             location keys
+
+    Note:
+        HASH_FILES_DYNAMO_TABLE environment variable is validated by
+        @required_env_vars decorator.
     """
     dynamodb_client = boto3.client("dynamodb")
+    # Environment variable guaranteed by @required_env_vars decorator
     hash_files_table_name = os.environ["HASH_FILES_DYNAMO_TABLE"]
     type_deserializer = TypeDeserializer()
 

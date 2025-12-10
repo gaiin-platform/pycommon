@@ -8,6 +8,8 @@ from enum import Enum
 import boto3
 from botocore.exceptions import ClientError
 
+from pycommon.dal.providers.aws.resource_perms import SecretsManagerOperation
+from pycommon.decorators import required_env_vars
 from pycommon.logger import getLogger
 
 logger = getLogger("get_endpoint")
@@ -18,6 +20,7 @@ class EndpointType(Enum):
     API_BASE_URL = "API_BASE_URL"
 
 
+@required_env_vars({"APP_ARN_NAME": [SecretsManagerOperation.GET_SECRET_VALUE]})
 def get_endpoint(endpoint_type: EndpointType) -> str:
     """
     Retrieve an endpoint URL from AWS Secrets Manager based on the endpoint type.
@@ -31,7 +34,11 @@ def get_endpoint(endpoint_type: EndpointType) -> str:
     Raises:
         ValueError: If the endpoint type is not found in secrets manager
         ClientError: If there's an error retrieving the secret
+
+    Note:
+        APP_ARN_NAME environment variable is validated by @required_env_vars decorator.
     """
+    # Environment variable guaranteed by @required_env_vars decorator
     secret_name = os.environ["APP_ARN_NAME"]
     region_name = os.environ.get("AWS_REGION", "us-east-1")
     # Create a Secrets Manager client
