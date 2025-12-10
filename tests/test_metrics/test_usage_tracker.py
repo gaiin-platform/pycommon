@@ -769,6 +769,36 @@ class TestIntegration:
 
     @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
     @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_end_tracking_memory_on_darwin(self, mock_boto3):
+        """Test memory tracking on macOS (ru_maxrss in bytes, needs /1024)"""
+        mock_dynamodb = Mock()
+        mock_boto3.resource.return_value = mock_dynamodb
+
+        tracker = UsageTracker()
+
+        tracking_context = {
+            "start_time": datetime.utcnow(),
+            "user": "test_user",
+            "operation": "test_op",
+            "endpoint": "/test",
+            "api_accessed": False,
+            "request_id": "req-123",
+            "memory_limit": 1024,
+        }
+
+        claims = {"account": "test_account"}
+        result = {"statusCode": 200}
+
+        # Mock platform.system to return Darwin (macOS)
+        with patch("platform.system", return_value="Darwin"):
+            metrics = tracker.end_tracking(tracking_context, result, claims)
+
+        # Should have captured memory (Darwin branch at line 305 covered)
+        assert metrics is not None
+        assert hasattr(metrics, "max_memory_used_mb")
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
     def test_end_tracking_memory_capture_exception(self, mock_boto3):
         """Test that memory capture exceptions are handled gracefully"""
         mock_dynamodb = Mock()
