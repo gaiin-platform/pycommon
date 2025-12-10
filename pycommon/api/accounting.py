@@ -12,7 +12,10 @@ from pycommon.logger import getLogger
 
 logger = getLogger("accounting")
 
-dynamodb = boto3.client("dynamodb")
+
+def _get_dynamodb_client():
+    """Lazy initialization of DynamoDB client to avoid import-time boto3 calls."""
+    return boto3.client("dynamodb")
 
 
 @required_env_vars(
@@ -91,7 +94,7 @@ def record_usage(
             "details": {"M": TypeSerializer().serialize(details)["M"]},
         }
 
-        dynamodb.put_item(TableName=dynamoTableName, Item=item)
+        _get_dynamodb_client().put_item(TableName=dynamoTableName, Item=item)
         logger.info(f"Usage recorded for user: {account['user']}")
 
     except Exception as e:
@@ -99,7 +102,7 @@ def record_usage(
         return 0.0
 
     try:
-        model_rate_response = dynamodb.query(
+        model_rate_response = _get_dynamodb_client().query(
             TableName=modelRateDynamoTable,
             KeyConditionExpression="ModelID = :modelId",
             ExpressionAttributeValues={":modelId": {"S": model_id}},
@@ -141,7 +144,7 @@ def record_usage(
         # First update: Ensure dailyCost and hourlyCost are initialized
         empty_list = [{"N": "0"} for _ in range(24)]
 
-        dynamodb.update_item(
+        _get_dynamodb_client().update_item(
             TableName=costDynamoTableName,
             Key={"id": {"S": account["user"]}, "accountInfo": {"S": account_info}},
             UpdateExpression=(
@@ -157,7 +160,7 @@ def record_usage(
         )
 
         # Second update: Update dailyCost and the specific hourlyCost index
-        dynamodb.update_item(
+        _get_dynamodb_client().update_item(
             TableName=costDynamoTableName,
             Key={"id": {"S": account["user"]}, "accountInfo": {"S": account_info}},
             UpdateExpression=(

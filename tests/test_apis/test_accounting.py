@@ -4,8 +4,23 @@ from uuid import UUID
 
 import pytest
 
-from pycommon.api.accounting import get_api_key_id, record_usage
+from pycommon.api.accounting import _get_dynamodb_client, get_api_key_id, record_usage
 from pycommon.exceptions import EnvVarError
+
+
+class TestGetDynamoDBClient:
+    """Tests for _get_dynamodb_client helper function."""
+
+    @patch("pycommon.api.accounting.boto3.client")
+    def test_returns_dynamodb_client(self, mock_boto_client):
+        """Test that _get_dynamodb_client returns a DynamoDB client."""
+        mock_client = Mock()
+        mock_boto_client.return_value = mock_client
+
+        result = _get_dynamodb_client()
+
+        mock_boto_client.assert_called_once_with("dynamodb")
+        assert result == mock_client
 
 
 class TestGetApiKeyId:
@@ -95,9 +110,11 @@ class TestRecordUsage:
             with pytest.raises(EnvVarError, match="MODEL_RATE_TABLE"):
                 record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
 
-    @patch("pycommon.api.accounting.dynamodb")
+    @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
-    def test_returns_zero_when_usage_recording_fails(self, mock_logger, mock_dynamodb):
+    def test_returns_zero_when_usage_recording_fails(
+        self, mock_logger, mock_get_client
+    ):
         """Test that 0.0 is returned when usage recording fails."""
         with patch.dict(
             os.environ,
@@ -107,6 +124,8 @@ class TestRecordUsage:
                 "MODEL_RATE_TABLE": "test-model-rate-table",
             },
         ):
+            mock_dynamodb = Mock()
+            mock_get_client.return_value = mock_dynamodb
             mock_dynamodb.put_item.side_effect = Exception("DynamoDB error")
 
             result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
@@ -115,9 +134,9 @@ class TestRecordUsage:
                 "Error recording usage: DynamoDB error"
             )
 
-    @patch("pycommon.api.accounting.dynamodb")
+    @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
-    def test_returns_zero_when_model_rate_not_found(self, mock_logger, mock_dynamodb):
+    def test_returns_zero_when_model_rate_not_found(self, mock_logger, mock_get_client):
         """Test that 0.0 is returned when no model rate is found."""
         with patch.dict(
             os.environ,
@@ -127,6 +146,8 @@ class TestRecordUsage:
                 "MODEL_RATE_TABLE": "test-model-rate-table",
             },
         ):
+            mock_dynamodb = Mock()
+            mock_get_client.return_value = mock_dynamodb
             mock_dynamodb.put_item.return_value = None
             mock_dynamodb.query.return_value = {"Items": []}
 
@@ -136,9 +157,11 @@ class TestRecordUsage:
                 "No model rate found for ModelID: gpt-4"
             )
 
-    @patch("pycommon.api.accounting.dynamodb")
+    @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
-    def test_returns_zero_when_cost_calculation_fails(self, mock_logger, mock_dynamodb):
+    def test_returns_zero_when_cost_calculation_fails(
+        self, mock_logger, mock_get_client
+    ):
         """Test that 0.0 is returned when cost calculation fails."""
         with patch.dict(
             os.environ,
@@ -148,6 +171,8 @@ class TestRecordUsage:
                 "MODEL_RATE_TABLE": "test-model-rate-table",
             },
         ):
+            mock_dynamodb = Mock()
+            mock_get_client.return_value = mock_dynamodb
             mock_dynamodb.put_item.return_value = None
             mock_dynamodb.query.side_effect = Exception("Query failed")
 
@@ -157,11 +182,11 @@ class TestRecordUsage:
                 "Error calculating or updating cost: Query failed"
             )
 
-    @patch("pycommon.api.accounting.dynamodb")
+    @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
     @patch("pycommon.api.accounting.uuid")
     def test_successful_usage_recording_without_api_key(
-        self, mock_uuid, mock_logger, mock_dynamodb
+        self, mock_uuid, mock_logger, mock_get_client
     ):
         """Test successful usage recording without API key."""
         with patch.dict(
@@ -198,6 +223,8 @@ class TestRecordUsage:
                 mock_datetime.now.return_value = mock_now
 
                 # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
                 mock_dynamodb.put_item.return_value = None
                 mock_dynamodb.query.return_value = {
                     "Items": [
@@ -217,11 +244,11 @@ class TestRecordUsage:
                 )
                 assert result == expected_cost
 
-    @patch("pycommon.api.accounting.dynamodb")
+    @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
     @patch("pycommon.api.accounting.uuid")
     def test_successful_usage_recording_with_api_key(
-        self, mock_uuid, mock_logger, mock_dynamodb
+        self, mock_uuid, mock_logger, mock_get_client
     ):
         """Test successful usage recording with API key."""
         with patch.dict(
@@ -259,6 +286,8 @@ class TestRecordUsage:
                 mock_datetime.now.side_effect = datetime_now_side_effect
 
                 # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
                 mock_dynamodb.put_item.return_value = None
                 mock_dynamodb.query.return_value = {
                     "Items": [
@@ -286,11 +315,11 @@ class TestRecordUsage:
                 )
                 assert result == expected_cost
 
-    @patch("pycommon.api.accounting.dynamodb")
+    @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
     @patch("pycommon.api.accounting.uuid")
     def test_usage_recording_with_none_details(
-        self, mock_uuid, mock_logger, mock_dynamodb
+        self, mock_uuid, mock_logger, mock_get_client
     ):
         """Test usage recording with None details parameter."""
         with patch.dict(
@@ -321,6 +350,8 @@ class TestRecordUsage:
                 mock_datetime.now.side_effect = datetime_now_side_effect
 
                 # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
                 mock_dynamodb.put_item.return_value = None
                 mock_dynamodb.query.return_value = {
                     "Items": [
@@ -342,11 +373,11 @@ class TestRecordUsage:
                 )
                 assert result == expected_cost
 
-    @patch("pycommon.api.accounting.dynamodb")
+    @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
     @patch("pycommon.api.accounting.uuid")
     def test_usage_recording_with_missing_account_id(
-        self, mock_uuid, mock_logger, mock_dynamodb
+        self, mock_uuid, mock_logger, mock_get_client
     ):
         """Test usage recording when account_id is missing (uses default)."""
         with patch.dict(
@@ -380,6 +411,8 @@ class TestRecordUsage:
                 mock_datetime.now.side_effect = datetime_now_side_effect
 
                 # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
                 mock_dynamodb.put_item.return_value = None
                 mock_dynamodb.query.return_value = {
                     "Items": [
@@ -401,11 +434,11 @@ class TestRecordUsage:
                 )
                 assert result == expected_cost
 
-    @patch("pycommon.api.accounting.dynamodb")
+    @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
     @patch("pycommon.api.accounting.uuid")
     def test_cost_update_failure_after_successful_usage_recording(
-        self, mock_uuid, mock_logger, mock_dynamodb
+        self, mock_uuid, mock_logger, mock_get_client
     ):
         """Test that function returns 0.0 when cost update fails after
         successful usage recording."""
@@ -437,6 +470,8 @@ class TestRecordUsage:
                 mock_datetime.now.side_effect = datetime_now_side_effect
 
                 # Mock DynamoDB responses - usage succeeds, cost update fails
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
                 mock_dynamodb.put_item.return_value = None
                 mock_dynamodb.query.return_value = {
                     "Items": [
