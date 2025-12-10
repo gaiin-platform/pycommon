@@ -799,6 +799,11 @@ def validated(
 
     def decorator(f: Callable) -> Callable:
         def wrapper(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+            # Capture Lambda start time immediately for accurate cost tracking
+            from datetime import datetime
+
+            lambda_start_time = datetime.utcnow()
+
             # Initialize usage tracker
             from pycommon.metrics import get_usage_tracker
 
@@ -855,6 +860,7 @@ def validated(
                 logger.debug("Data dictionary setup complete, calling main function...")
 
                 # Start tracking (skip if validate_body=False for agent loop)
+                # Pass lambda_start_time for accurate billing (includes auth/validation)
                 if should_track:
                     tracking_context = tracker.start_tracking(
                         user=current_user,
@@ -862,6 +868,7 @@ def validated(
                         endpoint=name,
                         api_accessed=api_accessed,
                         context=context,
+                        start_time=lambda_start_time,
                     )
 
                 result = f(event, context, current_user, name, data)

@@ -68,13 +68,14 @@ class LambdaExecutionMetrics:
     # Lambda context
     request_id: Optional[str]
     memory_limit_mb: Optional[int]
+    max_memory_used_mb: Optional[int] = None
 
     # Additional context
     purpose: Optional[str] = None
     service_name: Optional[str] = None
     function_name: Optional[str] = None
 
-    def estimated_cost_usd(self) -> Decimal:
+    def estimated_cost_usd(self, use_actual_memory: bool = False) -> Decimal:
         """Calculate estimated AWS Lambda cost in USD.
 
         AWS Lambda pricing (as of 2025):
@@ -85,14 +86,26 @@ class LambdaExecutionMetrics:
         This calculation focuses on compute cost only (GB-seconds).
         Request cost is negligible for most use cases.
 
+        Args:
+            use_actual_memory: If True and max_memory_used_mb is available,
+                             use actual memory for cost calculation (more accurate).
+                             If False, use memory_limit_mb (what Lambda bills).
+
         Returns:
             Decimal: Estimated cost in USD for this execution
         """
         if not self.memory_limit_mb or self.duration_ms <= 0:
             return Decimal("0.0")
 
+        # Use actual memory if requested and available, otherwise use limit
+        # Note: AWS bills based on allocated memory, not used memory
+        # But tracking actual usage helps identify over-provisioning
+        memory_mb = self.memory_limit_mb
+        if use_actual_memory and self.max_memory_used_mb:
+            memory_mb = self.max_memory_used_mb
+
         # Convert memory from MB to GB
-        memory_gb = Decimal(self.memory_limit_mb) / Decimal(1024)
+        memory_gb = Decimal(memory_mb) / Decimal(1024)
 
         # Convert duration from ms to seconds
         duration_seconds = Decimal(self.duration_ms) / Decimal(1000)
@@ -136,6 +149,8 @@ class LambdaExecutionMetrics:
             item["request_id"] = self.request_id
         if self.memory_limit_mb:
             item["memory_limit_mb"] = self.memory_limit_mb
+        if self.max_memory_used_mb:
+            item["max_memory_used_mb"] = self.max_memory_used_mb
         if self.purpose:
             item["purpose"] = self.purpose
         if self.service_name:
@@ -203,6 +218,7 @@ class UsageTracker:
         context: Any,
         service_name: Optional[str] = None,
         function_name: Optional[str] = None,
+        start_time: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         """Start tracking a Lambda execution.
 
@@ -216,6 +232,7 @@ class UsageTracker:
             context: Lambda context object
             service_name: Service name (from SERVICE_NAME env var)
             function_name: Lambda function name (from context)
+            start_time: Optional start time (use this for accurate Lambda billing)
 
         Returns:
             Dict[str, Any]: Tracking context to pass to end_tracking()
@@ -224,7 +241,7 @@ class UsageTracker:
             return {}
 
         tracking_context = {
-            "start_time": datetime.utcnow(),
+            "start_time": start_time or datetime.utcnow(),
             "user": user,
             "operation": operation,
             "endpoint": endpoint,
@@ -272,6 +289,27 @@ class UsageTracker:
 
             status_code = result.get("statusCode", 200)
 
+            # Capture memory usage (Python process RSS + 30MB overhead buffer)
+            max_memory_used_mb = None
+            try:
+                import resource
+
+                # Get peak memory usage in KB, convert to MB
+                # RUSAGE_SELF gets this process's resource usage
+                peak_memory_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                # On Linux, ru_maxrss is in KB; on macOS it's in bytes
+                # Lambda runs on Linux, so we expect KB
+                import platform
+
+                if platform.system() == "Darwin":  # macOS
+                    peak_memory_kb = peak_memory_kb / 1024
+
+                # Convert to MB and add 30MB buffer for Lambda runtime overhead
+                python_memory_mb = int(peak_memory_kb / 1024)
+                max_memory_used_mb = python_memory_mb + 30
+            except Exception as e:
+                logger.debug(f"Could not capture memory usage: {e}")
+
             metrics = LambdaExecutionMetrics(
                 start_timestamp=start_time,
                 end_timestamp=end_time,
@@ -287,6 +325,7 @@ class UsageTracker:
                 error_type=error_type,
                 request_id=tracking_context.get("request_id"),
                 memory_limit_mb=tracking_context.get("memory_limit"),
+                max_memory_used_mb=max_memory_used_mb,
                 purpose=claims.get("purpose"),
                 service_name=tracking_context.get("service_name"),
                 function_name=tracking_context.get("function_name"),
@@ -294,6 +333,7 @@ class UsageTracker:
 
             logger.debug(
                 f"Ended tracking: duration={duration:.2f}ms, "
+                f"memory={max_memory_used_mb or 'unknown'}MB, "
                 f"status={status_code}, cost=${metrics.estimated_cost_usd()}"
             )
             return metrics
@@ -340,6 +380,7 @@ class UsageTracker:
                     "event_source": getattr(metrics, "event_source", None),
                     "duration_ms": Decimal(str(metrics.duration_ms)),
                     "memory_limit_mb": metrics.memory_limit_mb,
+                    "max_memory_used_mb": metrics.max_memory_used_mb,
                     "estimated_cost_usd": cost,  # Also keep in details for reference
                     "status_code": metrics.status_code,
                     "success": metrics.success,

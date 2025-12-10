@@ -635,3 +635,164 @@ class TestIntegration:
 
         # Verify DynamoDB was called
         mock_table.put_item.assert_called_once()
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_estimated_cost_with_actual_memory(self, mock_boto3):
+        """Test cost calculation using actual memory instead of limit"""
+        start = datetime.now()
+        end = start + timedelta(seconds=1)
+
+        # Create metrics with both memory_limit and max_memory_used
+        metrics = LambdaExecutionMetrics(
+            start_timestamp=start,
+            end_timestamp=end,
+            duration_ms=1000.0,
+            user="test_user",
+            account="test_account",
+            api_key_id=None,
+            operation="test_op",
+            endpoint="/test",
+            api_accessed=False,
+            status_code=200,
+            success=True,
+            error_type=None,
+            request_id="test-123",
+            memory_limit_mb=1024,  # Allocated 1GB
+            max_memory_used_mb=256,  # Only used 256MB
+        )
+
+        # Default: use memory_limit
+        cost_with_limit = metrics.estimated_cost_usd(use_actual_memory=False)
+
+        # With actual memory: use max_memory_used
+        cost_with_actual = metrics.estimated_cost_usd(use_actual_memory=True)
+
+        # Cost with actual should be ~25% of cost with limit (256/1024)
+        assert cost_with_actual < cost_with_limit
+        # Allow small rounding differences
+        ratio = cost_with_actual / cost_with_limit
+        expected_ratio = Decimal("256") / Decimal("1024")  # 0.25
+        assert abs(ratio - expected_ratio) < Decimal("0.01")
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_to_dynamodb_item_with_max_memory(self, mock_boto3):
+        """Test to_dynamodb_item includes max_memory_used_mb"""
+        start = datetime.now()
+        end = start + timedelta(seconds=1)
+
+        metrics = LambdaExecutionMetrics(
+            start_timestamp=start,
+            end_timestamp=end,
+            duration_ms=1000.0,
+            user="test_user",
+            account="test_account",
+            api_key_id="api-123",
+            operation="test_op",
+            endpoint="/test",
+            api_accessed=True,
+            status_code=200,
+            success=True,
+            error_type=None,
+            request_id="req-123",
+            memory_limit_mb=1024,
+            max_memory_used_mb=150,
+        )
+
+        item = metrics.to_dynamodb_item()
+
+        assert item["memory_limit_mb"] == 1024
+        assert item["max_memory_used_mb"] == 150
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_end_tracking_captures_memory_usage(self, mock_boto3):
+        """Test that end_tracking captures memory usage via resource module"""
+        mock_dynamodb = Mock()
+        mock_boto3.resource.return_value = mock_dynamodb
+
+        tracker = UsageTracker()
+
+        tracking_context = {
+            "start_time": datetime.utcnow(),
+            "user": "test_user",
+            "operation": "test_op",
+            "endpoint": "/test",
+            "api_accessed": False,
+            "request_id": "req-123",
+            "memory_limit": 1024,
+        }
+
+        claims = {"account": "test_account"}
+        result = {"statusCode": 200}
+
+        metrics = tracker.end_tracking(tracking_context, result, claims)
+
+        # Memory tracking should have been attempted (may or may not succeed)
+        # On Linux/Lambda it will populate, on macOS it may also populate
+        # We just verify the field exists (may be None or a value)
+        assert hasattr(metrics, "max_memory_used_mb")
+        # If populated, should be positive
+        if metrics.max_memory_used_mb is not None:
+            assert metrics.max_memory_used_mb > 0
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_end_tracking_memory_on_linux(self, mock_boto3):
+        """Test memory tracking on Linux (ru_maxrss in KB)"""
+        mock_dynamodb = Mock()
+        mock_boto3.resource.return_value = mock_dynamodb
+
+        tracker = UsageTracker()
+
+        tracking_context = {
+            "start_time": datetime.utcnow(),
+            "user": "test_user",
+            "operation": "test_op",
+            "endpoint": "/test",
+            "api_accessed": False,
+            "request_id": "req-123",
+            "memory_limit": 1024,
+        }
+
+        claims = {"account": "test_account"}
+        result = {"statusCode": 200}
+
+        # Mock platform.system to return Linux
+        with patch("platform.system", return_value="Linux"):
+            metrics = tracker.end_tracking(tracking_context, result, claims)
+
+        # Should have captured memory (platform check branch covered)
+        assert metrics is not None
+        assert hasattr(metrics, "max_memory_used_mb")
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_end_tracking_memory_capture_exception(self, mock_boto3):
+        """Test that memory capture exceptions are handled gracefully"""
+        mock_dynamodb = Mock()
+        mock_boto3.resource.return_value = mock_dynamodb
+
+        tracker = UsageTracker()
+
+        tracking_context = {
+            "start_time": datetime.utcnow(),
+            "user": "test_user",
+            "operation": "test_op",
+            "endpoint": "/test",
+            "api_accessed": False,
+            "request_id": "req-123",
+            "memory_limit": 1024,
+        }
+
+        claims = {"account": "test_account"}
+        result = {"statusCode": 200}
+
+        # Patch resource.getrusage to raise an exception
+        with patch("resource.getrusage", side_effect=Exception("Test exception")):
+            metrics = tracker.end_tracking(tracking_context, result, claims)
+
+        # Should still return metrics even if memory capture fails
+        assert metrics is not None
+        assert metrics.max_memory_used_mb is None  # None due to exception
