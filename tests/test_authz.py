@@ -2400,6 +2400,67 @@ def test_get_claims_uses_immutable_id_when_present(
 @patch("pycommon.authz.get_claims")
 @patch("pycommon.authz._parse_token")
 @patch("pycommon.metrics.get_usage_tracker")
+def test_validated_success_with_tracking(
+    mock_get_tracker, mock_parse_token, mock_get_claims, mock_parse_and_validate
+):
+    """Test that successful request with tracking records metrics"""
+    # Mock token parsing
+    mock_parse_token.return_value = "user-token"
+
+    # Mock get_claims to return valid claims
+    mock_get_claims.return_value = {
+        "username": "mockuser",
+        "account": "test-account",
+        "allowed_access": ["full_access"],
+        "rate_limit": {},
+    }
+
+    # Mock parse_and_validate to bypass validation
+    mock_parse_and_validate.return_value = ["/test_operation", {}]
+
+    # Setup usage tracker mock
+    mock_tracker = MagicMock()
+    mock_tracker.start_tracking.return_value = {"start_time": "2024-01-01"}
+    mock_tracker.end_tracking.return_value = MagicMock(user="mockuser")
+    mock_get_tracker.return_value = mock_tracker
+
+    # Setup validated decorator with empty rules and always-allow permission checker
+    setup_validated({}, always_allow_permission_checker)
+
+    # Create a handler that succeeds
+    @validated("test_operation", True)  # validate_body=True enables tracking
+    def handler(event, context, user, name, data):
+        return {"status": "success"}
+
+    event = {
+        "headers": {"Authorization": "Bearer user-token"},
+        "body": json.dumps({}),
+        "path": "/test_operation",
+    }
+    context = MagicMock()
+
+    result = handler(event, context)
+
+    # Verify success response
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    assert body["status"] == "success"
+
+    # Verify tracking happened (covers lines 878-884)
+    assert mock_tracker.start_tracking.called
+    assert mock_tracker.end_tracking.called
+    assert mock_tracker.record_metrics.called
+
+    # Verify no error_type was passed
+    end_tracking_call = mock_tracker.end_tracking.call_args
+    assert end_tracking_call[1]["error_type"] is None
+
+
+@patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-charges-table"})
+@patch("pycommon.authz._parse_and_validate")
+@patch("pycommon.authz.get_claims")
+@patch("pycommon.authz._parse_token")
+@patch("pycommon.metrics.get_usage_tracker")
 def test_validated_server_exception_with_tracking(
     mock_get_tracker, mock_parse_token, mock_get_claims, mock_parse_and_validate
 ):
@@ -2455,6 +2516,64 @@ def test_validated_server_exception_with_tracking(
     # Verify error_type was passed
     end_tracking_call = mock_tracker.end_tracking.call_args
     assert end_tracking_call[1]["error_type"] == "HTTPException"
+
+
+@patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-charges-table"})
+@patch("pycommon.authz._parse_and_validate")
+@patch("pycommon.authz.get_claims")
+@patch("pycommon.authz._parse_token")
+@patch("pycommon.metrics.get_usage_tracker")
+def test_validated_unexpected_exception_with_tracking(
+    mock_get_tracker, mock_parse_token, mock_get_claims, mock_parse_and_validate
+):
+    """Test that unexpected exceptions trigger tracking before re-raising"""
+    # Mock token parsing
+    mock_parse_token.return_value = "user-token"
+
+    # Mock get_claims to return valid claims
+    mock_get_claims.return_value = {
+        "username": "mockuser",
+        "account": "test-account",
+        "allowed_access": ["full_access"],
+        "rate_limit": {},
+    }
+
+    # Mock parse_and_validate to bypass validation
+    mock_parse_and_validate.return_value = ["/test_operation", {}]
+
+    # Setup usage tracker mock
+    mock_tracker = MagicMock()
+    mock_tracker.start_tracking.return_value = {"start_time": "2024-01-01"}
+    mock_tracker.end_tracking.return_value = MagicMock(user="mockuser")
+    mock_get_tracker.return_value = mock_tracker
+
+    # Setup validated decorator with empty rules and always-allow permission checker
+    setup_validated({}, always_allow_permission_checker)
+
+    # Create a handler that raises unexpected exception
+    @validated("test_operation", True)  # validate_body=True enables tracking
+    def handler(event, context, user, name, data):
+        raise ValueError("Unexpected error")
+
+    event = {
+        "headers": {"Authorization": "Bearer user-token"},
+        "body": json.dumps({}),
+        "path": "/test_operation",
+    }
+    context = MagicMock()
+
+    # Should re-raise the exception
+    with pytest.raises(ValueError, match="Unexpected error"):
+        handler(event, context)
+
+    # Verify tracking happened before re-raising (covers lines 916-928)
+    assert mock_tracker.start_tracking.called
+    assert mock_tracker.end_tracking.called
+    assert mock_tracker.record_metrics.called
+
+    # Verify error_type was passed
+    end_tracking_call = mock_tracker.end_tracking.call_args
+    assert end_tracking_call[1]["error_type"] == "ValueError"
 
 
 @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-charges-table"})

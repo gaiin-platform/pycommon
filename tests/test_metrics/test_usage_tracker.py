@@ -472,6 +472,47 @@ class TestUsageTracker:
 
     @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
     @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_record_metrics_with_error_type(self, mock_boto3):
+        """Test record_metrics includes error_type in details when present"""
+        mock_dynamodb = Mock()
+        mock_table = Mock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3.resource.return_value = mock_dynamodb
+
+        tracker = UsageTracker()
+
+        start = datetime.now()
+        end = start + timedelta(seconds=1)
+
+        metrics = LambdaExecutionMetrics(
+            start_timestamp=start,
+            end_timestamp=end,
+            duration_ms=1000.0,
+            user="test_user",
+            account="test_account",
+            api_key_id=None,
+            operation="failed_operation",
+            endpoint="/api/resource",
+            api_accessed=False,
+            status_code=500,
+            success=False,
+            error_type="ValueError",  # This should trigger line 354
+            request_id="req-456",
+            memory_limit_mb=512,
+        )
+
+        tracker.record_metrics(metrics)
+
+        # Verify put_item was called
+        mock_table.put_item.assert_called_once()
+        call_args = mock_table.put_item.call_args
+        item = call_args[1]["Item"]
+
+        # Verify error_type is in details.execution (covers line 354)
+        assert item["details"]["execution"]["error_type"] == "ValueError"
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
     def test_record_metrics_handles_errors(self, mock_boto3):
         """Test record_metrics handles errors gracefully"""
         mock_dynamodb = Mock()
