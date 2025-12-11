@@ -40,7 +40,8 @@ class TestLambdaExecutionMetrics:
             memory_limit_mb=1024,  # 1 GB
         )
 
-        cost = metrics.estimated_cost_usd()
+        # Test without padding (original behavior)
+        cost = metrics.estimated_cost_usd(use_padded_duration=False)
 
         # 1 GB * 2 seconds = 2 GB-seconds
         # 2 * 0.0000166667 = 0.0000333334
@@ -70,7 +71,8 @@ class TestLambdaExecutionMetrics:
             memory_limit_mb=512,  # 0.5 GB
         )
 
-        cost = metrics.estimated_cost_usd()
+        # Test without padding for predictable cost
+        cost = metrics.estimated_cost_usd(use_padded_duration=False)
 
         # 0.5 GB * 0.5 seconds = 0.25 GB-seconds
         # 0.25 * 0.0000166667 = 0.0000041667
@@ -674,6 +676,78 @@ class TestIntegration:
         ratio = cost_with_actual / cost_with_limit
         expected_ratio = Decimal("256") / Decimal("1024")  # 0.25
         assert abs(ratio - expected_ratio) < Decimal("0.01")
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_get_padded_duration(self, mock_boto3):
+        """Test duration padding calculation"""
+        start = datetime.now()
+        end = start + timedelta(seconds=1)
+
+        metrics = LambdaExecutionMetrics(
+            start_timestamp=start,
+            end_timestamp=end,
+            duration_ms=1000.0,  # 1 second
+            user="test_user",
+            account="test_account",
+            api_key_id=None,
+            operation="test_op",
+            endpoint="/test",
+            api_accessed=False,
+            status_code=200,
+            success=True,
+            error_type=None,
+            request_id="test-123",
+            memory_limit_mb=1024,
+        )
+
+        # Test default 25% padding
+        padded = metrics.get_padded_duration_ms()
+        assert padded == 1250.0  # 1000 * 1.25
+
+        # Test custom padding
+        padded_10 = metrics.get_padded_duration_ms(padding_percent=10.0)
+        assert padded_10 == 1100.0  # 1000 * 1.10
+
+        padded_50 = metrics.get_padded_duration_ms(padding_percent=50.0)
+        assert padded_50 == 1500.0  # 1000 * 1.50
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_estimated_cost_with_padding(self, mock_boto3):
+        """Test cost calculation with duration padding"""
+        start = datetime.now()
+        end = start + timedelta(seconds=1)
+
+        metrics = LambdaExecutionMetrics(
+            start_timestamp=start,
+            end_timestamp=end,
+            duration_ms=348.0,  # Typical tracked duration
+            user="test_user",
+            account="test_account",
+            api_key_id=None,
+            operation="test_op",
+            endpoint="/test",
+            api_accessed=False,
+            status_code=200,
+            success=True,
+            error_type=None,
+            request_id="test-123",
+            memory_limit_mb=1024,
+        )
+
+        # Without padding
+        cost_no_padding = metrics.estimated_cost_usd(use_padded_duration=False)
+
+        # With default 25% padding (should be closer to CloudWatch)
+        cost_with_padding = metrics.estimated_cost_usd(use_padded_duration=True)
+
+        # Padded cost should be higher
+        assert cost_with_padding > cost_no_padding
+
+        # Should be ~25% higher (348ms -> 435ms)
+        ratio = cost_with_padding / cost_no_padding
+        assert abs(ratio - Decimal("1.25")) < Decimal("0.01")
 
     @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
     @patch("pycommon.metrics.usage_tracker.boto3")

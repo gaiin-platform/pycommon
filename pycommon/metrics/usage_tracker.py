@@ -75,7 +75,30 @@ class LambdaExecutionMetrics:
     service_name: Optional[str] = None
     function_name: Optional[str] = None
 
-    def estimated_cost_usd(self, use_actual_memory: bool = False) -> Decimal:
+    def get_padded_duration_ms(self, padding_percent: float = 25.0) -> float:
+        """Get duration with padding to account for tracking overhead.
+
+        The tracked duration misses:
+        - DynamoDB metrics write time (~50-100ms)
+        - Lambda finalization overhead (~20-50ms)
+        - Response serialization (~10-20ms)
+
+        Args:
+            padding_percent: Percentage to add to duration (default 25%)
+                           Based on typical overhead: 348ms tracked vs 465ms actual
+                           = ~33% gap, we use 25% as conservative estimate
+
+        Returns:
+            float: Padded duration in milliseconds
+        """
+        return self.duration_ms * (1.0 + padding_percent / 100.0)
+
+    def estimated_cost_usd(
+        self,
+        use_actual_memory: bool = False,
+        use_padded_duration: bool = True,
+        padding_percent: float = 25.0,
+    ) -> Decimal:
         """Calculate estimated AWS Lambda cost in USD.
 
         AWS Lambda pricing (as of 2025):
@@ -90,6 +113,9 @@ class LambdaExecutionMetrics:
             use_actual_memory: If True and max_memory_used_mb is available,
                              use actual memory for cost calculation (more accurate).
                              If False, use memory_limit_mb (what Lambda bills).
+            use_padded_duration: If True, add padding to account for tracking
+                               overhead that's not captured in duration_ms.
+            padding_percent: Percentage to pad duration (default 25%)
 
         Returns:
             Decimal: Estimated cost in USD for this execution
@@ -107,8 +133,13 @@ class LambdaExecutionMetrics:
         # Convert memory from MB to GB
         memory_gb = Decimal(memory_mb) / Decimal(1024)
 
+        # Use padded duration if requested to account for tracking overhead
+        duration_ms = self.duration_ms
+        if use_padded_duration:
+            duration_ms = self.get_padded_duration_ms(padding_percent)
+
         # Convert duration from ms to seconds
-        duration_seconds = Decimal(self.duration_ms) / Decimal(1000)
+        duration_seconds = Decimal(str(duration_ms)) / Decimal(1000)
 
         # Calculate GB-seconds
         gb_seconds = memory_gb * duration_seconds
@@ -379,9 +410,12 @@ class UsageTracker:
                     "endpoint": metrics.endpoint,
                     "event_source": getattr(metrics, "event_source", None),
                     "duration_ms": Decimal(str(metrics.duration_ms)),
+                    "duration_ms_padded": Decimal(
+                        str(metrics.get_padded_duration_ms())
+                    ),
                     "memory_limit_mb": metrics.memory_limit_mb,
                     "max_memory_used_mb": metrics.max_memory_used_mb,
-                    "estimated_cost_usd": cost,  # Also keep in details for reference
+                    "estimated_cost_usd": cost,  # Based on padded duration by default
                     "status_code": metrics.status_code,
                     "success": metrics.success,
                     "api_accessed": metrics.api_accessed,
