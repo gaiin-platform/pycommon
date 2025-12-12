@@ -772,13 +772,14 @@ def _parse_token(event: Dict[str, Any]) -> str:
     return token
 
 
-@required_env_vars(
-    {
-        "ADDITIONAL_CHARGES_TABLE": [
-            DynamoDBOperation.PUT_ITEM
-        ],  # DynamoDB table for additional charges (includes Lambda usage tracking)
-    }
-)
+# TODO: REMOVE LATER - Temporarily commented out to allow fail-safe deployment
+# @required_env_vars(
+#     {
+#         "ADDITIONAL_CHARGES_TABLE": [
+#             DynamoDBOperation.PUT_ITEM
+#         ],  # DynamoDB table for additional charges (includes Lambda usage tracking)
+#     }
+# )
 def validated(
     op: str,
     validate_body: bool = True,
