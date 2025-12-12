@@ -12,6 +12,7 @@ from pycommon.metrics.usage_tracker import (
     LambdaExecutionMetrics,
     UsageTracker,
     get_usage_tracker,
+    is_cold_start,
 )
 
 
@@ -701,9 +702,9 @@ class TestIntegration:
             memory_limit_mb=1024,
         )
 
-        # Test default 25% padding
+        # Test default 33% padding
         padded = metrics.get_padded_duration_ms()
-        assert padded == 1250.0  # 1000 * 1.25
+        assert padded == 1330.0  # 1000 * 1.33
 
         # Test custom padding
         padded_10 = metrics.get_padded_duration_ms(padding_percent=10.0)
@@ -739,15 +740,15 @@ class TestIntegration:
         # Without padding
         cost_no_padding = metrics.estimated_cost_usd(use_padded_duration=False)
 
-        # With default 25% padding (should be closer to CloudWatch)
+        # With default 33% padding (should be closer to CloudWatch)
         cost_with_padding = metrics.estimated_cost_usd(use_padded_duration=True)
 
         # Padded cost should be higher
         assert cost_with_padding > cost_no_padding
 
-        # Should be ~25% higher (348ms -> 435ms)
+        # Should be ~33% higher (348ms -> 463ms)
         ratio = cost_with_padding / cost_no_padding
-        assert abs(ratio - Decimal("1.25")) < Decimal("0.01")
+        assert abs(ratio - Decimal("1.33")) < Decimal("0.01")
 
     @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
     @patch("pycommon.metrics.usage_tracker.boto3")
@@ -900,3 +901,241 @@ class TestIntegration:
         # Should still return metrics even if memory capture fails
         assert metrics is not None
         assert metrics.max_memory_used_mb is None  # None due to exception
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_cold_start_detection(self, mock_boto3):
+        """Test cold start detection functionality"""
+        mock_dynamodb = Mock()
+        mock_boto3.resource.return_value = mock_dynamodb
+
+        # Reset the global cold start flag for this test
+        import pycommon.metrics.usage_tracker as usage_tracker_module
+
+        usage_tracker_module._cold_start = True
+
+        tracker = UsageTracker()
+
+        tracking_context = {
+            "start_time": datetime.utcnow(),
+            "user": "test_user",
+            "operation": "test_op",
+            "endpoint": "/test",
+            "api_accessed": False,
+            "request_id": "req-123",
+            "memory_limit": 1024,
+        }
+
+        claims = {"account": "test_account"}
+        result = {"statusCode": 200}
+
+        # First invocation should be cold start
+        metrics1 = tracker.end_tracking(tracking_context, result, claims)
+        assert metrics1 is not None
+        assert metrics1.is_cold_start is True
+
+        # Second invocation should be warm start
+        tracking_context2 = tracking_context.copy()
+        tracking_context2["start_time"] = datetime.utcnow()
+        metrics2 = tracker.end_tracking(tracking_context2, result, claims)
+        assert metrics2 is not None
+        assert metrics2.is_cold_start is False
+
+        # Third invocation should also be warm start
+        tracking_context3 = tracking_context.copy()
+        tracking_context3["start_time"] = datetime.utcnow()
+        metrics3 = tracker.end_tracking(tracking_context3, result, claims)
+        assert metrics3 is not None
+        assert metrics3.is_cold_start is False
+
+    def test_is_cold_start_function(self):
+        """Test is_cold_start() function directly"""
+        # Reset the global cold start flag for this test
+        import pycommon.metrics.usage_tracker as usage_tracker_module
+
+        usage_tracker_module._cold_start = True
+
+        # First call should return True (cold start)
+        assert is_cold_start() is True
+
+        # Subsequent calls should return False (warm starts)
+        assert is_cold_start() is False
+        assert is_cold_start() is False
+        assert is_cold_start() is False
+
+    def test_get_padded_duration_default(self):
+        """Test that default padding is now 33%"""
+        start = datetime.now()
+        end = start + timedelta(seconds=1)
+
+        metrics = LambdaExecutionMetrics(
+            start_timestamp=start,
+            end_timestamp=end,
+            duration_ms=1000.0,
+            user="test_user",
+            account="test_account",
+            api_key_id=None,
+            operation="test_op",
+            endpoint="/test",
+            api_accessed=False,
+            status_code=200,
+            success=True,
+            error_type=None,
+            request_id="test-request-123",
+            memory_limit_mb=1024,
+        )
+
+        # Default padding should be 33%
+        padded = metrics.get_padded_duration_ms()
+        assert padded == 1330.0  # 1000 * 1.33
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_record_metrics_includes_cold_start(self, mock_boto3):
+        """Test that record_metrics includes cold start flag in DynamoDB"""
+        mock_dynamodb = Mock()
+        mock_table = Mock()
+        mock_boto3.resource.return_value = mock_dynamodb
+        mock_dynamodb.Table.return_value = mock_table
+
+        tracker = UsageTracker()
+
+        start = datetime.utcnow()
+        end = start + timedelta(milliseconds=500)
+
+        metrics = LambdaExecutionMetrics(
+            start_timestamp=start,
+            end_timestamp=end,
+            duration_ms=500.0,
+            user="test_user",
+            account="test_account",
+            api_key_id=None,
+            operation="test_op",
+            endpoint="/test",
+            api_accessed=False,
+            status_code=200,
+            success=True,
+            error_type=None,
+            request_id="test-request-123",
+            memory_limit_mb=1024,
+            max_memory_used_mb=150,
+            is_cold_start=True,
+            service_name="test-service",
+            function_name="test-function",
+        )
+
+        tracker.record_metrics(metrics)
+
+        # Verify put_item was called
+        assert mock_table.put_item.called
+        call_args = mock_table.put_item.call_args
+        item = call_args[1]["Item"]
+
+        # Verify cold start flag is in details
+        assert "details" in item
+        assert "execution" in item["details"]
+        assert "is_cold_start" in item["details"]["execution"]
+        assert item["details"]["execution"]["is_cold_start"] is True
+
+    @patch.dict(os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-table"})
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_cold_start_detection_fails_safe(self, mock_boto3):
+        """Test that cold start detection failure doesn't break tracking"""
+        mock_dynamodb = Mock()
+        mock_boto3.resource.return_value = mock_dynamodb
+
+        tracker = UsageTracker()
+
+        tracking_context = {
+            "start_time": datetime.utcnow(),
+            "user": "test_user",
+            "operation": "test_op",
+            "endpoint": "/test",
+            "api_accessed": False,
+            "request_id": "req-123",
+            "memory_limit": 1024,
+        }
+
+        claims = {"account": "test_account"}
+        result = {"statusCode": 200}
+
+        # Mock is_cold_start to raise an exception
+        with patch(
+            "pycommon.metrics.usage_tracker.is_cold_start",
+            side_effect=Exception("Cold start detection failed"),
+        ):
+            metrics = tracker.end_tracking(tracking_context, result, claims)
+
+        # Should still return metrics with is_cold_start=False (fail-safe)
+        assert metrics is not None
+        assert metrics.is_cold_start is False
+
+    def test_estimated_cost_padding_failure_fails_safe(self):
+        """Test that padding calculation failure doesn't break cost estimation"""
+        start = datetime.now()
+        end = start + timedelta(seconds=1)
+
+        metrics = LambdaExecutionMetrics(
+            start_timestamp=start,
+            end_timestamp=end,
+            duration_ms=1000.0,
+            user="test_user",
+            account="test_account",
+            api_key_id=None,
+            operation="test_op",
+            endpoint="/test",
+            api_accessed=False,
+            status_code=200,
+            success=True,
+            error_type=None,
+            request_id="test-request-123",
+            memory_limit_mb=1024,
+        )
+
+        # Mock get_padded_duration_ms to raise an exception
+        with patch.object(
+            metrics,
+            "get_padded_duration_ms",
+            side_effect=Exception("Padding calculation failed"),
+        ):
+            cost = metrics.estimated_cost_usd(use_padded_duration=True)
+
+        # Should still return a valid cost using raw duration (fail-safe)
+        assert cost > Decimal("0")
+        # Should be the unpadded cost
+        unpadded_cost = metrics.estimated_cost_usd(use_padded_duration=False)
+        assert cost == unpadded_cost
+
+    @patch.dict(os.environ, {}, clear=True)  # Clear env var
+    @patch("pycommon.metrics.usage_tracker.boto3")
+    def test_record_metrics_without_table_env_var(self, mock_boto3):
+        """Test record_metrics fails safe when env var not set"""
+        # Create tracker with table name explicitly (simulating it was set before)
+        tracker = UsageTracker(dynamodb_table="test-table")
+
+        start = datetime.utcnow()
+        end = start + timedelta(milliseconds=500)
+
+        metrics = LambdaExecutionMetrics(
+            start_timestamp=start,
+            end_timestamp=end,
+            duration_ms=500.0,
+            user="test_user",
+            account="test_account",
+            api_key_id=None,
+            operation="test_op",
+            endpoint="/test",
+            api_accessed=False,
+            status_code=200,
+            success=True,
+            error_type=None,
+            request_id="test-request-123",
+            memory_limit_mb=1024,
+        )
+
+        # Temporarily remove the env var to trigger fail-safe
+        with patch.dict(os.environ, {}, clear=True):
+            # Should not raise an exception, just log and return
+            tracker.record_metrics(metrics)
+
+        # If we got here without exception, the fail-safe worked

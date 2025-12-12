@@ -414,16 +414,17 @@ def track_execution(
     Note:
         - If tracking fails, the function continues normally (fail-safe)
         - Metrics are recorded to ADDITIONAL_CHARGES_TABLE
-        - Requires ADDITIONAL_CHARGES_TABLE environment variable
+        - ADDITIONAL_CHARGES_TABLE environment variable (temporarily optional)
     """
 
-    @required_env_vars(
-        {
-            "ADDITIONAL_CHARGES_TABLE": [
-                DynamoDBOperation.PUT_ITEM
-            ],  # DynamoDB table for additional charges (includes Lambda usage tracking)
-        }
-    )
+    # TODO: REMOVE LATER - Temporarily commented out to allow fail-safe deployment
+    # @required_env_vars(
+    #     {
+    #         "ADDITIONAL_CHARGES_TABLE": [
+    #             DynamoDBOperation.PUT_ITEM
+    #         ],  # DynamoDB table for additional charges (Lambda usage tracking)
+    #     }
+    # )
     def decorator(f: Callable) -> Callable:
         @wraps(f)
         def wrapper(event: Dict[str, Any], context: Any, *args, **kwargs) -> Any:

@@ -19,6 +19,10 @@ from pycommon.logger import getLogger
 
 logger = getLogger("usage_tracker")
 
+# Global flag to detect cold starts
+# Lambda containers are reused, so first invocation is cold start
+_cold_start = True
+
 
 @dataclass
 class LambdaExecutionMetrics:
@@ -69,13 +73,14 @@ class LambdaExecutionMetrics:
     request_id: Optional[str]
     memory_limit_mb: Optional[int]
     max_memory_used_mb: Optional[int] = None
+    is_cold_start: bool = False
 
     # Additional context
     purpose: Optional[str] = None
     service_name: Optional[str] = None
     function_name: Optional[str] = None
 
-    def get_padded_duration_ms(self, padding_percent: float = 25.0) -> float:
+    def get_padded_duration_ms(self, padding_percent: float = 33.0) -> float:
         """Get duration with padding to account for tracking overhead.
 
         The tracked duration misses:
@@ -84,9 +89,11 @@ class LambdaExecutionMetrics:
         - Response serialization (~10-20ms)
 
         Args:
-            padding_percent: Percentage to add to duration (default 25%)
-                           Based on typical overhead: 348ms tracked vs 465ms actual
-                           = ~33% gap, we use 25% as conservative estimate
+            padding_percent: Percentage to add to duration (default 33%)
+                           Based on observed overhead:
+                           - Warm starts: 848ms tracked vs 984ms actual = 16% gap
+                           - With overhead: 348ms tracked vs 465ms actual = 34% gap
+                           Using 33% as balanced estimate
 
         Returns:
             float: Padded duration in milliseconds
@@ -97,7 +104,7 @@ class LambdaExecutionMetrics:
         self,
         use_actual_memory: bool = False,
         use_padded_duration: bool = True,
-        padding_percent: float = 25.0,
+        padding_percent: float = 33.0,
     ) -> Decimal:
         """Calculate estimated AWS Lambda cost in USD.
 
@@ -115,7 +122,7 @@ class LambdaExecutionMetrics:
                              If False, use memory_limit_mb (what Lambda bills).
             use_padded_duration: If True, add padding to account for tracking
                                overhead that's not captured in duration_ms.
-            padding_percent: Percentage to pad duration (default 25%)
+            padding_percent: Percentage to pad duration (default 33%)
 
         Returns:
             Decimal: Estimated cost in USD for this execution
@@ -134,9 +141,17 @@ class LambdaExecutionMetrics:
         memory_gb = Decimal(memory_mb) / Decimal(1024)
 
         # Use padded duration if requested to account for tracking overhead
+        # TODO: REMOVE LATER - temporary fail-safe logging
         duration_ms = self.duration_ms
         if use_padded_duration:
-            duration_ms = self.get_padded_duration_ms(padding_percent)
+            try:
+                duration_ms = self.get_padded_duration_ms(padding_percent)
+            except Exception as padding_error:
+                logger.warning(
+                    f"[REMOVE LATER] Failed to calculate padded duration "
+                    f"(using raw duration): {padding_error}"
+                )
+                duration_ms = self.duration_ms
 
         # Convert duration from ms to seconds
         duration_seconds = Decimal(str(duration_ms)) / Decimal(1000)
@@ -215,29 +230,46 @@ class UsageTracker:
             enabled: Whether tracking is enabled. Can be controlled via
                     ENABLE_USAGE_TRACKING env var.
         """
+        # TODO: REMOVE LATER - temporary fail-safe logging
         self.table_name = dynamodb_table or os.getenv("ADDITIONAL_CHARGES_TABLE")
+        logger.warning(
+            f"[REMOVE LATER] UsageTracker init: table_name={self.table_name}, "
+            f"enabled={enabled}"
+        )
 
         # Check if tracking is enabled via environment variable
         env_enabled = os.getenv("ENABLE_USAGE_TRACKING", "true").lower()
         self.enabled = enabled and env_enabled in ("true", "1", "yes")
 
         if not self.enabled:
-            logger.info("Usage tracking is disabled")
+            logger.warning(
+                f"[REMOVE LATER] Usage tracking is disabled "
+                f"(enabled={enabled}, env_enabled={env_enabled})"
+            )
             return
 
         if not self.table_name:
             logger.warning(
-                "ADDITIONAL_CHARGES_TABLE not set, usage tracking will be disabled"
+                "[REMOVE LATER] ADDITIONAL_CHARGES_TABLE not set, "
+                "usage tracking will be disabled. This is a temporary fail-safe."
             )
             self.enabled = False
             return
 
+        # TODO: REMOVE LATER - temporary fail-safe for boto3 initialization
         try:
             self.dynamodb = boto3.resource("dynamodb")
             self.table = self.dynamodb.Table(self.table_name)
-            logger.debug(f"Usage tracker initialized with table: {self.table_name}")
+            logger.warning(
+                f"[REMOVE LATER] Usage tracker initialized successfully "
+                f"with table: {self.table_name}"
+            )
         except Exception as e:
-            logger.error(f"Failed to initialize DynamoDB table: {e}")
+            logger.warning(
+                f"[REMOVE LATER] Failed to initialize DynamoDB table "
+                f"(failing safe): {e}",
+                exc_info=True,
+            )
             self.enabled = False
 
     def start_tracking(
@@ -335,11 +367,29 @@ class UsageTracker:
                 if platform.system() == "Darwin":  # macOS
                     peak_memory_kb = peak_memory_kb / 1024
 
-                # Convert to MB and add 30MB buffer for Lambda runtime overhead
+                # Convert to MB and add 35MB buffer for Lambda runtime overhead
+                # Observed: 111MB tracked vs 133MB actual (22MB diff)
+                #          117MB tracked vs 141MB actual (24MB diff)
+                # Using 35MB buffer for better accuracy
                 python_memory_mb = int(peak_memory_kb / 1024)
-                max_memory_used_mb = python_memory_mb + 30
+                max_memory_used_mb = python_memory_mb + 35
             except Exception as e:
                 logger.debug(f"Could not capture memory usage: {e}")
+
+            # Detect if this is a cold start
+            # TODO: REMOVE LATER - temporary fail-safe logging
+            is_cold = False
+            try:
+                is_cold = is_cold_start()
+                logger.warning(
+                    f"[REMOVE LATER] Cold start detection successful: {is_cold}"
+                )
+            except Exception as cold_start_error:
+                logger.warning(
+                    f"[REMOVE LATER] Cold start detection failed "
+                    f"(failing safe to False): {cold_start_error}",
+                    exc_info=True,
+                )
 
             metrics = LambdaExecutionMetrics(
                 start_timestamp=start_time,
@@ -357,6 +407,7 @@ class UsageTracker:
                 request_id=tracking_context.get("request_id"),
                 memory_limit_mb=tracking_context.get("memory_limit"),
                 max_memory_used_mb=max_memory_used_mb,
+                is_cold_start=is_cold,
                 purpose=claims.get("purpose"),
                 service_name=tracking_context.get("service_name"),
                 function_name=tracking_context.get("function_name"),
@@ -365,7 +416,8 @@ class UsageTracker:
             logger.debug(
                 f"Ended tracking: duration={duration:.2f}ms, "
                 f"memory={max_memory_used_mb or 'unknown'}MB, "
-                f"status={status_code}, cost=${metrics.estimated_cost_usd()}"
+                f"status={status_code}, cold_start={is_cold}, "
+                f"cost=${metrics.estimated_cost_usd()}"
             )
             return metrics
 
@@ -384,6 +436,24 @@ class UsageTracker:
             metrics: Metrics object to store, or None to skip
         """
         if not self.enabled or not metrics:
+            logger.warning(
+                "[REMOVE LATER] record_metrics skipped: enabled=%s, metrics=%s",
+                self.enabled,
+                metrics is not None,
+            )
+            return
+
+        # TODO: REMOVE LATER - temporary fail-safe for ADDITIONAL_CHARGES_TABLE
+        table_name = os.getenv("ADDITIONAL_CHARGES_TABLE")
+        if not table_name:
+            logger.warning(
+                "[REMOVE LATER] ADDITIONAL_CHARGES_TABLE not set, "
+                "skipping metrics recording. This is a temporary fail-safe. "
+                "Metrics would be: user=%s, duration=%.2fms, cost=$%s",
+                metrics.user,
+                metrics.duration_ms,
+                metrics.estimated_cost_usd(),
+            )
             return
 
         try:
@@ -415,6 +485,7 @@ class UsageTracker:
                     ),
                     "memory_limit_mb": metrics.memory_limit_mb,
                     "max_memory_used_mb": metrics.max_memory_used_mb,
+                    "is_cold_start": metrics.is_cold_start,
                     "estimated_cost_usd": cost,  # Based on padded duration by default
                     "status_code": metrics.status_code,
                     "success": metrics.success,
@@ -465,6 +536,26 @@ class UsageTracker:
 
 # Global singleton instance
 _usage_tracker: Optional[UsageTracker] = None
+
+
+def is_cold_start() -> bool:
+    """Detect if this is a Lambda cold start.
+
+    Lambda containers are reused across invocations. The first invocation
+    after container creation is a "cold start" with significant initialization
+    overhead (2000+ ms). Subsequent invocations are "warm starts".
+
+    This function returns True only on the first call per container,
+    then False for all subsequent calls.
+
+    Returns:
+        bool: True if this is a cold start, False if warm start
+    """
+    global _cold_start
+    if _cold_start:
+        _cold_start = False
+        return True
+    return False
 
 
 def get_usage_tracker() -> UsageTracker:
