@@ -4,7 +4,12 @@ from uuid import UUID
 
 import pytest
 
-from pycommon.api.accounting import _get_dynamodb_client, get_api_key_id, record_usage
+from pycommon.api.accounting import (
+    _get_dynamodb_client,
+    get_api_key_id,
+    record_additional_charge,
+    record_usage,
+)
 from pycommon.exceptions import EnvVarError
 
 
@@ -112,8 +117,9 @@ class TestRecordUsage:
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.log_critical_error")
     def test_returns_zero_when_usage_recording_fails(
-        self, mock_logger, mock_get_client
+        self, mock_log_critical, mock_logger, mock_get_client
     ):
         """Test that 0.0 is returned when usage recording fails."""
         with patch.dict(
@@ -133,6 +139,12 @@ class TestRecordUsage:
             mock_logger.error.assert_called_with(
                 "Error recording usage: DynamoDB error"
             )
+
+            # Verify critical error was logged
+            mock_log_critical.assert_called_once()
+            call_kwargs = mock_log_critical.call_args[1]
+            assert call_kwargs["function_name"] == "record_usage"
+            assert call_kwargs["error_type"] == "UsageRecordingFailure"
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
@@ -159,8 +171,9 @@ class TestRecordUsage:
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.log_critical_error")
     def test_returns_zero_when_cost_calculation_fails(
-        self, mock_logger, mock_get_client
+        self, mock_log_critical, mock_logger, mock_get_client
     ):
         """Test that 0.0 is returned when cost calculation fails."""
         with patch.dict(
@@ -181,6 +194,12 @@ class TestRecordUsage:
             mock_logger.error.assert_called_with(
                 "Error calculating or updating cost: Query failed"
             )
+
+            # Verify critical error was logged
+            mock_log_critical.assert_called_once()
+            call_kwargs = mock_log_critical.call_args[1]
+            assert call_kwargs["function_name"] == "record_usage_costCalculation"
+            assert call_kwargs["error_type"] == "CostCalculationFailure"
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
@@ -437,8 +456,9 @@ class TestRecordUsage:
     @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
     @patch("pycommon.api.accounting.uuid")
+    @patch("pycommon.api.accounting.log_critical_error")
     def test_cost_update_failure_after_successful_usage_recording(
-        self, mock_uuid, mock_logger, mock_get_client
+        self, mock_log_critical, mock_uuid, mock_logger, mock_get_client
     ):
         """Test that function returns 0.0 when cost update fails after
         successful usage recording."""
@@ -494,3 +514,705 @@ class TestRecordUsage:
                 assert mock_logger.error.called
                 call_args = mock_logger.error.call_args[0][0]
                 assert "Error calculating or updating cost:" in call_args
+
+                # Verify critical error was logged
+                mock_log_critical.assert_called_once()
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.log_critical_error")
+    def test_logs_error_when_usage_critical_logging_fails(
+        self, mock_log_critical, mock_logger, mock_get_client
+    ):
+        """Test error is logged if critical logging fails in usage recording."""
+        with patch.dict(
+            os.environ,
+            {
+                "CHAT_USAGE_DYNAMO_TABLE": "test-usage-table",
+                "COST_CALCULATIONS_DYNAMO_TABLE": "test-cost-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            mock_dynamodb = Mock()
+            mock_get_client.return_value = mock_dynamodb
+            mock_dynamodb.put_item.side_effect = Exception("DynamoDB error")
+
+            # Make critical logging fail too
+            mock_log_critical.side_effect = Exception("Logging error")
+
+            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+
+            assert result == 0.0
+            # Verify that the failure to log critical error was also logged
+            assert mock_logger.error.call_count >= 2
+            calls = [str(call) for call in mock_logger.error.call_args_list]
+            assert any("Failed to log critical error" in call for call in calls)
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.log_critical_error")
+    def test_logs_error_when_cost_calculation_critical_logging_fails(
+        self, mock_log_critical, mock_logger, mock_get_client
+    ):
+        """Test error is logged if critical logging fails in cost calc."""
+        with patch.dict(
+            os.environ,
+            {
+                "CHAT_USAGE_DYNAMO_TABLE": "test-usage-table",
+                "COST_CALCULATIONS_DYNAMO_TABLE": "test-cost-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            mock_dynamodb = Mock()
+            mock_get_client.return_value = mock_dynamodb
+            mock_dynamodb.put_item.return_value = None
+            mock_dynamodb.query.side_effect = Exception("Query failed")
+
+            # Make critical logging fail too
+            mock_log_critical.side_effect = Exception("Logging error")
+
+            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+
+            assert result == 0.0
+            # Verify that the failure to log critical error was also logged
+            assert mock_logger.error.call_count >= 2
+            calls = [str(call) for call in mock_logger.error.call_args_list]
+            assert any("Failed to log critical error" in call for call in calls)
+
+
+class TestRecordAdditionalCharge:
+    """Tests for record_additional_charge function."""
+
+    def setup_method(self):
+        """Set up test environment variables and account data."""
+        self.account = {
+            "user": "test-user@example.com",
+            "account_id": "test-account-123",
+        }
+
+    def test_raises_error_when_additional_charges_table_missing(self):
+        """Test that EnvVarError is raised when ADDITIONAL_CHARGES_TABLE is missing."""
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(EnvVarError, match="ADDITIONAL_CHARGES_TABLE"):
+                record_additional_charge(
+                    self.account, "text-embedding-3-small", 1000, "embedding"
+                )
+
+    def test_raises_error_when_model_rate_table_missing(self):
+        """Test that EnvVarError is raised when MODEL_RATE_TABLE is missing."""
+        with patch.dict(
+            os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-charges-table"}, clear=True
+        ):
+            with pytest.raises(EnvVarError, match="MODEL_RATE_TABLE"):
+                record_additional_charge(
+                    self.account, "text-embedding-3-small", 1000, "embedding"
+                )
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    def test_returns_zero_when_account_user_missing(self, mock_logger, mock_get_client):
+        """Test that 0.0 is returned when account.user is missing."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            account_no_user = {"account_id": "test-account-123"}
+            result = record_additional_charge(
+                account_no_user, "text-embedding-3-small", 1000, "embedding"
+            )
+
+            assert result == 0.0
+            mock_logger.warning.assert_called_once()
+            assert "Missing account.user" in str(mock_logger.warning.call_args)
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    def test_returns_zero_when_model_rate_not_found(self, mock_logger, mock_get_client):
+        """Test that 0.0 is returned when no model rate is found."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            mock_dynamodb = Mock()
+            mock_get_client.return_value = mock_dynamodb
+            mock_dynamodb.query.return_value = {"Items": []}
+
+            result = record_additional_charge(
+                self.account, "unknown-model", 1000, "embedding"
+            )
+
+            assert result == 0.0
+            mock_logger.warning.assert_called_once()
+            assert "No pricing found for model" in str(mock_logger.warning.call_args)
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    @patch("pycommon.api.accounting.log_critical_error")
+    def test_returns_zero_and_logs_critical_error_on_failure(
+        self, mock_log_critical, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test 0.0 returned and critical error logged when recording fails."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            mock_dynamodb = Mock()
+            mock_get_client.return_value = mock_dynamodb
+            mock_dynamodb.query.side_effect = Exception("DynamoDB error")
+
+            result = record_additional_charge(
+                self.account, "text-embedding-3-small", 1000, "embedding"
+            )
+
+            assert result == 0.0
+            mock_logger.error.assert_called_once()
+            assert "Failed to record additional charge" in str(
+                mock_logger.error.call_args
+            )
+
+            # Verify critical error was logged
+            mock_log_critical.assert_called_once()
+            call_kwargs = mock_log_critical.call_args[1]
+            assert call_kwargs["function_name"] == "record_additional_charge"
+            assert call_kwargs["error_type"] == "AdditionalChargeRecordingFailure"
+            assert call_kwargs["severity"] == "HIGH"
+            assert call_kwargs["current_user"] == "test-user@example.com"
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_successful_charge_recording_with_basic_params(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test successful charge recording with basic parameters."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock uuid
+            mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0001"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                result = record_additional_charge(
+                    self.account, "text-embedding-3-small", 1000, "embedding"
+                )
+
+                expected_cost = 1000 / 1000 * 0.0001  # 0.0001
+                assert result == expected_cost
+
+                # Verify put_item was called with correct structure
+                put_item_call = mock_dynamodb.put_item.call_args
+                assert put_item_call is not None
+                item = put_item_call[1]["Item"]
+                assert item["user"]["S"] == "test-user@example.com"
+                assert item["accountId"]["S"] == "test-account-123"
+                assert item["modelId"]["S"] == "text-embedding-3-small"
+                assert item["details"]["M"]["itemType"]["S"] == "embedding"
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_successful_charge_recording_with_details(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test successful charge recording with additional details."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock uuid
+            mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0002"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                details = {
+                    "document_key": "doc-456.pdf",
+                    "chunk_id": 123,
+                    "is_test": True,
+                    "nested": {"key": "value"},
+                }
+
+                result = record_additional_charge(
+                    self.account,
+                    "text-embedding-3-large",
+                    2000,
+                    "embedding",
+                    details=details,
+                )
+
+                expected_cost = 2000 / 1000 * 0.0002  # 0.0004
+                assert result == expected_cost
+
+                # Verify details were properly serialized
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+                item_details = item["details"]["M"]
+                assert item_details["document_key"]["S"] == "doc-456.pdf"
+                assert item_details["chunk_id"]["N"] == "123"
+                # Boolean values are stored as BOOL in DynamoDB with nested structure
+                assert "is_test" in item_details
+                assert "nested" in item_details
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    @patch("pycommon.api.accounting.time")
+    def test_successful_charge_recording_with_ttl(
+        self, mock_time, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test successful charge recording with TTL."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock time and uuid
+            mock_time.time.return_value = 1609459200  # 2021-01-01 00:00:00
+            mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0001"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                result = record_additional_charge(
+                    self.account,
+                    "text-embedding-3-small",
+                    1000,
+                    "embedding",
+                    ttl_days=90,
+                )
+
+                assert result > 0.0
+
+                # Verify TTL was set correctly
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+                assert "ttl" in item
+                expected_ttl = 1609459200 + (90 * 24 * 60 * 60)
+                assert item["ttl"]["N"] == str(expected_ttl)
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_successful_charge_recording_with_custom_request_id(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test successful charge recording with custom request_id."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0001"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                custom_request_id = "custom-req-789"
+                result = record_additional_charge(
+                    self.account,
+                    "text-embedding-3-small",
+                    1000,
+                    "embedding",
+                    request_id=custom_request_id,
+                )
+
+                assert result > 0.0
+
+                # Verify request_id was used
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+                assert item["requestId"]["S"] == custom_request_id
+                assert custom_request_id in item["id"]["S"]
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_charge_recording_with_account_fallback(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test charge recording when account uses 'account' instead of 'account_id'."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0001"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                # Account with 'account' instead of 'account_id'
+                account_alt = {
+                    "user": "test-user@example.com",
+                    "account": "alt-acc-456",
+                }
+
+                result = record_additional_charge(
+                    account_alt, "text-embedding-3-small", 1000, "embedding"
+                )
+
+                assert result > 0.0
+
+                # Verify accountId was set correctly
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+                assert item["accountId"]["S"] == "alt-acc-456"
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_charge_recording_with_no_account_id_uses_default(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test charge recording uses 'general_account' when no account_id."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0001"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                # Account without account_id or account
+                account_no_id = {"user": "test-user@example.com"}
+
+                result = record_additional_charge(
+                    account_no_id, "text-embedding-3-small", 1000, "embedding"
+                )
+
+                assert result > 0.0
+
+                # Verify default accountId was used
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+                assert item["accountId"]["S"] == "general_account"
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_charge_recording_for_different_item_types(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test charge recording works for various item types."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.01"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                item_types = [
+                    "embedding",
+                    "image_generation",
+                    "fine_tuning",
+                    "audio_transcription",
+                ]
+
+                for item_type in item_types:
+                    result = record_additional_charge(
+                        self.account, "test-model", 100, item_type
+                    )
+
+                    assert result > 0.0
+
+                    # Verify item type was recorded correctly
+                    put_item_call = mock_dynamodb.put_item.call_args
+                    item = put_item_call[1]["Item"]
+                    assert item["details"]["M"]["itemType"]["S"] == item_type
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    @patch("pycommon.api.accounting.log_critical_error")
+    def test_logs_error_when_critical_logging_fails(
+        self, mock_log_critical, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test that error is logged if critical error logging itself fails."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            mock_dynamodb = Mock()
+            mock_get_client.return_value = mock_dynamodb
+            mock_dynamodb.query.side_effect = Exception("DynamoDB error")
+
+            # Make critical logging fail too
+            mock_log_critical.side_effect = Exception("Logging error")
+
+            result = record_additional_charge(
+                self.account, "text-embedding-3-small", 1000, "embedding"
+            )
+
+            assert result == 0.0
+            # Verify that the failure to log critical error was also logged
+            assert mock_logger.error.call_count >= 2
+            calls = [str(call) for call in mock_logger.error.call_args_list]
+            assert any("Failed to log critical error" in call for call in calls)
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_successful_charge_recording_with_boolean_details(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test successful charge recording with boolean value in details."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0001"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                details = {"is_production": False}
+
+                result = record_additional_charge(
+                    self.account,
+                    "text-embedding-3-small",
+                    1000,
+                    "embedding",
+                    details=details,
+                )
+
+                assert result > 0.0
+
+                # Verify boolean was properly serialized
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+                item_details = item["details"]["M"]
+                assert "is_production" in item_details
+                # Boolean values are stored with BOOL type in DynamoDB
+                assert "BOOL" in item_details["is_production"]
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_successful_charge_recording_with_mixed_type_details(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test successful charge recording with all detail value types."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0001"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                details = {
+                    "string_field": "test_value",
+                    "int_field": 42,
+                    "float_field": 3.14,
+                    "bool_field": True,
+                    "dict_field": {"nested_key": "nested_value"},
+                }
+
+                result = record_additional_charge(
+                    self.account,
+                    "text-embedding-3-small",
+                    1000,
+                    "embedding",
+                    details=details,
+                )
+
+                assert result > 0.0
+
+                # Verify all types were properly serialized
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+                item_details = item["details"]["M"]
+                assert "string_field" in item_details
+                assert item_details["string_field"]["S"] == "test_value"
+                assert "int_field" in item_details
+                assert item_details["int_field"]["N"] == "42"
+                assert "float_field" in item_details
+                assert item_details["float_field"]["N"] == "3.14"
+                assert "bool_field" in item_details
+                assert "BOOL" in item_details["bool_field"]
+                assert "dict_field" in item_details
+                assert "M" in item_details["dict_field"]
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_successful_charge_recording_with_other_types_in_details(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test successful charge recording with other types (list, None) in details."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0001"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                details = {
+                    "list_field": ["item1", "item2"],
+                    "none_field": None,
+                }
+
+                result = record_additional_charge(
+                    self.account,
+                    "text-embedding-3-small",
+                    1000,
+                    "embedding",
+                    details=details,
+                )
+
+                assert result > 0.0
+
+                # Verify other types were converted to strings
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+                item_details = item["details"]["M"]
+                assert "list_field" in item_details
+                assert item_details["list_field"]["S"] == str(["item1", "item2"])
+                assert "none_field" in item_details
+                assert item_details["none_field"]["S"] == "None"
