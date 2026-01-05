@@ -734,6 +734,8 @@ class TestRecordAdditionalCharge:
                 assert item["user"]["S"] == "test-user@example.com"
                 assert item["accountId"]["S"] == "test-account-123"
                 assert item["modelId"]["S"] == "text-embedding-3-small"
+                # Verify itemType is at top level AND in details
+                assert item["itemType"]["S"] == "embedding"
                 assert item["details"]["M"]["itemType"]["S"] == "embedding"
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
@@ -1019,10 +1021,61 @@ class TestRecordAdditionalCharge:
 
                     assert result > 0.0
 
-                    # Verify item type was recorded correctly
+                    # Verify item type at top level and in details
                     put_item_call = mock_dynamodb.put_item.call_args
                     item = put_item_call[1]["Item"]
+                    assert item["itemType"]["S"] == item_type
                     assert item["details"]["M"]["itemType"]["S"] == item_type
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_item_type_stored_as_top_level_column(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test that itemType is stored as a top-level column for easy querying."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.query.return_value = {
+                    "Items": [{"InputCostPerThousandTokens": {"N": "0.0001"}}]
+                }
+                mock_dynamodb.put_item.return_value = None
+
+                result = record_additional_charge(
+                    self.account,
+                    "text-embedding-3-small",
+                    1000,
+                    "embedding",
+                    details={"document_key": "test.pdf"},
+                )
+
+                assert result > 0.0
+
+                # Verify itemType is at top level (for DynamoDB GSI queries)
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+
+                # Top-level itemType column exists
+                assert "itemType" in item
+                assert item["itemType"]["S"] == "embedding"
+
+                # Also preserved in details for backward compatibility
+                assert "itemType" in item["details"]["M"]
+                assert item["details"]["M"]["itemType"]["S"] == "embedding"
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
@@ -1164,6 +1217,55 @@ class TestRecordAdditionalCharge:
                 assert "BOOL" in item_details["bool_field"]
                 assert "dict_field" in item_details
                 assert "M" in item_details["dict_field"]
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_successful_charge_recording_with_flat_cost(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test successful charge recording with flat cost (no model rate lookup)."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADDITIONAL_CHARGES_TABLE": "test-charges-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00Z"
+                mock_datetime.now.return_value = mock_now
+
+                # Mock DynamoDB responses
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                # No query should be made when flat_cost is provided
+                mock_dynamodb.put_item.return_value = None
+
+                # Code interpreter session: flat $0.03 fee
+                result = record_additional_charge(
+                    self.account,
+                    "gpt-4o",
+                    token_count=0,  # Not used with flat_cost
+                    item_type="codeInterpreterSession",
+                    request_id="session-123",
+                    details={"session_duration": "1h"},
+                    flat_cost=0.03,  # Flat fee
+                )
+
+                # Should return exactly the flat cost
+                assert result == 0.03
+
+                # Verify NO model rate query was made
+                mock_dynamodb.query.assert_not_called()
+
+                # Verify put_item was called with correct cost
+                put_item_call = mock_dynamodb.put_item.call_args
+                item = put_item_call[1]["Item"]
+                assert item["cost"]["N"] == "0.03"
+                assert item["itemType"]["S"] == "codeInterpreterSession"
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")

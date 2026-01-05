@@ -35,6 +35,7 @@ def record_additional_charge(
     request_id: Optional[str] = None,
     details: Optional[Dict[str, Any]] = None,
     ttl_days: Optional[int] = None,
+    flat_cost: Optional[float] = None,
 ) -> float:
     """Records additional charges (e.g., embeddings, image generation) to DynamoDB.
 
@@ -42,20 +43,29 @@ def record_additional_charge(
     services beyond regular LLM chat usage. It calculates costs based on model rates
     and stores them in the ADDITIONAL_CHARGES_TABLE.
 
+    The itemType is stored both as a top-level column (for easy DynamoDB querying/GSI)
+    and within the details object (for backward compatibility and context).
+
     Args:
         account (Dict[str, Any]): Account information containing 'user' and
                                    optionally 'account_id' or 'account'
         model_id (str): Model identifier (e.g., 'text-embedding-3-small',
                         'dall-e-3')
-        token_count (int): Number of input tokens used (or equivalent units)
+        token_count (int): Number of input tokens used (or equivalent units).
+                           Ignored if flat_cost is provided.
         item_type (str): Type of additional charge (e.g., 'embedding',
-                         'image_generation', 'fine_tuning')
+                         'image_generation', 'fine_tuning'). Stored as top-level
+                         column for efficient querying.
         request_id (Optional[str]): Unique request identifier. Defaults to
                                     generated UUID if not provided
         details (Optional[Dict[str, Any]]): Additional metadata to store with
                                              the charge record. Defaults to None.
         ttl_days (Optional[int]): Number of days until record expires (TTL).
                                   If None, no TTL is set.
+        flat_cost (Optional[float]): Fixed cost in USD. If provided, this cost
+                                     is used instead of calculating from token_count
+                                     and model rates. Useful for flat-fee services
+                                     like code interpreter sessions ($0.03/session).
 
     Returns:
         float: Total cost calculated for this charge in USD.
@@ -97,29 +107,41 @@ def record_additional_charge(
             account.get("account_id") or account.get("account") or "general_account"
         )
 
-        # Query model rate
-        model_rate_response = _get_dynamodb_client().query(
-            TableName=model_rate_table_name,
-            KeyConditionExpression="ModelID = :modelId",
-            ExpressionAttributeValues={":modelId": {"S": model_id}},
-        )
-
-        if (
-            not model_rate_response.get("Items")
-            or len(model_rate_response["Items"]) == 0
-        ):
-            logger.warning(
-                "No pricing found for model: %s (item_type: %s)", model_id, item_type
+        # Use flat cost if provided, otherwise calculate from token count
+        if flat_cost is not None:
+            cost = flat_cost
+            logger.debug(
+                "Using flat cost: $%.4f for %s (model: %s)",
+                flat_cost,
+                item_type,
+                model_id,
             )
-            return 0.0
+        else:
+            # Query model rate
+            model_rate_response = _get_dynamodb_client().query(
+                TableName=model_rate_table_name,
+                KeyConditionExpression="ModelID = :modelId",
+                ExpressionAttributeValues={":modelId": {"S": model_id}},
+            )
 
-        model_rate = model_rate_response["Items"][0]
-        input_cost_per_thousand = float(
-            model_rate.get("InputCostPerThousandTokens", {}).get("N", "0")
-        )
+            if (
+                not model_rate_response.get("Items")
+                or len(model_rate_response["Items"]) == 0
+            ):
+                logger.warning(
+                    "No pricing found for model: %s (item_type: %s)",
+                    model_id,
+                    item_type,
+                )
+                return 0.0
 
-        # Calculate cost
-        cost = (token_count / 1000.0) * input_cost_per_thousand
+            model_rate = model_rate_response["Items"][0]
+            input_cost_per_thousand = float(
+                model_rate.get("InputCostPerThousandTokens", {}).get("N", "0")
+            )
+
+            # Calculate cost from token count
+            cost = (token_count / 1000.0) * input_cost_per_thousand
 
         # Generate record ID and timestamp
         record_id = f"{account['user']}#{item_type}#{request_id or str(uuid.uuid4())}"
@@ -154,6 +176,7 @@ def record_additional_charge(
             "user": {"S": account["user"]},
             "accountId": {"S": account_id},
             "cost": {"N": str(cost)},
+            "itemType": {"S": item_type},  # Top-level column for easy querying
             "details": {"M": charge_details},
             "modelId": {"S": model_id},
             "time": {"S": timestamp},
