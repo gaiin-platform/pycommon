@@ -257,7 +257,8 @@ def record_usage(
     model_id: str,
     input_tokens: int,
     output_tokens: int,
-    cached_tokens: int,
+    input_cached_tokens: int,
+    input_write_cached_tokens: int,
     details: Optional[Dict[str, Any]] = None,
 ) -> float:
     """Records usage and costs in DynamoDB tables.
@@ -272,12 +273,13 @@ def record_usage(
         model_id (str): Model identifier (e.g., 'gpt-4o', 'claude-3-5-sonnet')
         input_tokens (int): Number of input tokens used
         output_tokens (int): Number of output tokens generated
-        cached_tokens (int): Number of cached tokens used
+        input_cached_tokens (int): Number of input cached tokens (read from cache)
+        input_write_cached_tokens (int): Number of input write cached tokens
         details (Optional[Dict[str, Any]]): Additional metadata to store with
                                              usage record. Defaults to None.
 
     Returns:
-        float: Total cost calculated for this usage (input + output + cached cost).
+        float: Total cost calculated for this usage (input + output + cached costs).
                Returns 0.0 if recording fails or environment variables are missing.
 
     Environment Variables Required:
@@ -344,7 +346,8 @@ def record_usage(
                     ),
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
-                    "cached_tokens": cached_tokens,
+                    "input_cached_tokens": input_cached_tokens,
+                    "input_write_cached_tokens": input_write_cached_tokens,
                     "table_name": dynamoTableName,
                 },
             )
@@ -374,14 +377,42 @@ def record_usage(
         output_cost_per_thousand_tokens = float(
             model_rate["OutputCostPerThousandTokens"]["N"]
         )
-        cached_cost_per_thousand_tokens = float(
-            model_rate["CachedCostPerThousandTokens"]["N"]
-        )
+
+        # Handle new cached token cost fields with backward compatibility
+        input_cached_cost_per_thousand = 0.0
+        input_write_cached_cost_per_thousand = 0.0
+
+        # Try new fields first
+        if model_rate.get("InputCachedCostPerThousandTokens", {}).get("N"):
+            input_cached_cost_per_thousand = float(
+                model_rate["InputCachedCostPerThousandTokens"]["N"]
+            )
+        if model_rate.get("InputWriteCachedCostPerThousandTokens", {}).get("N"):
+            input_write_cached_cost_per_thousand = float(
+                model_rate["InputWriteCachedCostPerThousandTokens"]["N"]
+            )
+
+        # Backward compatibility: if old field exists and new fields missing
+        if model_rate.get("CachedCostPerThousandTokens", {}).get("N"):
+            legacy_cached_cost = float(model_rate["CachedCostPerThousandTokens"]["N"])
+            # Only use legacy if new fields weren't explicitly set
+            if not model_rate.get("InputCachedCostPerThousandTokens", {}).get("N"):
+                input_cached_cost_per_thousand = legacy_cached_cost
 
         input_cost = (input_tokens / 1000) * input_cost_per_thousand_tokens
         output_cost = (output_tokens / 1000) * output_cost_per_thousand_tokens
-        cached_cost = (cached_tokens / 1000) * cached_cost_per_thousand_tokens
-        total_cost = input_cost + output_cost + cached_cost
+
+        # Calculate cached token costs separately for precision
+        input_cached_cost = (
+            input_cached_tokens / 1000
+        ) * input_cached_cost_per_thousand
+        input_write_cached_cost = (
+            input_write_cached_tokens / 1000
+        ) * input_write_cached_cost_per_thousand
+
+        total_cost = (
+            input_cost + output_cost + input_cached_cost + input_write_cached_cost
+        )
 
         logger.info(f"Total cost calculated: ${total_cost:.6f}")
 
@@ -448,7 +479,8 @@ def record_usage(
                     ),
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
-                    "cached_tokens": cached_tokens,
+                    "input_cached_tokens": input_cached_tokens,
+                    "input_write_cached_tokens": input_write_cached_tokens,
                     "cost_table_name": costDynamoTableName,
                     "model_rate_table": modelRateDynamoTable,
                 },

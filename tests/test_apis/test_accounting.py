@@ -90,7 +90,7 @@ class TestRecordUsage:
         # Clear all required env vars to trigger the decorator error
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(EnvVarError, match="CHAT_USAGE_DYNAMO_TABLE"):
-                record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+                record_usage(self.account, "req-123", "gpt-4", 100, 50, 10, 0)
 
     def test_returns_zero_when_cost_calculations_table_missing(self):
         """Test EnvVarError raised when COST_CALCULATIONS_DYNAMO_TABLE missing."""
@@ -99,7 +99,7 @@ class TestRecordUsage:
             os.environ, {"CHAT_USAGE_DYNAMO_TABLE": "test-table"}, clear=True
         ):
             with pytest.raises(EnvVarError, match="COST_CALCULATIONS_DYNAMO_TABLE"):
-                record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+                record_usage(self.account, "req-123", "gpt-4", 100, 50, 10, 0)
 
     def test_returns_zero_when_model_rate_table_missing(self):
         """Test that EnvVarError is raised when MODEL_RATE_TABLE is missing."""
@@ -113,7 +113,7 @@ class TestRecordUsage:
             clear=True,
         ):
             with pytest.raises(EnvVarError, match="MODEL_RATE_TABLE"):
-                record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+                record_usage(self.account, "req-123", "gpt-4", 100, 50, 10, 0)
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
@@ -134,7 +134,7 @@ class TestRecordUsage:
             mock_get_client.return_value = mock_dynamodb
             mock_dynamodb.put_item.side_effect = Exception("DynamoDB error")
 
-            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10, 0)
             assert result == 0.0
             mock_logger.error.assert_called_with(
                 "Error recording usage: DynamoDB error"
@@ -163,7 +163,7 @@ class TestRecordUsage:
             mock_dynamodb.put_item.return_value = None
             mock_dynamodb.query.return_value = {"Items": []}
 
-            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10, 0)
             assert result == 0.0
             mock_logger.warning.assert_called_with(
                 "No model rate found for ModelID: gpt-4"
@@ -189,7 +189,7 @@ class TestRecordUsage:
             mock_dynamodb.put_item.return_value = None
             mock_dynamodb.query.side_effect = Exception("Query failed")
 
-            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10, 0)
             assert result == 0.0
             mock_logger.error.assert_called_with(
                 "Error calculating or updating cost: Query failed"
@@ -250,16 +250,22 @@ class TestRecordUsage:
                         {
                             "InputCostPerThousandTokens": {"N": "0.01"},
                             "OutputCostPerThousandTokens": {"N": "0.03"},
-                            "CachedCostPerThousandTokens": {"N": "0.005"},
+                            "InputCachedCostPerThousandTokens": {"N": "0.005"},
+                            "InputWriteCachedCostPerThousandTokens": {"N": "0.0025"},
                         }
                     ]
                 }
                 mock_dynamodb.update_item.return_value = None
 
-                result = record_usage(self.account, "req-123", "gpt-4", 1000, 500, 100)
+                result = record_usage(
+                    self.account, "req-123", "gpt-4", 1000, 500, 100, 50
+                )
 
                 expected_cost = (
-                    (1000 / 1000 * 0.01) + (500 / 1000 * 0.03) + (100 / 1000 * 0.005)
+                    (1000 / 1000 * 0.01)
+                    + (500 / 1000 * 0.03)
+                    + (100 / 1000 * 0.005)
+                    + (50 / 1000 * 0.0025)
                 )
                 assert result == expected_cost
 
@@ -313,7 +319,8 @@ class TestRecordUsage:
                         {
                             "InputCostPerThousandTokens": {"N": "0.002"},
                             "OutputCostPerThousandTokens": {"N": "0.006"},
-                            "CachedCostPerThousandTokens": {"N": "0.001"},
+                            "InputCachedCostPerThousandTokens": {"N": "0.001"},
+                            "InputWriteCachedCostPerThousandTokens": {"N": "0.0005"},
                         }
                     ]
                 }
@@ -326,11 +333,15 @@ class TestRecordUsage:
                     500,
                     250,
                     50,
+                    25,
                     {"extra": "data"},
                 )
 
                 expected_cost = (
-                    (500 / 1000 * 0.002) + (250 / 1000 * 0.006) + (50 / 1000 * 0.001)
+                    (500 / 1000 * 0.002)
+                    + (250 / 1000 * 0.006)
+                    + (50 / 1000 * 0.001)
+                    + (25 / 1000 * 0.0005)
                 )
                 assert result == expected_cost
 
@@ -377,14 +388,14 @@ class TestRecordUsage:
                         {
                             "InputCostPerThousandTokens": {"N": "0.01"},
                             "OutputCostPerThousandTokens": {"N": "0.03"},
-                            "CachedCostPerThousandTokens": {"N": "0.005"},
+                            "InputCachedCostPerThousandTokens": {"N": "0.005"},
                         }
                     ]
                 }
                 mock_dynamodb.update_item.return_value = None
 
                 result = record_usage(
-                    self.account, "req-789", "gpt-3.5", 300, 150, 30, None
+                    self.account, "req-789", "gpt-3.5", 300, 150, 30, 0, None
                 )
 
                 expected_cost = (
@@ -438,14 +449,14 @@ class TestRecordUsage:
                         {
                             "InputCostPerThousandTokens": {"N": "0.01"},
                             "OutputCostPerThousandTokens": {"N": "0.03"},
-                            "CachedCostPerThousandTokens": {"N": "0.005"},
+                            "InputCachedCostPerThousandTokens": {"N": "0.005"},
                         }
                     ]
                 }
                 mock_dynamodb.update_item.return_value = None
 
                 result = record_usage(
-                    account_without_id, "req-000", "gpt-4", 200, 100, 20
+                    account_without_id, "req-000", "gpt-4", 200, 100, 20, 0
                 )
 
                 expected_cost = (
@@ -498,14 +509,14 @@ class TestRecordUsage:
                         {
                             "InputCostPerThousandTokens": {"N": "0.01"},
                             "OutputCostPerThousandTokens": {"N": "0.03"},
-                            "CachedCostPerThousandTokens": {"N": "0.005"},
+                            "InputCachedCostPerThousandTokens": {"N": "0.005"},
                         }
                     ]
                 }
                 mock_dynamodb.update_item.side_effect = Exception("Update failed")
 
                 result = record_usage(
-                    self.account, "req-update-fail", "gpt-4", 100, 50, 10
+                    self.account, "req-update-fail", "gpt-4", 100, 50, 10, 0
                 )
 
                 assert result == 0.0
@@ -540,13 +551,132 @@ class TestRecordUsage:
             # Make critical logging fail too
             mock_log_critical.side_effect = Exception("Logging error")
 
-            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10, 0)
 
             assert result == 0.0
             # Verify that the failure to log critical error was also logged
             assert mock_logger.error.call_count >= 2
             calls = [str(call) for call in mock_logger.error.call_args_list]
             assert any("Failed to log critical error" in call for call in calls)
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_successful_usage_recording_with_legacy_cached_field(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test backward compatibility with legacy CachedCostPerThousandTokens."""
+        with patch.dict(
+            os.environ,
+            {
+                "CHAT_USAGE_DYNAMO_TABLE": "test-usage-table",
+                "COST_CALCULATIONS_DYNAMO_TABLE": "test-cost-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock uuid
+            mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00"
+                mock_now.hour = 10
+
+                mock_utc_now = Mock()
+                mock_utc_now.hour = 10
+
+                def datetime_now_side_effect(tz=None):
+                    if tz is not None:  # timezone.utc call
+                        return mock_utc_now
+                    return mock_now
+
+                mock_datetime.now.side_effect = datetime_now_side_effect
+
+                # Mock DynamoDB with legacy field only
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.put_item.return_value = None
+                mock_dynamodb.query.return_value = {
+                    "Items": [
+                        {
+                            "InputCostPerThousandTokens": {"N": "0.01"},
+                            "OutputCostPerThousandTokens": {"N": "0.03"},
+                            "CachedCostPerThousandTokens": {"N": "0.005"},
+                        }
+                    ]
+                }
+                mock_dynamodb.update_item.return_value = None
+
+                result = record_usage(
+                    self.account, "req-999", "gpt-4", 1000, 500, 100, 0
+                )
+
+                # Should use legacy field for input_cached_tokens
+                expected_cost = (
+                    (1000 / 1000 * 0.01) + (500 / 1000 * 0.03) + (100 / 1000 * 0.005)
+                )
+                assert result == expected_cost
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_successful_usage_recording_legacy_ignored_when_new_field_exists(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Test legacy field ignored when new field exists."""
+        with patch.dict(
+            os.environ,
+            {
+                "CHAT_USAGE_DYNAMO_TABLE": "test-usage-table",
+                "COST_CALCULATIONS_DYNAMO_TABLE": "test-cost-table",
+                "MODEL_RATE_TABLE": "test-model-rate-table",
+            },
+        ):
+            # Mock uuid
+            mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+
+            # Mock datetime
+            with patch("pycommon.api.accounting.datetime") as mock_datetime:
+                mock_now = Mock()
+                mock_now.isoformat.return_value = "2023-01-01T12:00:00"
+                mock_now.hour = 10
+
+                mock_utc_now = Mock()
+                mock_utc_now.hour = 10
+
+                def datetime_now_side_effect(tz=None):
+                    if tz is not None:  # timezone.utc call
+                        return mock_utc_now
+                    return mock_now
+
+                mock_datetime.now.side_effect = datetime_now_side_effect
+
+                # Mock DynamoDB with BOTH legacy and new fields
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.put_item.return_value = None
+                mock_dynamodb.query.return_value = {
+                    "Items": [
+                        {
+                            "InputCostPerThousandTokens": {"N": "0.01"},
+                            "OutputCostPerThousandTokens": {"N": "0.03"},
+                            "InputCachedCostPerThousandTokens": {"N": "0.002"},  # New
+                            "CachedCostPerThousandTokens": {"N": "0.005"},  # Legacy
+                        }
+                    ]
+                }
+                mock_dynamodb.update_item.return_value = None
+
+                result = record_usage(
+                    self.account, "req-legacy-ignored", "gpt-4", 1000, 500, 100, 0
+                )
+
+                # Should use new field value (0.002) not legacy (0.005)
+                expected_cost = (
+                    (1000 / 1000 * 0.01) + (500 / 1000 * 0.03) + (100 / 1000 * 0.002)
+                )
+                assert result == expected_cost
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
@@ -571,7 +701,7 @@ class TestRecordUsage:
             # Make critical logging fail too
             mock_log_critical.side_effect = Exception("Logging error")
 
-            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10)
+            result = record_usage(self.account, "req-123", "gpt-4", 100, 50, 10, 0)
 
             assert result == 0.0
             # Verify that the failure to log critical error was also logged
