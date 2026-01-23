@@ -223,14 +223,24 @@ class AwsUser(UserABC):
 
         Returns:
             dict: A dictionary containing user information including user_id, email,
-                  family_name, given_name, custom SAML groups
-                  and updated_at.
+                  name (combined given_name + family_name), custom SAML groups and
+                  updated_at. Note: family_name and given_name are not included as
+                  they are replaced by the combined name field.
         """
+        # Compute name field by combining given_name and family_name
+        name = None
+        if self.given_name or self.family_name:
+            parts = []
+            if self.given_name:
+                parts.append(self.given_name)
+            if self.family_name:
+                parts.append(self.family_name)
+            name = " ".join(parts) if parts else None
+
         return {
             "user_id": self.user_id,
             "email": self.email,
-            "family_name": self.family_name,
-            "given_name": self.given_name,
+            "name": name,
             "custom:saml_groups": self.cust_saml_groups,
             "updated_at": self.updated_at,  # TODO(sam) make setter/getter
             "version": self.version,
@@ -279,6 +289,13 @@ class AwsUser(UserABC):
                 attrs_to_delete = []
                 data["updated_at"] = nowstr()
 
+                # Explicitly remove family_name and given_name if they exist
+                # in the database (migrating to combined 'name' field)
+                if resp["Item"].get("family_name") is not None:
+                    attrs_to_delete.append("family_name")
+                if resp["Item"].get("given_name") is not None:
+                    attrs_to_delete.append("given_name")
+
                 # remove any keys which match both sides
                 for k, v in data.items():
                     if data.get(k) is None and resp["Item"].get(k) is not None:
@@ -289,22 +306,41 @@ class AwsUser(UserABC):
                 for k in keys_to_delete:
                     del data[k]
 
-                if not data or data.keys() == {"updated_at"}:
+                # Skip update if no changes and nothing to delete
+                if (not data or data.keys() == {"updated_at"}) and not attrs_to_delete:
                     return
 
-                update_expr = "SET " + ", ".join(
-                    f"#{key_alias(k)}=:{key_alias(k)}"
+                update_expr_parts = []
+                # Build SET clause
+                set_keys = [
+                    k
                     for k in data.keys()
                     if k != "user_id" and k not in attrs_to_delete
-                )
-                if attrs_to_delete:
-                    update_expr += " REMOVE " + ", ".join(
-                        [f"#{key_alias(k)}" for k in attrs_to_delete]
+                ]
+                if set_keys:
+                    update_expr_parts.append(
+                        "SET "
+                        + ", ".join(
+                            f"#{key_alias(k)}=:{key_alias(k)}" for k in set_keys
+                        )
                     )
+
+                # Build REMOVE clause
+                if attrs_to_delete:
+                    update_expr_parts.append(
+                        "REMOVE "
+                        + ", ".join([f"#{key_alias(k)}" for k in attrs_to_delete])
+                    )
+
+                update_expr = " ".join(update_expr_parts)
 
                 expr_attr_names = {
                     f"#{key_alias(k)}": k for k in data.keys() if k != "user_id"
                 }
+                # Add attribute names for deletion
+                for k in attrs_to_delete:
+                    expr_attr_names[f"#{key_alias(k)}"] = k
+
                 expr_attr_values = {
                     f":{key_alias(k)}": v
                     for k, v in data.items()

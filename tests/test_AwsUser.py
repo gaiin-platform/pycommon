@@ -355,9 +355,10 @@ def test_create_non_null_dynamodb_dict_excludes_none_fields():
     d = user._create_non_null_dynamodb_dict()
     assert "email" not in d
     assert "given_name" not in d
+    assert "family_name" not in d  # No longer included (use name instead)
     assert "cust_saml_groups" not in d or d["cust_saml_groups"] is None
     assert "updated_at" not in d or d["updated_at"] is None
-    assert d["family_name"] == "Smith"
+    assert d["name"] == "Smith"  # Combined name field
     assert d["user_id"] == "u1"
 
 
@@ -437,8 +438,7 @@ def test_deletes_attributes_set_to_none(monkeypatch):
         "Item": {
             "user_id": "u1",
             "email": "test@example.com",
-            "family_name": "Smith",
-            "given_name": "John",
+            "name": "John Smith",  # Use name instead of family_name/given_name
             "custom:saml_groups": '["abc"]',
             "updated_at": None,
             "version": 1,
@@ -449,7 +449,8 @@ def test_deletes_attributes_set_to_none(monkeypatch):
     with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="now"):
         user.save()
         args, kwargs = mock_table.update_item.call_args
-        assert "REMOVE #custom_saml_groups" in kwargs["UpdateExpression"]
+        assert "#custom_saml_groups" in kwargs["UpdateExpression"]
+        assert "REMOVE" in kwargs["UpdateExpression"]
 
 
 def test_save_no_changes(monkeypatch):
@@ -459,8 +460,7 @@ def test_save_no_changes(monkeypatch):
         "Item": {
             "user_id": "u1",
             "email": "test@example.com",
-            "family_name": "Smith",
-            "given_name": "John",
+            "name": "John Smith",  # Combined name field (no family/given)
             "version": 1,
             "updated_at": "now",
         }
@@ -479,8 +479,7 @@ def test_none_deletes_attr(monkeypatch):
         "Item": {
             "user_id": "u1",
             "email": "test@example.com",
-            "family_name": "Smith",
-            "given_name": "John",
+            "name": "John Smith",  # Use name instead of family_name/given_name
             "custom:saml_groups": '["abc"]',
             "updated_at": None,
             "version": 1,
@@ -491,7 +490,8 @@ def test_none_deletes_attr(monkeypatch):
     with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="now"):
         user.save()
         args, kwargs = mock_table.update_item.call_args
-        assert "REMOVE #custom_saml_groups" in kwargs["UpdateExpression"]
+        assert "#custom_saml_groups" in kwargs["UpdateExpression"]
+        assert "REMOVE" in kwargs["UpdateExpression"]
 
 
 def test_get_version_default():
@@ -509,3 +509,181 @@ def test_set_version_invalid(monkeypatch):
     user = make_user()
     with pytest.raises(TypeError, match="version must be int"):
         user.version = "invalid"
+
+
+def test_name_field_combines_given_and_family_names():
+    """Test that name field is computed from given_name + family_name."""
+    user = AwsUser(
+        user_id="u1", email="test@example.com", given_name="John", family_name="Smith"
+    )
+    data = user._get_values_as_dict()
+    assert data["name"] == "John Smith"
+
+
+def test_name_field_with_only_given_name():
+    """Test that name field works with only given_name."""
+    user = AwsUser(
+        user_id="u1", email="test@example.com", given_name="John", family_name=None
+    )
+    data = user._get_values_as_dict()
+    assert data["name"] == "John"
+
+
+def test_name_field_with_only_family_name():
+    """Test that name field works with only family_name."""
+    user = AwsUser(
+        user_id="u1", email="test@example.com", given_name=None, family_name="Smith"
+    )
+    data = user._get_values_as_dict()
+    assert data["name"] == "Smith"
+
+
+def test_name_field_with_neither_given_nor_family():
+    """Test that name field is None when both names are None."""
+    user = AwsUser(
+        user_id="u1", email="test@example.com", given_name=None, family_name=None
+    )
+    data = user._get_values_as_dict()
+    assert data["name"] is None
+
+
+def test_save_includes_name_field(monkeypatch):
+    """Test that save() includes the computed name field."""
+    user = AwsUser(
+        user_id="u1", email="test@example.com", given_name="Jane", family_name="Doe"
+    )
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {}  # No existing item
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+
+    with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="2024-01-01"):
+        user.save()
+
+    # Verify put_item was called with name field
+    assert mock_table.put_item.called
+    call_kwargs = mock_table.put_item.call_args[1]
+    assert "Item" in call_kwargs
+    assert call_kwargs["Item"]["name"] == "Jane Doe"
+
+
+def test_save_updates_name_when_names_change(monkeypatch):
+    """Test that updating given_name or family_name updates the name field."""
+    user = make_user()  # John Smith
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "user_id": "u1",
+            "email": "test@example.com",
+            "family_name": "Smith",
+            "given_name": "John",
+            "name": "John Smith",
+            "version": 1,
+        }
+    }
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+
+    # Change the given name
+    user.given_name = "James"
+
+    with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="now"):
+        user.save()
+
+    # Verify update_item was called and includes the updated name
+    assert mock_table.update_item.called
+    call_kwargs = mock_table.update_item.call_args[1]
+
+    # The ExpressionAttributeValues should contain the new name
+    expr_attr_values = call_kwargs.get("ExpressionAttributeValues", {})
+    expr_attr_names = call_kwargs.get("ExpressionAttributeNames", {})
+    # Should have aliases for both given_name and name
+    assert "given_name" in expr_attr_names.values()
+    assert "name" in expr_attr_names.values()
+
+    # The name value should be "James Smith"
+    # (James + existing family_name)
+    # Find the alias for "name"
+    name_alias = None
+    for alias, actual_name in expr_attr_names.items():
+        if actual_name == "name":
+            name_alias = alias[1:]  # Remove # prefix for value key
+            break
+
+    if name_alias:
+        value_key = f":{name_alias}"
+        assert value_key in expr_attr_values
+        assert expr_attr_values[value_key] == "James Smith"
+
+
+def test_save_removes_legacy_name_fields(monkeypatch):
+    """Test that family_name and given_name are removed when present."""
+    user = make_user()
+    mock_table = MagicMock()
+    # Mock DB item has old family_name and given_name fields
+    mock_table.get_item.return_value = {
+        "Item": {
+            "user_id": "u1",
+            "email": "test@example.com",
+            "family_name": "Smith",  # Legacy field
+            "given_name": "John",  # Legacy field
+            "version": 1,
+            "updated_at": "old_time",
+        }
+    }
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+
+    # Save should remove legacy fields and add name field
+    with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="new_time"):
+        user.save()
+
+    # Verify update_item was called
+    assert mock_table.update_item.called
+    call_kwargs = mock_table.update_item.call_args[1]
+
+    # Check UpdateExpression contains REMOVE clause
+    update_expr = call_kwargs["UpdateExpression"]
+    assert "REMOVE" in update_expr
+    assert "#family_name" in update_expr
+    assert "#given_name" in update_expr
+
+    # Verify ExpressionAttributeNames includes the removed fields
+    expr_attr_names = call_kwargs.get("ExpressionAttributeNames", {})
+    assert "family_name" in expr_attr_names.values()
+    assert "given_name" in expr_attr_names.values()
+
+    # Verify name field is being SET
+    assert "SET" in update_expr
+    assert "#name" in update_expr
+    assert "name" in expr_attr_names.values()
+
+
+def test_save_only_removes_without_set(monkeypatch):
+    """Test case where only REMOVE is needed (no SET clause)."""
+    user = make_user()
+    mock_table = MagicMock()
+    # Mock DB has legacy fields and everything else matches
+    mock_table.get_item.return_value = {
+        "Item": {
+            "user_id": "u1",
+            "email": "test@example.com",
+            "family_name": "Smith",  # Legacy field to remove
+            "given_name": "John",  # Legacy field to remove
+            "name": "John Smith",  # Already has correct name
+            "version": 1,
+            "updated_at": "now",
+        }
+    }
+    monkeypatch.setattr(AwsUser, "_user_table", classmethod(lambda cls: mock_table))
+
+    # Save with timestamp matching existing
+    with patch("pycommon.dal.providers.aws.AwsUser.nowstr", return_value="now"):
+        user.save()
+
+    # Verify update_item was called (to remove legacy fields)
+    assert mock_table.update_item.called
+    call_kwargs = mock_table.update_item.call_args[1]
+
+    # Should have REMOVE but minimal or no SET
+    update_expr = call_kwargs["UpdateExpression"]
+    assert "REMOVE" in update_expr
+    assert "#family_name" in update_expr
+    assert "#given_name" in update_expr
