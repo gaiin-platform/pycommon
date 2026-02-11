@@ -292,11 +292,30 @@ def get_claims(token: str) -> dict:
             dal.User.get_by_user_id(user_id=payload["sub"])
             user = payload["sub"]
             logger.info(f"Using sub for user: {user}")
-        except Exception:
-            logger.debug(
-                f"Sub {payload['sub']} not found in cognito table, "
-                "falling back to username"
-            )
+        except Exception as e:
+            # Check error type by class name for compatibility
+            error_type = type(e).__name__
+
+            if error_type == "NotFound":
+                # User not found in cognito table - expected for some users
+                logger.debug(
+                    f"Sub {payload['sub']} not found in cognito table, "
+                    "falling back to username"
+                )
+            elif error_type == "PermissionDenied" or "AccessDenied" in str(e):
+                # Permission denied - IAM policy issue
+                logger.error(
+                    f"Permission denied looking up sub {payload['sub']}: {e}, "
+                    "falling back to username. Check IAM policy for "
+                    "COGNITO_USERS_DYNAMODB_TABLE access."
+                )
+            else:
+                # Other unexpected errors (connection, etc.)
+                logger.warning(
+                    f"Unexpected error looking up sub {payload['sub']}: "
+                    f"{error_type}: {e}, falling back to username",
+                    exc_info=True,
+                )
 
     # If sub not found, fallback to old IDP prefix username logic
     if not user:

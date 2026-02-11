@@ -2287,6 +2287,218 @@ def test_get_claims_falls_back_to_username_when_sub_not_found(
 @patch("pycommon.authz.boto3.resource")
 @patch("pycommon.authz.jwt.get_unverified_header")
 @patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
+def test_get_claims_falls_back_with_not_found(
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
+):
+    """Test get_claims falls back to username when NotFound is raised."""
+    mock_get_env.side_effect = lambda key, default: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+        "IDP_PREFIX": "mockprefix",
+    }.get(key, default)
+
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {
+        "username": "mockprefix_mockuser",
+        "sub": "sub12345",
+    }
+
+    # Create a NotFound exception using a class with that name
+    class NotFound(Exception):
+        pass
+
+    # Mock DAL to raise NotFound exception
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.side_effect = NotFound(
+        "User sub12345 not found"
+    )
+
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [
+                {
+                    "id": "mock_account",
+                    "isDefault": True,
+                    "rateLimit": {"rate": 42, "period": "Hourly"},
+                }
+            ],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    result = get_claims("mock_token")
+
+    # Should fall back to processed username (without prefix)
+    assert result["username"] == "mockuser"
+    assert result["account"] == "mock_account"
+    assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}
+
+    # Verify DAL was called with sub
+    mock_dal_instance.User.get_by_user_id.assert_called_once_with(user_id="sub12345")
+
+
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
+def test_get_claims_falls_back_with_permission_denied(
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
+):
+    """Test get_claims falls back to username when PermissionDenied is raised."""
+    mock_get_env.side_effect = lambda key, default: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+        "IDP_PREFIX": "mockprefix",
+    }.get(key, default)
+
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {
+        "username": "mockprefix_mockuser",
+        "sub": "sub12345",
+    }
+
+    # Create a PermissionDenied exception using a class with that name
+    class PermissionDenied(Exception):
+        pass
+
+    # Mock DAL to raise PermissionDenied exception
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.side_effect = PermissionDenied(
+        "AccessDeniedException: User not authorized"
+    )
+
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [
+                {
+                    "id": "mock_account",
+                    "isDefault": True,
+                    "rateLimit": {"rate": 42, "period": "Hourly"},
+                }
+            ],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    result = get_claims("mock_token")
+
+    # Should fall back to processed username (without prefix)
+    assert result["username"] == "mockuser"
+    assert result["account"] == "mock_account"
+    assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}
+
+    # Verify DAL was called with sub
+    mock_dal_instance.User.get_by_user_id.assert_called_once_with(user_id="sub12345")
+
+
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
+def test_get_claims_falls_back_with_other_exception(
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
+):
+    """Test get_claims falls back to username when other exceptions are raised."""
+    mock_get_env.side_effect = lambda key, default: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+        "IDP_PREFIX": "mockprefix",
+    }.get(key, default)
+
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {
+        "username": "mockprefix_mockuser",
+        "sub": "sub12345",
+    }
+
+    # Mock DAL to raise a ConnectionError (other exception type)
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.side_effect = ConnectionError(
+        "Database connection timeout"
+    )
+
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [
+                {
+                    "id": "mock_account",
+                    "isDefault": True,
+                    "rateLimit": {"rate": 42, "period": "Hourly"},
+                }
+            ],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    result = get_claims("mock_token")
+
+    # Should fall back to processed username (without prefix)
+    assert result["username"] == "mockuser"
+    assert result["account"] == "mock_account"
+    assert result["allowed_access"] == ["full_access"]
+    assert result["rate_limit"] == {"rate": 42, "period": "Hourly"}
+
+    # Verify DAL was called with sub
+    mock_dal_instance.User.get_by_user_id.assert_called_once_with(user_id="sub12345")
+
+
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
 def test_get_claims_no_sub_field_uses_username_directly(
     mock_decode,
     mock_get_header,
