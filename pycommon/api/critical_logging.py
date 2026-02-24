@@ -12,7 +12,6 @@ The log_critical_error function can be imported and used in any Lambda to record
 critical errors without requiring admin privileges or special permissions.
 """
 
-import json
 import os
 from typing import Any, Dict, Optional
 
@@ -21,6 +20,7 @@ from botocore.exceptions import ClientError
 
 from pycommon.dal.providers.aws.resource_perms import SQSOperation
 from pycommon.decorators import required_env_vars
+from pycommon.encoders import dumps_smart
 from pycommon.exceptions import EnvVarError
 from pycommon.logger import getLogger
 
@@ -50,6 +50,7 @@ def _log_critical_error_internal(
     Internal function with environment variable resolution and tracking.
     This function assumes CRITICAL_ERRORS_SQS_QUEUE_NAME is available.
     """
+    logger.error(error_message)
     # Auto-detect service name if not provided
     if service_name is None:
         service_name = os.getenv("SERVICE_NAME", "unknown")
@@ -75,7 +76,7 @@ def _log_critical_error_internal(
     # Send to SQS
     sqs_client.send_message(
         QueueUrl=queue_url,
-        MessageBody=json.dumps(message_body),
+        MessageBody=dumps_smart(message_body),
         MessageAttributes={
             "severity": {"StringValue": severity, "DataType": "String"},
             "service_name": {"StringValue": service_name, "DataType": "String"},

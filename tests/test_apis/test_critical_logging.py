@@ -170,8 +170,11 @@ class TestLogCriticalError:
         # but not for SQS since the parameter lookup fails
         mock_boto3_client.assert_any_call("ssm", region_name="us-east-1")
 
-        # Should log error (due to general exception handling)
-        mock_logger.error.assert_called_once()
+        # Should log error twice: once for error_message, once for exception
+        assert mock_logger.error.call_count == 2
+        # First call is the error_message
+        assert mock_logger.error.call_args_list[0][0][0] == "Test message"
+        # Second call is the exception handler
 
     @patch.dict(
         os.environ,
@@ -317,9 +320,12 @@ class TestLogCriticalError:
         # Should still return success (fail-safe)
         assert result == {"success": True, "message": "SQS error, logged locally only"}
 
-        # Verify error was logged
-        mock_logger.error.assert_called_once()
-        error_call = mock_logger.error.call_args[0][0]
+        # Verify error was logged twice: once for error_message, once for exception
+        assert mock_logger.error.call_count == 2
+        # First call is the error_message
+        assert mock_logger.error.call_args_list[0][0][0] == "Test message"
+        # Second call is the exception handler
+        error_call = mock_logger.error.call_args_list[1][0][0]
         assert "SQS error logging critical error (fail-safe mode)" in error_call
 
     @patch.dict(
@@ -350,9 +356,12 @@ class TestLogCriticalError:
             "message": "Unexpected error, logged locally only",
         }
 
-        # Verify error was logged
-        mock_logger.error.assert_called_once()
-        error_call = mock_logger.error.call_args[0][0]
+        # Verify error was logged twice: once for error_message, once for exception
+        assert mock_logger.error.call_count == 2
+        # First call is the error_message
+        assert mock_logger.error.call_args_list[0][0][0] == "Test message"
+        # Second call is the exception handler
+        error_call = mock_logger.error.call_args_list[1][0][0]
         assert "Unexpected error logging critical error (fail-safe mode)" in error_call
 
     @patch.dict(
@@ -457,8 +466,11 @@ class TestLogCriticalError:
         assert result["success"] is True
         assert result["message"] == "Unexpected error, logged locally only"
 
-        # Should log error (due to general exception handling)
-        mock_logger.error.assert_called_once()
+        # Should log error twice: once for error_message, once for exception
+        assert mock_logger.error.call_count == 2
+        # First call is the error_message
+        assert mock_logger.error.call_args_list[0][0][0] == "Test message"
+        # Second call is the exception handler
 
     @patch("pycommon.api.critical_logging._log_critical_error_internal")
     @patch("pycommon.api.critical_logging.logger")
