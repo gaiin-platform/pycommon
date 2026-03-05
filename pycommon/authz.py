@@ -791,15 +791,127 @@ def _parse_token(event: Dict[str, Any]) -> str:
     return token
 
 
+def _init_poll_status_record(
+    table_name: str, request_id: str, user: str, operation: str, status: str
+) -> None:
+    """
+    Initialize a poll status record in DynamoDB.
+
+    Args:
+        table_name: DynamoDB table name for poll status
+        request_id: Unique request identifier (pollRequestId from frontend)
+        user: Username from auth claims
+        operation: Operation name (e.g., 'create_assistant')
+        status: Initial status (typically 'processing')
+    """
+    import time
+    from datetime import datetime
+
+    import boto3
+
+    dynamodb = boto3.resource("dynamodb")
+    table = dynamodb.Table(table_name)
+
+    # Calculate TTL: 14 days from now (failsafe cleanup for hung requests)
+    ttl = int(time.time()) + (14 * 24 * 60 * 60)
+
+    table.put_item(
+        Item={
+            "requestId": request_id,
+            "user": user,
+            "operation": operation,
+            "status": status,
+            "createdAt": datetime.utcnow().isoformat(),
+            "updatedAt": datetime.utcnow().isoformat(),
+            "ttl": ttl,
+            "lastLog": f"Starting {operation}...",
+            "lastLogLevel": "INFO",
+        }
+    )
+
+
+def _finalize_poll_status_record(
+    table_name: str,
+    request_id: str,
+    user: str,
+    status: str,
+    result: Dict[str, Any] = None,
+    error: str = None,
+) -> None:
+    """
+    Finalize a poll status record and delete it (failsafe cleanup).
+
+    Args:
+        table_name: DynamoDB table name for poll status
+        request_id: Unique request identifier
+        user: Username from auth claims
+        status: Final status ('completed' or 'failed')
+        result: Optional result data (for completed status)
+        error: Optional error message (for failed status)
+    """
+    from datetime import datetime
+
+    import boto3
+
+    dynamodb = boto3.resource("dynamodb")
+    table = dynamodb.Table(table_name)
+
+    try:
+        # First, update the record with final status
+        update_expr = "SET #status = :status, updatedAt = :time, completedAt = :time"
+        expr_attr_names = {"#status": "status"}
+        expr_attr_values = {":status": status, ":time": datetime.utcnow().isoformat()}
+
+        if result:
+            update_expr += ", #result = :result"
+            expr_attr_names["#result"] = "result"
+            # Store compact result (just success/failure and key data)
+            compact_result = {
+                "success": result.get("success", False),
+                "data": result.get("data", {}) if result.get("success") else None,
+            }
+            expr_attr_values[":result"] = compact_result
+
+        if error:
+            update_expr += ", #error = :error"
+            expr_attr_names["#error"] = "error"
+            expr_attr_values[":error"] = error[:1000]  # Limit error length
+
+        table.update_item(
+            Key={"requestId": request_id, "user": user},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames=expr_attr_names,
+            ExpressionAttributeValues=expr_attr_values,
+        )
+
+        # Failsafe: Delete the record after marking as complete
+        # This prevents the table from growing indefinitely
+        # Frontend should poll and retrieve the status before deletion
+        # TTL serves as backup cleanup if this fails
+        table.delete_item(Key={"requestId": request_id, "user": user})
+
+    except Exception as e:
+        # Don't fail the request if cleanup fails
+        # TTL will eventually clean it up
+        logger.warning(f"Failed to finalize poll status record: {e}")
+
+
 def validated(
     op: str,
     validate_body: bool = True,
+    support_polling: bool = False,
 ) -> Callable:
-    """Decorator to validate input data and permissions for an API operation.
+    """Validate input data and permissions for an API operation.
 
     Args:
         op (str): The operation being performed.
         validate_body (bool): Whether to validate the request body.
+        support_polling (bool): Support pollRequestId-based status tracking.
+                               When True, the decorator will:
+                               - Extract pollRequestId from body before validation
+                               - Track progress via logger writes to DynamoDB
+                               - Update status to completed/failed automatically
+                               - Clean up poll status record after completion
 
     Returns:
         Callable: The decorated function.
@@ -815,6 +927,10 @@ def validated(
             from datetime import datetime
 
             lambda_start_time = datetime.utcnow()
+
+            # Poll tracking state
+            poll_request_id = None
+            poll_status_table = None
 
             # Initialize usage tracker
             from pycommon.metrics import get_usage_tracker
@@ -839,6 +955,47 @@ def validated(
                 logger.info(f"User: {current_user}")
                 if current_user is None:
                     raise HTTPUnauthorized("User not found.")
+
+                # Extract pollRequestId BEFORE validation (so it's not in schema)
+                if support_polling:
+                    try:
+                        body = json.loads(event.get("body", "{}"))
+                        # pollRequestId is at same level as "data", not inside it
+                        poll_request_id = body.get("pollRequestId")
+
+                        if poll_request_id:
+                            # Remove so it doesn't go through validation
+                            body.pop("pollRequestId", None)
+                            event["body"] = json.dumps(body)
+
+                            # Initialize poll status record (fail-safe)
+                            poll_status_table = os.environ.get("POLL_STATUS_TABLE")
+                            if not poll_status_table:
+                                logger.warning(
+                                    "Poll tracking requested but POLL_STATUS_TABLE "
+                                    "env var not set - skipping poll tracking"
+                                )
+                            else:
+                                _init_poll_status_record(
+                                    table_name=poll_status_table,
+                                    request_id=poll_request_id,
+                                    user=current_user,
+                                    operation=op,
+                                    status="processing",
+                                )
+
+                                # Activate poll tracking for logger
+                                from pycommon.logger import activate_poll_tracking
+
+                                activate_poll_tracking(
+                                    poll_request_id, current_user, op
+                                )
+                                logger.info(
+                                    f"Poll tracking activated: {poll_request_id}"
+                                )
+                    except Exception as poll_error:
+                        # Don't fail the request if poll setup fails
+                        logger.warning(f"Failed to setup poll tracking: {poll_error}")
 
                 logger.debug("Prior to call _parse_and_validate...")
                 logger.debug(
@@ -892,6 +1049,22 @@ def validated(
                     "body": json.dumps(result, cls=CustomPydanticJSONEncoder),
                 }
 
+                # Mark poll status as completed and clean up
+                if poll_request_id and poll_status_table:
+                    try:
+                        _finalize_poll_status_record(
+                            table_name=poll_status_table,
+                            request_id=poll_request_id,
+                            user=current_user,
+                            status="completed",
+                            result=result,
+                        )
+                        logger.info(
+                            f"Poll status completed for request {poll_request_id}"
+                        )
+                    except Exception as poll_error:
+                        logger.warning(f"Failed to finalize poll status: {poll_error}")
+
                 # End tracking and record metrics
                 if should_track and tracking_context:
                     metrics = tracker.end_tracking(
@@ -910,6 +1083,25 @@ def validated(
                     "statusCode": e.status_code,
                     "body": json.dumps({"error": f"Error: {e.status_code} - {e}"}),
                 }
+
+                # Mark poll status as failed and clean up
+                if poll_request_id and poll_status_table:
+                    try:
+                        _finalize_poll_status_record(
+                            table_name=poll_status_table,
+                            request_id=poll_request_id,
+                            user=(
+                                current_user
+                                if "current_user" in locals()
+                                else "unknown"
+                            ),
+                            status="failed",
+                            error=f"{type(e).__name__}: {str(e)}",
+                        )
+                    except Exception as poll_error:
+                        logger.warning(
+                            f"Failed to mark poll status as failed: {poll_error}"
+                        )
 
                 # Track failed request
                 if should_track and tracking_context:
@@ -930,6 +1122,25 @@ def validated(
 
                 logger.error(f"Traceback: {traceback.format_exc()}")
 
+                # Mark poll status as failed and clean up
+                if poll_request_id and poll_status_table:
+                    try:
+                        _finalize_poll_status_record(
+                            table_name=poll_status_table,
+                            request_id=poll_request_id,
+                            user=(
+                                current_user
+                                if "current_user" in locals()
+                                else "unknown"
+                            ),
+                            status="failed",
+                            error=f"{type(e).__name__}: {str(e)}",
+                        )
+                    except Exception as poll_error:
+                        logger.warning(
+                            f"Failed to mark poll status as failed: {poll_error}"
+                        )
+
                 # Track unexpected errors before re-raising
                 if should_track and tracking_context:
                     result_dict = {
@@ -947,6 +1158,15 @@ def validated(
                     tracker.record_metrics(metrics)
 
                 raise
+            finally:
+                # Always deactivate poll tracking
+                if support_polling and poll_request_id:
+                    try:
+                        from pycommon.logger import deactivate_poll_tracking
+
+                        deactivate_poll_tracking()
+                    except Exception:
+                        pass  # Ignore deactivation errors
 
         return wrapper
 
