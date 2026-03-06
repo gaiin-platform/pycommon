@@ -49,7 +49,6 @@ class PollStatusHandler(logging.Handler):
             # Check if polling is active for this request
             poll_request_id = getattr(_request_context, "poll_request_id", None)
             user = getattr(_request_context, "user", None)
-            operation = getattr(_request_context, "operation", None)
 
             if not poll_request_id or not user:
                 return  # No polling active, skip
@@ -70,7 +69,7 @@ class PollStatusHandler(logging.Handler):
             # Update poll status table
             update_expr = (
                 "SET #status = :status, lastLog = :log, "
-                "lastLogLevel = :level, updatedAt = :time, operation = :op"
+                "lastLogLevel = :level, updatedAt = :time"
             )
             self.table.update_item(
                 Key={"requestId": poll_request_id, "user": user},
@@ -81,7 +80,6 @@ class PollStatusHandler(logging.Handler):
                     ":log": record.getMessage()[:500],
                     ":level": record.levelname,
                     ":time": datetime.utcnow().isoformat(),
-                    ":op": operation or "unknown",
                 },
             )
 
@@ -153,7 +151,7 @@ def getLogger(log_stack: str):
     return logger
 
 
-def activate_poll_tracking(poll_request_id: str, user: str, operation: str = None):
+def activate_poll_tracking(poll_request_id: str, user: str):
     """
     Activate poll status tracking for the current request.
 
@@ -163,17 +161,15 @@ def activate_poll_tracking(poll_request_id: str, user: str, operation: str = Non
     Args:
         poll_request_id: Unique identifier for this polling request
         user: User making the request (from auth claims)
-        operation: Optional operation name (e.g., 'create_assistant')
 
     Example:
         >>> activate_poll_tracking(
-        ...     'req-123-abc', 'user@example.com', 'create_assistant'
+        ...     'req-123-abc', 'user@example.com'
         ... )
         >>> logger.info("Starting processing...")  # Updates poll status
     """
     _request_context.poll_request_id = poll_request_id
     _request_context.user = user
-    _request_context.operation = operation
 
 
 def deactivate_poll_tracking():
@@ -185,7 +181,6 @@ def deactivate_poll_tracking():
     """
     _request_context.poll_request_id = None
     _request_context.user = None
-    _request_context.operation = None
 
 
 def get_active_poll_request_id() -> Optional[str]:

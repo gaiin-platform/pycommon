@@ -2964,7 +2964,8 @@ def test_validated_with_polling_success(
     # Verify poll status record was initialized and finalized
     assert mock_table.put_item.called
     assert mock_table.update_item.called
-    assert mock_table.delete_item.called
+    # Record should NOT be deleted - it stays for frontend to retrieve
+    assert not mock_table.delete_item.called
 
 
 @patch.dict(

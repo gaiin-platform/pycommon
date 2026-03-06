@@ -792,7 +792,7 @@ def _parse_token(event: Dict[str, Any]) -> str:
 
 
 def _init_poll_status_record(
-    table_name: str, request_id: str, user: str, operation: str, status: str
+    table_name: str, request_id: str, user: str, status: str
 ) -> None:
     """
     Initialize a poll status record in DynamoDB.
@@ -801,7 +801,6 @@ def _init_poll_status_record(
         table_name: DynamoDB table name for poll status
         request_id: Unique request identifier (pollRequestId from frontend)
         user: Username from auth claims
-        operation: Operation name (e.g., 'create_assistant')
         status: Initial status (typically 'processing')
     """
     import time
@@ -819,12 +818,11 @@ def _init_poll_status_record(
         Item={
             "requestId": request_id,
             "user": user,
-            "operation": operation,
             "status": status,
             "createdAt": datetime.utcnow().isoformat(),
             "updatedAt": datetime.utcnow().isoformat(),
             "ttl": ttl,
-            "lastLog": f"Starting {operation}...",
+            "lastLog": "Processing request...",
             "lastLogLevel": "INFO",
         }
     )
@@ -884,11 +882,8 @@ def _finalize_poll_status_record(
             ExpressionAttributeValues=expr_attr_values,
         )
 
-        # Failsafe: Delete the record after marking as complete
-        # This prevents the table from growing indefinitely
-        # Frontend should poll and retrieve the status before deletion
-        # TTL serves as backup cleanup if this fails
-        table.delete_item(Key={"requestId": request_id, "user": user})
+        # Record stays in DynamoDB for frontend to retrieve via getPollStatus
+        # TTL (14 days) will automatically clean up completed/failed records
 
     except Exception as e:
         # Don't fail the request if cleanup fails
@@ -980,16 +975,13 @@ def validated(
                                     table_name=poll_status_table,
                                     request_id=poll_request_id,
                                     user=current_user,
-                                    operation=op,
                                     status="processing",
                                 )
 
                                 # Activate poll tracking for logger
                                 from pycommon.logger import activate_poll_tracking
 
-                                activate_poll_tracking(
-                                    poll_request_id, current_user, op
-                                )
+                                activate_poll_tracking(poll_request_id, current_user)
                                 logger.info(
                                     f"Poll tracking activated: {poll_request_id}"
                                 )
@@ -1052,6 +1044,12 @@ def validated(
                 # Mark poll status as completed and clean up
                 if poll_request_id and poll_status_table:
                     try:
+                        # Deactivate poll tracking BEFORE finalization
+                        # to prevent any subsequent logs from overwriting status
+                        from pycommon.logger import deactivate_poll_tracking
+
+                        deactivate_poll_tracking()
+
                         _finalize_poll_status_record(
                             table_name=poll_status_table,
                             request_id=poll_request_id,
@@ -1059,15 +1057,9 @@ def validated(
                             status="completed",
                             result=result,
                         )
-                        logger.info(
+                        logger.debug(
                             f"Poll status completed for request {poll_request_id}"
                         )
-                        # Deactivate poll tracking IMMEDIATELY after finalization
-                        # to prevent any subsequent logs from overwriting
-                        # the completed status
-                        from pycommon.logger import deactivate_poll_tracking
-
-                        deactivate_poll_tracking()
                     except Exception as poll_error:
                         logger.warning(f"Failed to finalize poll status: {poll_error}")
 
@@ -1093,6 +1085,11 @@ def validated(
                 # Mark poll status as failed and clean up
                 if poll_request_id and poll_status_table:
                     try:
+                        # Deactivate poll tracking BEFORE finalization
+                        from pycommon.logger import deactivate_poll_tracking
+
+                        deactivate_poll_tracking()
+
                         _finalize_poll_status_record(
                             table_name=poll_status_table,
                             request_id=poll_request_id,
@@ -1104,10 +1101,6 @@ def validated(
                             status="failed",
                             error=f"{type(e).__name__}: {str(e)}",
                         )
-                        # Deactivate poll tracking IMMEDIATELY after finalization
-                        from pycommon.logger import deactivate_poll_tracking
-
-                        deactivate_poll_tracking()
                     except Exception as poll_error:
                         logger.warning(
                             f"Failed to mark poll status as failed: {poll_error}"
@@ -1135,6 +1128,11 @@ def validated(
                 # Mark poll status as failed and clean up
                 if poll_request_id and poll_status_table:
                     try:
+                        # Deactivate poll tracking BEFORE finalization
+                        from pycommon.logger import deactivate_poll_tracking
+
+                        deactivate_poll_tracking()
+
                         _finalize_poll_status_record(
                             table_name=poll_status_table,
                             request_id=poll_request_id,
@@ -1146,10 +1144,6 @@ def validated(
                             status="failed",
                             error=f"{type(e).__name__}: {str(e)}",
                         )
-                        # Deactivate poll tracking IMMEDIATELY after finalization
-                        from pycommon.logger import deactivate_poll_tracking
-
-                        deactivate_poll_tracking()
                     except Exception as poll_error:
                         logger.warning(
                             f"Failed to mark poll status as failed: {poll_error}"

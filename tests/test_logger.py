@@ -246,7 +246,7 @@ class TestLogger:
             handler.table = mock_table  # Explicitly set the table
 
             # Activate polling
-            activate_poll_tracking("req-123", "user@test.com", "test_op")
+            activate_poll_tracking("req-123", "user@test.com")
 
             # Emit a log record
             record = logging.LogRecord(
@@ -272,7 +272,7 @@ class TestLogger:
             handler.table = mock_table  # Explicitly set the table
 
             # Activate polling
-            activate_poll_tracking("req-123", "user@test.com", "test_op")
+            activate_poll_tracking("req-123", "user@test.com")
 
             # Emit an error log record
             record = logging.LogRecord(
@@ -299,7 +299,7 @@ class TestLogger:
             handler.table = mock_table  # Explicitly set the table
 
             # Activate polling
-            activate_poll_tracking("req-123", "user@test.com", "test_op")
+            activate_poll_tracking("req-123", "user@test.com")
 
             # First emit should work
             record1 = logging.LogRecord(
@@ -333,7 +333,7 @@ class TestLogger:
             handler.table = mock_table  # Explicitly set the table
 
             # Activate polling
-            activate_poll_tracking("req-123", "user@test.com", "test_op")
+            activate_poll_tracking("req-123", "user@test.com")
 
             # Capture stderr to verify error message
             captured_stderr = StringIO()
@@ -357,7 +357,7 @@ class TestLogger:
             get_active_poll_request_id,
         )
 
-        activate_poll_tracking("req-456", "user@example.com", "create_assistant")
+        activate_poll_tracking("req-456", "user@example.com")
         assert get_active_poll_request_id() == "req-456"
 
         deactivate_poll_tracking()
