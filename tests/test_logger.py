@@ -199,3 +199,232 @@ class TestLogger:
         with patch.dict(os.environ, {"LOG_LEVEL": "FATAL"}, clear=True):
             logger = getLogger("test")
             assert logger.level == logging.CRITICAL
+
+    def test_poll_status_handler_init(self):
+        """Test PollStatusHandler initialization."""
+        from unittest.mock import patch
+
+        with patch("pycommon.logger.boto3"):
+            from pycommon.logger import PollStatusHandler
+
+            handler = PollStatusHandler("test-table", min_interval_seconds=10)
+            assert handler.min_interval == 10
+            assert handler.last_update_time == {}
+
+    def test_poll_status_handler_emit_no_polling_active(self):
+        """Test PollStatusHandler.emit when no polling is active."""
+        from unittest.mock import Mock, patch
+
+        with patch("pycommon.logger.boto3") as mock_boto3:
+            # Set up mock table before creating handler
+            mock_table = Mock()
+            mock_boto3.resource.return_value.Table.return_value = mock_table
+
+            from pycommon.logger import PollStatusHandler
+
+            handler = PollStatusHandler("test-table")
+            record = logging.LogRecord(
+                "test", logging.INFO, "", 0, "Test message", (), None
+            )
+
+            # Should not raise and not update DynamoDB
+            handler.emit(record)
+            assert not mock_table.update_item.called
+
+    def test_poll_status_handler_emit_with_active_polling(self):
+        """Test PollStatusHandler.emit with active polling."""
+        from unittest.mock import Mock, patch
+
+        with patch("pycommon.logger.boto3") as mock_boto3:
+            from pycommon.logger import PollStatusHandler, activate_poll_tracking
+
+            # Set up mock BEFORE creating handler
+            mock_table = Mock()
+            mock_boto3.resource.return_value.Table.return_value = mock_table
+
+            handler = PollStatusHandler("test-table", min_interval_seconds=0)
+            handler.table = mock_table  # Explicitly set the table
+
+            # Activate polling
+            activate_poll_tracking("req-123", "user@test.com")
+
+            # Emit a log record
+            record = logging.LogRecord(
+                "test", logging.INFO, "", 0, "Test message", (), None
+            )
+            handler.emit(record)
+
+            # Should update DynamoDB
+            assert mock_table.update_item.called
+
+    def test_poll_status_handler_emit_with_error_level(self):
+        """Test PollStatusHandler.emit with ERROR level sets status to failed."""
+        from unittest.mock import Mock, patch
+
+        with patch("pycommon.logger.boto3") as mock_boto3:
+            from pycommon.logger import PollStatusHandler, activate_poll_tracking
+
+            # Set up mock BEFORE creating handler
+            mock_table = Mock()
+            mock_boto3.resource.return_value.Table.return_value = mock_table
+
+            handler = PollStatusHandler("test-table", min_interval_seconds=0)
+            handler.table = mock_table  # Explicitly set the table
+
+            # Activate polling
+            activate_poll_tracking("req-123", "user@test.com")
+
+            # Emit an error log record
+            record = logging.LogRecord(
+                "test", logging.ERROR, "", 0, "Error message", (), None
+            )
+            handler.emit(record)
+
+            # Should update with status 'failed'
+            call_args = mock_table.update_item.call_args
+            assert call_args[1]["ExpressionAttributeValues"][":status"] == "failed"
+
+    def test_poll_status_handler_rate_limiting(self):
+        """Test PollStatusHandler rate limiting."""
+        from unittest.mock import Mock, patch
+
+        with patch("pycommon.logger.boto3") as mock_boto3:
+            from pycommon.logger import PollStatusHandler, activate_poll_tracking
+
+            # Set up mock BEFORE creating handler
+            mock_table = Mock()
+            mock_boto3.resource.return_value.Table.return_value = mock_table
+
+            handler = PollStatusHandler("test-table", min_interval_seconds=10)
+            handler.table = mock_table  # Explicitly set the table
+
+            # Activate polling
+            activate_poll_tracking("req-123", "user@test.com")
+
+            # First emit should work
+            record1 = logging.LogRecord(
+                "test", logging.INFO, "", 0, "Message 1", (), None
+            )
+            handler.emit(record1)
+            assert mock_table.update_item.call_count == 1
+
+            # Second emit immediately after should be rate limited
+            record2 = logging.LogRecord(
+                "test", logging.INFO, "", 0, "Message 2", (), None
+            )
+            handler.emit(record2)
+            assert mock_table.update_item.call_count == 1  # Still 1, not 2
+
+    def test_poll_status_handler_error_handling(self):
+        """Test PollStatusHandler handles errors gracefully."""
+        import sys
+        from io import StringIO
+        from unittest.mock import Mock, patch
+
+        with patch("pycommon.logger.boto3") as mock_boto3:
+            from pycommon.logger import PollStatusHandler, activate_poll_tracking
+
+            # Set up mock BEFORE creating handler
+            mock_table = Mock()
+            mock_table.update_item.side_effect = Exception("DynamoDB error")
+            mock_boto3.resource.return_value.Table.return_value = mock_table
+
+            handler = PollStatusHandler("test-table", min_interval_seconds=0)
+            handler.table = mock_table  # Explicitly set the table
+
+            # Activate polling
+            activate_poll_tracking("req-123", "user@test.com")
+
+            # Capture stderr to verify error message
+            captured_stderr = StringIO()
+            with patch.object(sys, "stderr", captured_stderr):
+                # Should not raise exception
+                record = logging.LogRecord(
+                    "test", logging.INFO, "", 0, "Test message", (), None
+                )
+                handler.emit(record)  # Should not raise
+
+            # Verify error was printed to stderr
+            stderr_output = captured_stderr.getvalue()
+            assert "Error updating poll status" in stderr_output
+            assert "DynamoDB error" in stderr_output
+
+    def test_activate_poll_tracking(self):
+        """Test activate_poll_tracking sets request context."""
+        from pycommon.logger import (
+            activate_poll_tracking,
+            deactivate_poll_tracking,
+            get_active_poll_request_id,
+        )
+
+        activate_poll_tracking("req-456", "user@example.com")
+        assert get_active_poll_request_id() == "req-456"
+
+        deactivate_poll_tracking()
+        assert get_active_poll_request_id() is None
+
+    def test_deactivate_poll_tracking(self):
+        """Test deactivate_poll_tracking clears request context."""
+        from pycommon.logger import (
+            activate_poll_tracking,
+            deactivate_poll_tracking,
+            get_active_poll_request_id,
+        )
+
+        activate_poll_tracking("req-789", "user@test.com")
+        assert get_active_poll_request_id() == "req-789"
+
+        deactivate_poll_tracking()
+        assert get_active_poll_request_id() is None
+
+    def test_get_active_poll_request_id_none_when_inactive(self):
+        """Test get_active_poll_request_id returns None when inactive."""
+        from pycommon.logger import deactivate_poll_tracking, get_active_poll_request_id
+
+        deactivate_poll_tracking()  # Ensure clean state
+        assert get_active_poll_request_id() is None
+
+    def test_getLogger_with_poll_status_table(self):
+        """Test getLogger adds PollStatusHandler when POLL_STATUS_TABLE is set."""
+        from unittest.mock import patch
+
+        with patch.dict(
+            os.environ, {"POLL_STATUS_TABLE": "test-poll-table"}, clear=True
+        ), patch("pycommon.logger.boto3"):
+            from pycommon.logger import PollStatusHandler
+
+            logger = getLogger("poll_test")
+
+            # Check if PollStatusHandler was added
+            has_poll_handler = any(
+                isinstance(h, PollStatusHandler) for h in logger.handlers
+            )
+            assert has_poll_handler
+
+    def test_getLogger_without_poll_status_table(self):
+        """Test getLogger doesn't add PollStatusHandler when table not configured."""
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {}, clear=True):
+            from pycommon.logger import PollStatusHandler
+
+            logger = getLogger("no_poll_test")
+
+            # Check that no PollStatusHandler was added
+            has_poll_handler = any(
+                isinstance(h, PollStatusHandler) for h in logger.handlers
+            )
+            assert not has_poll_handler
+
+    def test_getLogger_poll_handler_setup_failure(self):
+        """Test getLogger handles PollStatusHandler setup failure gracefully."""
+        from unittest.mock import patch
+
+        with patch.dict(
+            os.environ, {"POLL_STATUS_TABLE": "test-table"}, clear=True
+        ), patch("pycommon.logger.boto3") as mock_boto3:
+            mock_boto3.resource.side_effect = Exception("AWS connection failed")
+
+            # Should not raise, just skip adding the handler
+            logger = getLogger("fail_test")
+            assert isinstance(logger, logging.Logger)

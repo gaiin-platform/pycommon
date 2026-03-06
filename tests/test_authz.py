@@ -2897,3 +2897,778 @@ def test_validated_without_tracking_exception(
     assert not mock_tracker.start_tracking.called
     assert not mock_tracker.end_tracking.called
     assert not mock_tracker.record_metrics.called
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_success(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+):
+    """Test validated decorator with support_polling=True and successful execution."""
+    from pycommon.authz import validated
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        return {"success": True, "result": "test"}
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps({"pollRequestId": "req-abc-123", "data": {"key": "value"}}),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    result = test_handler(event, context)
+
+    # Should succeed
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    assert body["success"] is True
+
+    # Verify poll status record was initialized and finalized
+    assert mock_table.put_item.called
+    assert mock_table.update_item.called
+    # Record should NOT be deleted - it stays for frontend to retrieve
+    assert not mock_table.delete_item.called
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_http_exception(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+):
+    """Test validated decorator with support_polling=True and HTTPException."""
+    from pycommon.authz import validated
+    from pycommon.exceptions import HTTPBadRequest
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        raise HTTPBadRequest("Bad request error")
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps({"pollRequestId": "req-bad-123", "data": {"key": "value"}}),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    result = test_handler(event, context)
+
+    # Should return error response
+    assert result["statusCode"] == 400
+
+    # Verify poll status was marked as failed
+    update_calls = [
+        call
+        for call in mock_table.update_item.call_args_list
+        if call[1].get("ExpressionAttributeValues", {}).get(":status") == "failed"
+    ]
+    assert len(update_calls) > 0
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_unexpected_exception(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+):
+    """Test validated decorator with support_polling=True and unexpected exception."""
+    from pycommon.authz import validated
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        raise ValueError("Unexpected error")
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps({"pollRequestId": "req-err-123", "data": {"key": "value"}}),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    # Should raise the exception
+    with pytest.raises(ValueError, match="Unexpected error"):
+        test_handler(event, context)
+
+    # Verify poll status was marked as failed
+    update_calls = [
+        call
+        for call in mock_table.update_item.call_args_list
+        if call[1].get("ExpressionAttributeValues", {}).get(":status") == "failed"
+    ]
+    assert len(update_calls) > 0
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+    },
+)
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_no_table_env_var(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+):
+    """
+    Test validated decorator with support_polling=True
+    but no POLL_STATUS_TABLE env var.
+    """
+    from pycommon.authz import validated
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        return {"success": True, "result": "test"}
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps({"pollRequestId": "req-no-table", "data": {"key": "value"}}),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    result = test_handler(event, context)
+
+    # Should succeed even without poll table
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    assert body["success"] is True
+
+    # Verify no poll status operations were called (table not configured)
+    # put_item should only be called for other tables (accounts, etc.)
+    poll_put_calls = [
+        call
+        for call in mock_table.put_item.call_args_list
+        if "requestId" in call[1].get("Item", {})
+    ]
+    assert len(poll_put_calls) == 0
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_no_poll_request_id(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+):
+    """
+    Test validated decorator with support_polling=True
+    but no pollRequestId in body.
+    """
+    from pycommon.authz import validated
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        return {"success": True, "result": "test"}
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps({"data": {"key": "value"}}),  # No pollRequestId
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    result = test_handler(event, context)
+
+    # Should succeed without polling
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    assert body["success"] is True
+
+    # Verify no poll status operations were called (no pollRequestId)
+    poll_put_calls = [
+        call
+        for call in mock_table.put_item.call_args_list
+        if "requestId" in call[1].get("Item", {})
+    ]
+    assert len(poll_put_calls) == 0
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_init_failure(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+):
+    """Test validated decorator with polling when init fails."""
+    from pycommon.authz import validated
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    # Make put_item fail for poll status init
+    mock_table.put_item.side_effect = Exception("Init failed")
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        return {"success": True, "result": "test"}
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps(
+            {"pollRequestId": "req-init-fail", "data": {"key": "value"}}
+        ),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    # Should still succeed even though poll init failed
+    result = test_handler(event, context)
+    assert result["statusCode"] == 200
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz._finalize_poll_status_record")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_finalize_failure(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+    mock_finalize,
+):
+    """Test validated decorator with polling when finalize fails."""
+    from pycommon.authz import validated
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    # Make finalize function raise exception
+    mock_finalize.side_effect = Exception("Finalize failed")
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        return {"success": True, "result": "test"}
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps(
+            {"pollRequestId": "req-finalize-fail", "data": {"key": "value"}}
+        ),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    # Should still succeed even though poll finalize failed
+    result = test_handler(event, context)
+    assert result["statusCode"] == 200
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz._finalize_poll_status_record")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_http_exception_finalize_failure(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+    mock_finalize,
+):
+    """Test polling with HTTPException and finalize failure."""
+    from pycommon.authz import validated
+    from pycommon.exceptions import HTTPBadRequest
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    # Make finalize function raise exception
+    mock_finalize.side_effect = Exception("Finalize failed")
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        raise HTTPBadRequest("Bad request")
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps(
+            {"pollRequestId": "req-http-fail", "data": {"key": "value"}}
+        ),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    # Should return error response
+    result = test_handler(event, context)
+    assert result["statusCode"] == 400
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz._finalize_poll_status_record")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_unexpected_exception_finalize_failure(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+    mock_finalize,
+):
+    """Test polling with unexpected exception and finalize failure."""
+    from pycommon.authz import validated
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    # Make finalize function raise exception
+    mock_finalize.side_effect = Exception("Finalize failed")
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        raise ValueError("Unexpected")
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps(
+            {"pollRequestId": "req-unexpected-fail", "data": {"key": "value"}}
+        ),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    # Should raise the exception
+    with pytest.raises(ValueError, match="Unexpected"):
+        test_handler(event, context)
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_validated_with_polling_deactivate_tracking_failure(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+):
+    """Test that deactivate_poll_tracking exception is caught in finally block."""
+    from pycommon.authz import validated
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        return {"success": True, "result": "test"}
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps(
+            {"pollRequestId": "req-deactivate-fail", "data": {"key": "value"}}
+        ),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    # Patch deactivate_poll_tracking to raise an exception
+    with patch("pycommon.logger.deactivate_poll_tracking") as mock_deactivate:
+        mock_deactivate.side_effect = Exception("Deactivate failed")
+
+        # Should still succeed even though deactivate fails
+        result = test_handler(event, context)
+        assert result["statusCode"] == 200
+
+        # Verify deactivate was called
+        assert mock_deactivate.called
+
+
+@patch.dict(
+    os.environ,
+    {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-users-table",
+        "IDP_PREFIX": "mockprefix",
+        "POLL_STATUS_TABLE": "mock-poll-status-table",
+    },
+)
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.requests.get")
+def test_finalize_poll_status_record_exception_handling(
+    mock_requests_get,
+    mock_get_header,
+    mock_decode,
+    mock_boto3,
+):
+    """Test _finalize_poll_status_record internal exception handler."""
+    from pycommon.authz import validated
+
+    # Mock JWKS
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid", "key": "mock_key"}]}),
+    )
+
+    # Mock JWT
+    mock_get_header.return_value = {"kid": "mock_kid"}
+    mock_decode.return_value = {"username": "mockprefix_testuser"}
+
+    # Mock DynamoDB tables - init table works, finalize table fails
+    mock_init_table = MagicMock()
+    mock_finalize_table = MagicMock()
+    mock_accounts_table = MagicMock()
+    mock_accounts_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "test_account", "isDefault": True}],
+        }
+    }
+
+    # Make finalize table operations fail inside _finalize_poll_status_record
+    mock_finalize_table.update_item.side_effect = Exception(
+        "DynamoDB update failed internally"
+    )
+
+    # Setup Table() to return different mocks based on table name
+    def table_side_effect(table_name):
+        if table_name == "mock-accounts-table":
+            return mock_accounts_table
+        elif table_name == "mock-poll-status-table":
+            if not hasattr(table_side_effect, "call_count"):
+                table_side_effect.call_count = 0
+            table_side_effect.call_count += 1
+            # First call is for init (should succeed),
+            # subsequent for finalize (should fail)
+            if table_side_effect.call_count == 1:
+                return mock_init_table  # For _init_poll_status_record
+            else:
+                return mock_finalize_table  # For _finalize_poll_status_record
+
+    mock_boto3.return_value.Table.side_effect = table_side_effect
+
+    @validated("test_operation", validate_body=False, support_polling=True)
+    def test_handler(event, context, current_user, name, data):
+        return {"success": True, "result": "test"}
+
+    event = {
+        "headers": {"authorization": "Bearer test_token"},
+        "body": json.dumps(
+            {"pollRequestId": "req-internal-fail", "data": {"key": "value"}}
+        ),
+        "requestContext": {"path": "/test"},
+    }
+    context = {}
+
+    # Should still succeed despite internal exception in _finalize_poll_status_record
+    result = test_handler(event, context)
+    assert result["statusCode"] == 200
