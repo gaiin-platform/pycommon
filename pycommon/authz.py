@@ -811,8 +811,8 @@ def _init_poll_status_record(
     dynamodb = boto3.resource("dynamodb")
     table = dynamodb.Table(table_name)
 
-    # Calculate TTL: 14 days from now (failsafe cleanup for hung requests)
-    ttl = int(time.time()) + (14 * 24 * 60 * 60)
+    # Calculate TTL: 20 minutes from now (cleanup for unclaimed results)
+    ttl = int(time.time()) + (20 * 60)
 
     table.put_item(
         Item={
