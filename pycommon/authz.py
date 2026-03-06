@@ -1062,6 +1062,12 @@ def validated(
                         logger.info(
                             f"Poll status completed for request {poll_request_id}"
                         )
+                        # Deactivate poll tracking IMMEDIATELY after finalization
+                        # to prevent any subsequent logs from overwriting
+                        # the completed status
+                        from pycommon.logger import deactivate_poll_tracking
+
+                        deactivate_poll_tracking()
                     except Exception as poll_error:
                         logger.warning(f"Failed to finalize poll status: {poll_error}")
 
@@ -1098,6 +1104,10 @@ def validated(
                             status="failed",
                             error=f"{type(e).__name__}: {str(e)}",
                         )
+                        # Deactivate poll tracking IMMEDIATELY after finalization
+                        from pycommon.logger import deactivate_poll_tracking
+
+                        deactivate_poll_tracking()
                     except Exception as poll_error:
                         logger.warning(
                             f"Failed to mark poll status as failed: {poll_error}"
@@ -1136,6 +1146,10 @@ def validated(
                             status="failed",
                             error=f"{type(e).__name__}: {str(e)}",
                         )
+                        # Deactivate poll tracking IMMEDIATELY after finalization
+                        from pycommon.logger import deactivate_poll_tracking
+
+                        deactivate_poll_tracking()
                     except Exception as poll_error:
                         logger.warning(
                             f"Failed to mark poll status as failed: {poll_error}"
