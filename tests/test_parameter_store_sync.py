@@ -483,7 +483,7 @@ class TestLoggingBehavior:
             "MY_TABLE": "my-service-dev-table",
         }
 
-        with caplog.at_level("INFO"):
+        with caplog.at_level("DEBUG"):
             extract_locally_defined_vars(env_vars, "my-service", "dev")
 
         assert "Found locally defined variable: MY_TABLE" in caplog.text

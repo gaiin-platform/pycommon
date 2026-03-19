@@ -84,7 +84,7 @@ def extract_locally_defined_vars(
         # Check if value starts with our service-stage prefix
         if var_value.startswith(prefix):
             locally_defined[var_name] = var_value
-            logger.info(f"✓ Found locally defined variable: {var_name} = {var_value}")
+            logger.debug(f"✓ Found locally defined variable: {var_name} = {var_value}")
         else:
             # Log skipped variables for debugging
             preview = var_value[:50] if len(var_value) > 50 else var_value
@@ -92,7 +92,7 @@ def extract_locally_defined_vars(
                 f"✗ Skipping non-local variable: {var_name} = " f"{preview}..."
             )
 
-    logger.info(f"Extracted {len(locally_defined)} locally-defined variables")
+    logger.debug(f"Extracted {len(locally_defined)} locally-defined variables")
     return locally_defined
 
 
@@ -138,7 +138,7 @@ def create_or_update_parameter(
                     "message": f"Updated from {existing_value} to {value}",
                 }
             else:
-                logger.info(f"No change: {parameter_name}")
+                logger.debug(f"No change: {parameter_name}")
                 return {"status": "unchanged", "message": "Value already correct"}
 
         except ssm_client.exceptions.ParameterNotFound:
