@@ -9,6 +9,16 @@ NO_RATE_LIMIT = {"period": UNLIMITED, "rate": None}
 
 IMAGE_FILE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 
+VIDEO_FILE_TYPES = [
+    "video/mp4",
+    "video/mpeg",
+    "video/quicktime",
+    "video/x-msvideo",  # .avi
+    "video/x-ms-wmv",  # .wmv
+    "video/webm",
+    "video/ogg",
+]
+
 
 class APIAccessType(Enum):
     # User-facing API access types
