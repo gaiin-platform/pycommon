@@ -3672,3 +3672,50 @@ def test_finalize_poll_status_record_exception_handling(
     # Should still succeed despite internal exception in _finalize_poll_status_record
     result = test_handler(event, context)
     assert result["statusCode"] == 200
+
+
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.jwt.get_unverified_header")
+def test_get_claims_malformed_jwt_header(
+    mock_get_header, mock_get_env, mock_requests_get
+):
+    """Malformed JWT header raises ClaimException instead of crashing (Finding #14)."""
+    mock_get_env.side_effect = lambda key, default=None: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+    }.get(key, default)
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "mock_kid"}]}),
+    )
+    mock_get_header.side_effect = JWTError("Invalid header: not enough segments")
+
+    with pytest.raises(ClaimException, match="Invalid JWT token: malformed header"):
+        get_claims("not.a.real.jwt")
+
+
+@patch("pycommon.authz._parse_token")
+@patch("pycommon.authz.get_claims")
+def test_validated_claim_exception_returns_401(mock_get_claims, mock_parse_token):
+    """ClaimException from invalid JWT returns 401 instead of crashing with 502."""
+    mock_parse_token.return_value = "bad-token"
+    mock_get_claims.side_effect = ClaimException("Invalid JWT token: malformed header")
+
+    setup_validated({}, always_allow_permission_checker)
+
+    @validated("op", False)
+    def test_handler(event, context, user, name, data):
+        return {"ok": True}  # pragma: no cover
+
+    event = {
+        "headers": {"Authorization": "Bearer bad-token"},
+        "body": "{}",
+        "path": "/test",
+    }
+    resp = test_handler(event, {})
+    assert resp["statusCode"] == 401
+    assert "Unauthorized" in json.loads(resp["body"])["error"]
