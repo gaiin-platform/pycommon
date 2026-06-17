@@ -243,7 +243,12 @@ def get_claims(token: str) -> dict:
 
     # Try to get the jwks here and fail otherwise
     jwks_data = get_jwks_for_url(oauth_issuer_base_url, fail_open=True)
-    header = jwt.get_unverified_header(token)
+    try:
+        header = jwt.get_unverified_header(token)
+    except JWTError as e:
+        # Malformed JWT (bad base64, missing header, etc.) — return 401, not 502
+        logger.error(f"Malformed JWT header: {e}")
+        raise ClaimException("Invalid JWT token: malformed header")
 
     # This datastructure is:
     # { "keys": [ {}, {}, ... ] }
@@ -1119,6 +1124,16 @@ def validated(
                     tracker.record_metrics(metrics)
 
                 return result_dict
+            except ClaimException as e:
+                # Malformed/invalid JWT — return 401 instead of crashing with 502
+                # Poll records are left to expire via TTL
+                logger.error(f"ClaimException (invalid token): {e}")
+                return {
+                    "statusCode": 401,
+                    "body": json.dumps(
+                        {"error": "Unauthorized: invalid or malformed token"}
+                    ),
+                }
             except Exception as e:
                 logger.error(f"Unexpected exception caught: {type(e).__name__} - {e}")
                 import traceback
