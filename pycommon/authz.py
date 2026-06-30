@@ -281,6 +281,19 @@ def get_claims(token: str) -> dict:
         logger.error(f"JWT decoding error: {e}")
         raise ClaimException("Invalid JWT token")
 
+    # Cognito ACCESS tokens omit the 'aud' claim, which causes python-jose 3.x
+    # to silently skip audience validation (_validate_aud returns early when aud
+    # is absent).  Enforce that only access tokens — not id tokens or custom
+    # tokens — are accepted here.  Id tokens carry 'token_use: id' and would
+    # otherwise pass signature/issuer checks even though they should never be
+    # used as API bearer credentials.
+    if payload.get("token_use") is not None and payload.get("token_use") != "access":
+        logger.error(
+            f"JWT token_use rejected: expected 'access', "
+            f"got '{payload.get('token_use')}'"
+        )
+        raise ClaimException("Invalid JWT token: token_use must be 'access'")
+
     logger.debug(f"IDP_PREFIX from env: {idp_prefix}")
     logger.debug(f"Original username: {payload.get('username')}")
 
