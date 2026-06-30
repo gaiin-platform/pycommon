@@ -3698,6 +3698,129 @@ def test_get_claims_malformed_jwt_header(
         get_claims("not.a.real.jwt")
 
 
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
+def test_get_claims_id_token_rejected(
+    mock_decode, mock_get_header, mock_get_env, mock_requests_get
+):
+    """Non-access token_use value (e.g. 'id') must be rejected with ClaimException."""
+    mock_get_env.side_effect = lambda key, default=None: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+    }.get(key, default)
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
+    )
+    mock_get_header.return_value = {"kid": "kid1"}
+    # Simulate a Cognito ID token — has token_use='id', no 'aud' (so jose skips
+    # audience check), but our explicit check must still reject it.
+    mock_decode.return_value = {"username": "mockuser", "token_use": "id"}
+
+    with pytest.raises(ClaimException, match="token_use must be 'access'"):
+        get_claims("id_token_string")
+
+
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
+def test_get_claims_access_token_accepted(
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
+):
+    """token_use='access' must be accepted (normal Cognito access token path)."""
+    mock_get_env.side_effect = lambda key, default=None: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+    }.get(key, default)
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
+    )
+    mock_get_header.return_value = {"kid": "kid1"}
+    mock_decode.return_value = {"username": "mockuser", "token_use": "access"}
+
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.return_value = {"user_id": "mockuser"}
+
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "mock_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    result = get_claims("access_token_string")
+
+    assert result["username"] == "mockuser"
+    assert result["account"] == "mock_account"
+
+
+@patch("pycommon.authz.requests.get")
+@patch("pycommon.authz.os.environ.get")
+@patch("pycommon.authz.boto3.resource")
+@patch("pycommon.authz.jwt.get_unverified_header")
+@patch("pycommon.authz.jwt.decode")
+@patch("pycommon.dal.DAL")
+def test_get_claims_no_token_use_accepted(
+    mock_dal_class,
+    mock_decode,
+    mock_get_header,
+    mock_boto3,
+    mock_get_env,
+    mock_requests_get,
+):
+    """Tokens without token_use claim (non-Cognito issuers) must still be accepted."""
+    mock_get_env.side_effect = lambda key, default=None: {
+        "OAUTH_ISSUER_BASE_URL": "http://mock-issuer.com",
+        "OAUTH_AUDIENCE": "mock-audience",
+        "ACCOUNTS_DYNAMO_TABLE": "mock-accounts-table",
+        "ADDITIONAL_CHARGES_TABLE": "mock-additional-charges-table",
+        "COGNITO_USERS_DYNAMODB_TABLE": "mock-cognito-table",
+    }.get(key, default)
+    mock_requests_get.return_value = MagicMock(
+        ok=True,
+        json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
+    )
+    mock_get_header.return_value = {"kid": "kid1"}
+    # No token_use claim at all — non-Cognito issuer or legacy token
+    mock_decode.return_value = {"username": "mockuser"}
+
+    mock_dal_instance = MagicMock()
+    mock_dal_class.return_value = mock_dal_instance
+    mock_dal_instance.User.get_by_user_id.return_value = {"user_id": "mockuser"}
+
+    mock_table = MagicMock()
+    mock_table.get_item.return_value = {
+        "Item": {
+            "accounts": [{"id": "mock_account", "isDefault": True}],
+        }
+    }
+    mock_boto3.return_value.Table.return_value = mock_table
+
+    result = get_claims("legacy_token_string")
+
+    assert result["username"] == "mockuser"
+    assert result["account"] == "mock_account"
+
+
 @patch("pycommon.authz._parse_token")
 @patch("pycommon.authz.get_claims")
 def test_validated_claim_exception_returns_401(mock_get_claims, mock_parse_token):
