@@ -50,9 +50,30 @@ class TestIsLzwCompressedFormat:
         assert is_lzw_compressed_format([256]) is False
 
     def test_codes_too_large(self):
-        """Test data with codes that are too large."""
+        """Test data with codes exceeding max_expected_code for the array length."""
+        # max_expected_code = 256 + len(data) * 50
+        # For [65, 70000]: max = 356, 70000 > 356 → False
         assert is_lzw_compressed_format([65, 70000]) is False
+        # For 7 elements: max = 606, 700 > 606 → False
         assert is_lzw_compressed_format([100, 200, 300, 400, 500, 600, 700]) is False
+
+    def test_codes_above_65535_accepted_in_long_array(self):
+        """LZW codes can exceed 65535 for large inputs; long arrays must be accepted.
+
+        LZW codes grow monotonically — each new dictionary entry adds 1 to the
+        max code. For an input of N characters the max output code is ~256 + N.
+        Double-compression of large conversations routinely produces codes above
+        65535, so capping at that value caused valid payloads to be rejected.
+        """
+        # Array of 2000 elements: max_expected_code = 256 + 2000 * 50 = 100256.
+        # A code of 100000 is within that bound and must be accepted.
+        long_array = [65] + [300] * 1998 + [100000]
+        assert is_lzw_compressed_format(long_array) is True
+
+        # Code just above old 65535 cap but within max_expected_code for the length.
+        array_with_high_code = [65] + [500] * 2999 + [65536]
+        # max_expected_code = 256 + 3001 * 50 = 150306 — 65536 is well within bounds.
+        assert is_lzw_compressed_format(array_with_high_code) is True
 
     def test_tuple_input(self):
         """Test that tuples are accepted."""

@@ -33,11 +33,6 @@ def is_lzw_compressed_format(data: Any) -> bool:
     if data[0] > 255:
         return False
 
-    # Reasonable upper bound check - LZW codes shouldn't be astronomically large
-    # For typical use cases, codes beyond 65535 are unlikely
-    if any(code > 65535 for code in data):
-        return False
-
     # Check for reasonable progression - codes should generally increase
     # but we allow some flexibility since codes can be reused
     # Allow for more flexible bounds as LZW can have wider code ranges
