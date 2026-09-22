@@ -1448,3 +1448,194 @@ class TestRecordAdditionalCharge:
                 assert item_details["list_field"]["S"] == str(["item1", "item2"])
                 assert "none_field" in item_details
                 assert item_details["none_field"]["S"] == "None"
+
+
+class TestRecordUsageModelCosts:
+    """Tests for the modelCosts per-model MTD breakdown added to record_usage."""
+
+    def setup_method(self):
+        self.account = {
+            "user": "test-user@example.com",
+            "account_id": "general_account",
+        }
+
+    def _base_env(self):
+        return {
+            "CHAT_USAGE_DYNAMO_TABLE": "test-usage-table",
+            "COST_CALCULATIONS_DYNAMO_TABLE": "test-cost-table",
+            "MODEL_RATE_TABLE": "test-model-rate-table",
+        }
+
+    def _base_rates(self):
+        return {
+            "Items": [
+                {
+                    "InputCostPerThousandTokens": {"N": "0.01"},
+                    "OutputCostPerThousandTokens": {"N": "0.03"},
+                    "InputCachedCostPerThousandTokens": {"N": "0.0"},
+                    "InputWriteCachedCostPerThousandTokens": {"N": "0.0"},
+                }
+            ]
+        }
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_model_costs_expression_attribute_names_present(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Second update_item call must include #modelCosts and
+        #modelId in ExpressionAttributeNames."""
+        from uuid import UUID
+
+        mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+        with patch.dict(os.environ, self._base_env()):
+            with patch("pycommon.api.accounting.datetime") as mock_dt:
+                mock_utc = Mock()
+                mock_utc.hour = 10
+                mock_dt.now.side_effect = lambda tz=None: mock_utc if tz else Mock()
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.put_item.return_value = None
+                mock_dynamodb.query.return_value = self._base_rates()
+                mock_dynamodb.update_item.return_value = None
+
+                record_usage(self.account, "req-1", "gpt-4o", 1000, 500, 0, 0)
+
+                calls = mock_dynamodb.update_item.call_args_list
+                # second call is the cost increment;
+                # it must have ExpressionAttributeNames
+                second_call_kwargs = calls[1][1]
+                names = second_call_kwargs.get("ExpressionAttributeNames", {})
+                assert (
+                    "#modelCosts" in names
+                ), "ExpressionAttributeNames must contain #modelCosts"
+                assert (
+                    "#modelId" in names
+                ), "ExpressionAttributeNames must contain #modelId"
+                assert names["#modelCosts"] == "modelCosts"
+                assert names["#modelId"] == "gpt-4o"
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_model_costs_update_expression_contains_model_path(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Second update_item UpdateExpression must reference #modelCosts.#modelId."""
+        from uuid import UUID
+
+        mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+        with patch.dict(os.environ, self._base_env()):
+            with patch("pycommon.api.accounting.datetime") as mock_dt:
+                mock_utc = Mock()
+                mock_utc.hour = 5
+                mock_dt.now.side_effect = lambda tz=None: mock_utc if tz else Mock()
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.put_item.return_value = None
+                mock_dynamodb.query.return_value = self._base_rates()
+                mock_dynamodb.update_item.return_value = None
+
+                record_usage(self.account, "req-2", "claude-3", 500, 250, 0, 0)
+
+                calls = mock_dynamodb.update_item.call_args_list
+                second_call_kwargs = calls[1][1]
+                expr = second_call_kwargs.get("UpdateExpression", "")
+                assert "#modelCosts" in expr
+                assert "#modelId" in expr
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_init_call_includes_modelcosts_empty_map(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """First update_item (init) must initialize modelCosts
+        to an empty map if absent."""
+        from uuid import UUID
+
+        mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+        with patch.dict(os.environ, self._base_env()):
+            with patch("pycommon.api.accounting.datetime") as mock_dt:
+                mock_utc = Mock()
+                mock_utc.hour = 3
+                mock_dt.now.side_effect = lambda tz=None: mock_utc if tz else Mock()
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.put_item.return_value = None
+                mock_dynamodb.query.return_value = self._base_rates()
+                mock_dynamodb.update_item.return_value = None
+
+                record_usage(self.account, "req-3", "gpt-4o-mini", 100, 50, 0, 0)
+
+                calls = mock_dynamodb.update_item.call_args_list
+                first_call_kwargs = calls[0][1]
+                expr = first_call_kwargs.get("UpdateExpression", "")
+                values = first_call_kwargs.get("ExpressionAttributeValues", {})
+                assert "modelCosts" in expr
+                assert ":emptyMap" in values
+                assert values[":emptyMap"] == {"M": {}}
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_cached_token_fields_stored_in_usage_row(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Usage row must include inputCachedTokens and
+        inputWriteCachedTokens fields."""
+        from uuid import UUID
+
+        mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+        with patch.dict(os.environ, self._base_env()):
+            with patch("pycommon.api.accounting.datetime") as mock_dt:
+                mock_utc = Mock()
+                mock_utc.hour = 7
+                mock_dt.now.side_effect = lambda tz=None: mock_utc if tz else Mock()
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.put_item.return_value = None
+                mock_dynamodb.query.return_value = self._base_rates()
+                mock_dynamodb.update_item.return_value = None
+
+                record_usage(self.account, "req-4", "gpt-4o", 200, 100, 50, 25)
+
+                put_call = mock_dynamodb.put_item.call_args[1]
+                item = put_call["Item"]
+                assert (
+                    "inputCachedTokens" in item
+                ), "Usage row must store inputCachedTokens"
+                assert (
+                    "inputWriteCachedTokens" in item
+                ), "Usage row must store inputWriteCachedTokens"
+                assert item["inputCachedTokens"]["N"] == "50"
+                assert item["inputWriteCachedTokens"]["N"] == "25"
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
+    @patch("pycommon.api.accounting.logger")
+    @patch("pycommon.api.accounting.uuid")
+    def test_zero_cached_tokens_stored_correctly(
+        self, mock_uuid, mock_logger, mock_get_client
+    ):
+        """Zero cached token counts must still be stored in the usage row."""
+        from uuid import UUID
+
+        mock_uuid.uuid4.return_value = UUID("12345678-1234-5678-9012-123456789012")
+        with patch.dict(os.environ, self._base_env()):
+            with patch("pycommon.api.accounting.datetime") as mock_dt:
+                mock_utc = Mock()
+                mock_utc.hour = 9
+                mock_dt.now.side_effect = lambda tz=None: mock_utc if tz else Mock()
+                mock_dynamodb = Mock()
+                mock_get_client.return_value = mock_dynamodb
+                mock_dynamodb.put_item.return_value = None
+                mock_dynamodb.query.return_value = self._base_rates()
+                mock_dynamodb.update_item.return_value = None
+
+                record_usage(self.account, "req-5", "gpt-4o", 100, 50, 0, 0)
+
+                put_call = mock_dynamodb.put_item.call_args[1]
+                item = put_call["Item"]
+                assert item["inputCachedTokens"]["N"] == "0"
+                assert item["inputWriteCachedTokens"]["N"] == "0"

@@ -315,6 +315,8 @@ def record_usage(
             "accountId": {"S": account_id},
             "inputTokens": {"N": str(input_tokens)},
             "outputTokens": {"N": str(output_tokens)},
+            "inputCachedTokens": {"N": str(input_cached_tokens or 0)},
+            "inputWriteCachedTokens": {"N": str(input_write_cached_tokens or 0)},
             "modelId": {"S": model_id},
             "details": {"M": TypeSerializer().serialize(details)["M"]},
         }
@@ -433,11 +435,13 @@ def record_usage(
             UpdateExpression=(
                 "SET dailyCost = if_not_exists(dailyCost, :zero), "
                 "hourlyCost = if_not_exists(hourlyCost, :emptyList), "
+                "modelCosts = if_not_exists(modelCosts, :emptyMap), "
                 "record_type = if_not_exists(record_type, :recordType)"
             ),
             ExpressionAttributeValues={
                 ":zero": {"N": "0"},
                 ":emptyList": {"L": empty_list},
+                ":emptyMap": {"M": {}},
                 ":recordType": {"S": "cost"},
             },
         )
@@ -447,10 +451,19 @@ def record_usage(
             TableName=costDynamoTableName,
             Key={"id": {"S": account["user"]}, "accountInfo": {"S": account_info}},
             UpdateExpression=(
-                f"SET dailyCost = dailyCost + :totalCost "
+                f"SET dailyCost = dailyCost + :totalCost, "
+                "#modelCosts.#modelId = "
+                "if_not_exists(#modelCosts.#modelId, :zero) + :totalCost "
                 f"ADD hourlyCost[{current_hour}] :totalCost"
             ),
-            ExpressionAttributeValues={":totalCost": {"N": str(total_cost)}},
+            ExpressionAttributeNames={
+                "#modelCosts": "modelCosts",
+                "#modelId": model_id,
+            },
+            ExpressionAttributeValues={
+                ":totalCost": {"N": str(total_cost)},
+                ":zero": {"N": "0"},
+            },
         )
         logger.info(f"Updated dailyCost and hourlyCost for user: {account['user']}")
         return total_cost
