@@ -388,9 +388,12 @@ class TestLogger:
         """Test getLogger adds PollStatusHandler when POLL_STATUS_TABLE is set."""
         from unittest.mock import patch
 
-        with patch.dict(
-            os.environ, {"POLL_STATUS_TABLE": "test-poll-table"}, clear=True
-        ), patch("pycommon.logger.boto3"):
+        with (
+            patch.dict(
+                os.environ, {"POLL_STATUS_TABLE": "test-poll-table"}, clear=True
+            ),
+            patch("pycommon.logger.boto3"),
+        ):
             from pycommon.logger import PollStatusHandler
 
             logger = getLogger("poll_test")
@@ -420,9 +423,10 @@ class TestLogger:
         """Test getLogger handles PollStatusHandler setup failure gracefully."""
         from unittest.mock import patch
 
-        with patch.dict(
-            os.environ, {"POLL_STATUS_TABLE": "test-table"}, clear=True
-        ), patch("pycommon.logger.boto3") as mock_boto3:
+        with (
+            patch.dict(os.environ, {"POLL_STATUS_TABLE": "test-table"}, clear=True),
+            patch("pycommon.logger.boto3") as mock_boto3,
+        ):
             mock_boto3.resource.side_effect = Exception("AWS connection failed")
 
             # Should not raise, just skip adding the handler
