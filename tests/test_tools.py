@@ -1379,6 +1379,11 @@ class TestResolveOpsTable:
         result = resolve_ops_table(None, "direct-table")
         assert result == "direct-table"
 
+    def test_resolve_ops_table_without_stage_or_sources(self):
+        """Test the immediate fallback when no stage or sources are provided."""
+        with patch.dict(os.environ, {}, clear=True):
+            assert resolve_ops_table(None, None) is None
+
     @patch.dict(os.environ, {"OPS_DYNAMODB_TABLE": "env-table"})
     def test_resolve_ops_table_environment(self):
         """Test resolving ops table from environment variable."""
@@ -1684,6 +1689,27 @@ def test_function():
                             assert result is None
             finally:
                 os.chdir(original_cwd)
+
+    def test_resolve_ops_table_stage_without_existing_file_exercises_fallback(self):
+        """Test the no-file fallback after checking both search locations."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
+                with patch.dict(os.environ, {}, clear=True):
+                    with patch("os.path.exists", return_value=False) as mock_exists:
+                        assert resolve_ops_table("test-stage", None) is None
+                        assert mock_exists.call_count == 2
+            finally:
+                os.chdir(original_cwd)
+
+    def test_main_guard_executes_in_process(self):
+        """Test the module guard without starting a subprocess."""
+        import runpy
+
+        test_args = ["pycommon/tools/ops.py", "ls", "--dir", "."]
+        with patch("sys.argv", test_args):
+            runpy.run_path("pycommon/tools/ops.py", run_name="__main__")
 
     def test_main_guard_register_exit_subprocess(self):
         """Test running pycommon/tools/ops.py as subprocess with

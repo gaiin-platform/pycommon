@@ -8,10 +8,13 @@ This module is used by per-service Lambda functions to sync their
 environment variables to Parameter Store for cross-service access.
 """
 
+import json
 import logging
+import os
 from typing import Dict, Optional
 
 import boto3
+import urllib3
 
 logger = logging.getLogger(__name__)
 
@@ -239,3 +242,154 @@ def populate_parameters(
     )
 
     return results
+
+
+def send_cfn_response(event, context, status, response_data):
+    """
+    Send a response to a CloudFormation custom resource.
+
+    Args:
+        event: CloudFormation event containing StackId, RequestId, etc.
+        context: Lambda context (provides log_stream_name)
+        status: 'SUCCESS' or 'FAILED'
+        response_data: Dict of data to return to CloudFormation
+    """
+    response_body = json.dumps(
+        {
+            "Status": status,
+            "Reason": f"See CloudWatch Log Stream: {context.log_stream_name}",
+            "PhysicalResourceId": context.log_stream_name,
+            "StackId": event["StackId"],
+            "RequestId": event["RequestId"],
+            "LogicalResourceId": event["LogicalResourceId"],
+            "Data": response_data,
+        }
+    )
+
+    logger.info(f"Sending CloudFormation response: {status}")
+
+    try:
+        http = urllib3.PoolManager()
+        response = http.request(
+            "PUT",
+            event["ResponseURL"],
+            body=response_body,
+            headers={"Content-Type": "application/json"},
+        )
+        logger.info(f"CloudFormation response sent: {response.status}")
+    except Exception as e:
+        logger.error(f"Error sending CloudFormation response: {e}")
+
+    return {"statusCode": 200}
+
+
+def handle_cloudformation_request(event, context):
+    """
+    Handle a CloudFormation custom resource create/update/delete request.
+
+    Reads SERVICE_NAME and STAGE from the Lambda environment, then syncs
+    locally-defined environment variables to Parameter Store.
+
+    On Delete, does nothing (parameters are left in place).
+
+    Args:
+        event: CloudFormation custom resource event
+        context: Lambda context
+
+    Returns:
+        Result of send_cfn_response (always {'statusCode': 200})
+    """
+    request_type = event.get("RequestType")
+
+    if request_type == "Delete":
+        logger.info("Delete request - no action needed")
+        return send_cfn_response(
+            event, context, "SUCCESS", {"Message": "Delete operation - no action taken"}
+        )
+
+    service_name = os.environ.get("SERVICE_NAME")
+    stage = os.environ.get("STAGE")
+
+    if not service_name:
+        error_msg = "ServiceName not available (missing SERVICE_NAME env var)"
+        logger.error(error_msg)
+        return send_cfn_response(event, context, "FAILED", {"Error": error_msg})
+
+    if not stage:
+        error_msg = "Stage not available (missing STAGE env var)"
+        logger.error(error_msg)
+        return send_cfn_response(event, context, "FAILED", {"Error": error_msg})
+
+    logger.info(f"Using Lambda's own environment variables (total: {len(os.environ)})")
+    env_vars = dict(os.environ)
+
+    try:
+        results = populate_parameters(service_name, stage, env_vars)
+
+        if results["errors"] > 0:
+            logger.warning(f"Some parameters failed to populate: {results['errors']}")
+            return send_cfn_response(
+                event,
+                context,
+                "SUCCESS",
+                {
+                    "Message": f"Populated with {results['errors']} errors",
+                    "Results": results,
+                },
+            )
+
+        return send_cfn_response(
+            event,
+            context,
+            "SUCCESS",
+            {
+                "Message": f"Populated {results['totalVariables']} variables",
+                "Results": results,
+            },
+        )
+
+    except Exception as e:
+        error_msg = f"Error populating parameters: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return send_cfn_response(event, context, "FAILED", {"Error": error_msg})
+
+
+def cfn_handler(event, context):
+    """
+    Lambda handler entry-point for CloudFormation custom resource.
+
+    Delegates to handle_cloudformation_request for Create/Update/Delete,
+    and sends a FAILED response for any unexpected top-level exception.
+
+    Args:
+        event: Lambda event (CloudFormation custom resource event)
+        context: Lambda context
+
+    Returns:
+        {'statusCode': 200}
+    """
+    logger.info(f"Received event: {json.dumps(event, default=str)}")
+
+    try:
+        if "RequestType" in event:
+            return handle_cloudformation_request(event, context)
+
+        return {
+            "statusCode": 400,
+            "body": json.dumps(
+                {
+                    "error": (
+                        "Direct invocation not supported. "
+                        "Use CloudFormation custom resource."
+                    )
+                }
+            ),
+        }
+
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+
+        if "RequestType" in event:
+            return send_cfn_response(event, context, "FAILED", {"Error": str(e)})
+
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}

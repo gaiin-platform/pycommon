@@ -4,12 +4,16 @@ Tests for parameter_store_sync module
 Comprehensive test coverage for Parameter Store synchronization utilities.
 """
 
-from unittest.mock import Mock, patch
+import json
+from unittest.mock import MagicMock, Mock, patch
 
 from pycommon.deployment.parameter_store_sync import (
+    cfn_handler,
     create_or_update_parameter,
     extract_locally_defined_vars,
+    handle_cloudformation_request,
     populate_parameters,
+    send_cfn_response,
 )
 
 
@@ -543,3 +547,311 @@ class TestLoggingBehavior:
 
         assert "Parameter Store population complete" in caplog.text
         assert "1 created" in caplog.text
+
+
+def _make_cfn_event(request_type="Create"):
+    """Return a minimal CloudFormation custom resource event."""
+    return {
+        "RequestType": request_type,
+        "ResponseURL": "https://cfn-response.example.com/respond",
+        "StackId": "arn:aws:cloudformation:us-east-1:123456789012:stack/test/abc",
+        "RequestId": "req-1234",
+        "LogicalResourceId": "ParamStoreAutoPopulate",
+        "ResourceProperties": {},
+    }
+
+
+def _make_context(log_stream_name="test-log-stream"):
+    ctx = MagicMock()
+    ctx.log_stream_name = log_stream_name
+    return ctx
+
+
+class TestSendCfnResponse:
+    """Test send_cfn_response function."""
+
+    def test_sends_put_request_to_response_url(self):
+        """Test that a PUT is issued to the ResponseURL."""
+        event = _make_cfn_event()
+        ctx = _make_context()
+
+        with patch(
+            "pycommon.deployment.parameter_store_sync.urllib3.PoolManager"
+        ) as mock_pm:
+            mock_http = Mock()
+            mock_http.request.return_value = Mock(status=200)
+            mock_pm.return_value = mock_http
+
+            result = send_cfn_response(event, ctx, "SUCCESS", {"key": "val"})
+
+        mock_http.request.assert_called_once()
+        call_args = mock_http.request.call_args
+        assert call_args[0][0] == "PUT"
+        assert call_args[0][1] == event["ResponseURL"]
+        body = json.loads(call_args[1]["body"])
+        assert body["Status"] == "SUCCESS"
+        assert body["StackId"] == event["StackId"]
+        assert body["RequestId"] == event["RequestId"]
+        assert body["LogicalResourceId"] == event["LogicalResourceId"]
+        assert body["PhysicalResourceId"] == ctx.log_stream_name
+        assert body["Data"] == {"key": "val"}
+        assert result == {"statusCode": 200}
+
+    def test_sends_failed_status(self):
+        """Test that FAILED status is forwarded correctly."""
+        event = _make_cfn_event()
+        ctx = _make_context()
+
+        with patch(
+            "pycommon.deployment.parameter_store_sync.urllib3.PoolManager"
+        ) as mock_pm:
+            mock_http = Mock()
+            mock_http.request.return_value = Mock(status=200)
+            mock_pm.return_value = mock_http
+
+            send_cfn_response(event, ctx, "FAILED", {"Error": "oops"})
+
+        body = json.loads(mock_http.request.call_args[1]["body"])
+        assert body["Status"] == "FAILED"
+        assert body["Data"] == {"Error": "oops"}
+
+    def test_swallows_http_exception_and_returns_200(self):
+        """Test that HTTP errors are logged but do not raise."""
+        event = _make_cfn_event()
+        ctx = _make_context()
+
+        with patch(
+            "pycommon.deployment.parameter_store_sync.urllib3.PoolManager"
+        ) as mock_pm:
+            mock_http = Mock()
+            mock_http.request.side_effect = Exception("connection refused")
+            mock_pm.return_value = mock_http
+
+            result = send_cfn_response(event, ctx, "SUCCESS", {})
+
+        assert result == {"statusCode": 200}
+
+
+class TestHandleCloudformationRequest:
+    """Test handle_cloudformation_request function."""
+
+    def test_delete_returns_success_immediately(self):
+        """Test that Delete skips parameter population."""
+        event = _make_cfn_event("Delete")
+        ctx = _make_context()
+
+        with (
+            patch(
+                "pycommon.deployment.parameter_store_sync.send_cfn_response"
+            ) as mock_send,
+            patch(
+                "pycommon.deployment.parameter_store_sync.populate_parameters"
+            ) as mock_pop,
+        ):
+            mock_send.return_value = {"statusCode": 200}
+            handle_cloudformation_request(event, ctx)
+
+        mock_pop.assert_not_called()
+        mock_send.assert_called_once_with(
+            event, ctx, "SUCCESS", {"Message": "Delete operation - no action taken"}
+        )
+
+    def test_missing_service_name_returns_failed(self):
+        """Test FAILED response when SERVICE_NAME env var is absent."""
+        event = _make_cfn_event("Create")
+        ctx = _make_context()
+
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch(
+                "pycommon.deployment.parameter_store_sync.send_cfn_response"
+            ) as mock_send,
+        ):
+            mock_send.return_value = {"statusCode": 200}
+            handle_cloudformation_request(event, ctx)
+
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        assert args[2] == "FAILED"
+        assert "SERVICE_NAME" in args[3]["Error"]
+
+    def test_missing_stage_returns_failed(self):
+        """Test FAILED response when STAGE env var is absent."""
+        event = _make_cfn_event("Create")
+        ctx = _make_context()
+
+        with (
+            patch.dict("os.environ", {"SERVICE_NAME": "my-service"}, clear=True),
+            patch(
+                "pycommon.deployment.parameter_store_sync.send_cfn_response"
+            ) as mock_send,
+        ):
+            mock_send.return_value = {"statusCode": 200}
+            handle_cloudformation_request(event, ctx)
+
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        assert args[2] == "FAILED"
+        assert "STAGE" in args[3]["Error"]
+
+    def test_successful_population(self):
+        """Test SUCCESS response on clean population."""
+        event = _make_cfn_event("Create")
+        ctx = _make_context()
+
+        env = {"SERVICE_NAME": "my-service", "STAGE": "dev"}
+        good_results = {
+            "totalVariables": 2,
+            "created": 2,
+            "updated": 0,
+            "unchanged": 0,
+            "errors": 0,
+            "variables": {},
+        }
+
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch(
+                "pycommon.deployment.parameter_store_sync.populate_parameters"
+            ) as mock_pop,
+            patch(
+                "pycommon.deployment.parameter_store_sync.send_cfn_response"
+            ) as mock_send,
+        ):
+            mock_pop.return_value = good_results
+            mock_send.return_value = {"statusCode": 200}
+            handle_cloudformation_request(event, ctx)
+
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        assert args[2] == "SUCCESS"
+        assert "2 variables" in args[3]["Message"]
+
+    def test_partial_errors_still_sends_success(self):
+        """Test that partial errors return SUCCESS (non-blocking)."""
+        event = _make_cfn_event("Update")
+        ctx = _make_context()
+
+        env = {"SERVICE_NAME": "my-service", "STAGE": "dev"}
+        partial_results = {
+            "totalVariables": 3,
+            "created": 2,
+            "updated": 0,
+            "unchanged": 0,
+            "errors": 1,
+            "variables": {},
+        }
+
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch(
+                "pycommon.deployment.parameter_store_sync.populate_parameters"
+            ) as mock_pop,
+            patch(
+                "pycommon.deployment.parameter_store_sync.send_cfn_response"
+            ) as mock_send,
+        ):
+            mock_pop.return_value = partial_results
+            mock_send.return_value = {"statusCode": 200}
+            handle_cloudformation_request(event, ctx)
+
+        args = mock_send.call_args[0]
+        assert args[2] == "SUCCESS"
+        assert "errors" in args[3]["Message"]
+
+    def test_populate_exception_sends_failed(self):
+        """Test FAILED response when populate_parameters raises."""
+        event = _make_cfn_event("Create")
+        ctx = _make_context()
+
+        env = {"SERVICE_NAME": "my-service", "STAGE": "dev"}
+
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch(
+                "pycommon.deployment.parameter_store_sync.populate_parameters"
+            ) as mock_pop,
+            patch(
+                "pycommon.deployment.parameter_store_sync.send_cfn_response"
+            ) as mock_send,
+        ):
+            mock_pop.side_effect = Exception("boto3 exploded")
+            mock_send.return_value = {"statusCode": 200}
+            handle_cloudformation_request(event, ctx)
+
+        args = mock_send.call_args[0]
+        assert args[2] == "FAILED"
+        assert "boto3 exploded" in args[3]["Error"]
+
+
+class TestCfnHandler:
+    """Test cfn_handler (Lambda entry-point)."""
+
+    def test_routes_cfn_event_to_handler(self):
+        """Test that CFN events are delegated to handle_cloudformation_request."""
+        event = _make_cfn_event("Create")
+        ctx = _make_context()
+
+        with patch(
+            "pycommon.deployment.parameter_store_sync." "handle_cloudformation_request"
+        ) as mock_handle:
+            mock_handle.return_value = {"statusCode": 200}
+            result = cfn_handler(event, ctx)
+
+        mock_handle.assert_called_once_with(event, ctx)
+        assert result == {"statusCode": 200}
+
+    def test_direct_invocation_returns_400(self):
+        """Test that non-CFN (direct) invocations return 400."""
+        ctx = _make_context()
+        result = cfn_handler({}, ctx)
+
+        assert result["statusCode"] == 400
+        body = json.loads(result["body"])
+        assert "Direct invocation not supported" in body["error"]
+
+    def test_unexpected_exception_sends_cfn_failed(self):
+        """Test that an unexpected top-level exception sends FAILED to CFN."""
+        event = _make_cfn_event("Create")
+        ctx = _make_context()
+
+        with (
+            patch(
+                "pycommon.deployment.parameter_store_sync."
+                "handle_cloudformation_request"
+            ) as mock_handle,
+            patch(
+                "pycommon.deployment.parameter_store_sync.send_cfn_response"
+            ) as mock_send,
+        ):
+            mock_handle.side_effect = RuntimeError("totally unexpected")
+            mock_send.return_value = {"statusCode": 200}
+            cfn_handler(event, ctx)
+
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        assert args[2] == "FAILED"
+        assert "totally unexpected" in args[3]["Error"]
+
+    def test_unexpected_exception_without_cfn_event_returns_500(self):
+        """Test that an unexpected top-level exception on direct call returns 500."""
+        ctx = _make_context()
+
+        # Patch json.dumps so the *second* call (inside the 400-body) raises,
+        # triggering the except branch without a RequestType in the event.
+        original_dumps = json.dumps
+        call_count = {"n": 0}
+
+        def selective_raises(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 2:  # the json.dumps inside the 400-body
+                raise TypeError("not serialisable")
+            return original_dumps(*args, **kwargs)
+
+        with patch(
+            "pycommon.deployment.parameter_store_sync.json.dumps",
+            side_effect=selective_raises,
+        ):
+            result = cfn_handler({}, ctx)
+
+        assert result["statusCode"] == 500
