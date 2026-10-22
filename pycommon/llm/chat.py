@@ -7,6 +7,36 @@ from pycommon.logger import getLogger
 logger = getLogger("llm_chat")
 
 
+def delta_text(value):
+    """Return displayable text from a stream "d" value.
+
+    "d" is normally a string, but some events (e.g. rate-limit notices) send a
+    structured delta such as {"delta": {"text": "..."}}. Anything else yields "".
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        delta = value.get("delta")
+        if isinstance(delta, dict):
+            value = delta
+        text = value.get("text")
+        return text if isinstance(text, str) else ""
+    return ""
+
+
+def get_rate_limit_notice(meta_events):
+    """Return the rate-limit message if any meta event reports a reached limit, else None."""
+    for event in meta_events or []:
+        state = event.get("state") if isinstance(event, dict) else None
+        if not isinstance(state, dict):
+            continue
+        for key in ("rateLimitNotice", "modelRateLimit"):
+            notice = state.get(key)
+            if isinstance(notice, dict) and notice.get("reachedLimit"):
+                return notice.get("message") or "Rate limit reached."
+    return None
+
+
 def chat(chat_url, access_token, payload):
     """
     Invoke the specified endpoint with a JSON payload and handle the streamed
@@ -76,7 +106,7 @@ def chat(chat_url, access_token, payload):
     # concatenated_d_data
     def content_handler(data):
         nonlocal concatenated_d_data
-        concatenated_d_data += data.get("d", "")
+        concatenated_d_data += delta_text(data.get("d"))
 
     # create a meta handler that appends the meta event to the meta_events list
     def meta_handler(data):

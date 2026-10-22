@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pycommon.llm.chat import chat, chat_streaming
+from pycommon.llm.chat import chat, chat_streaming, delta_text, get_rate_limit_notice
 
 
 class TestChat:
@@ -459,3 +459,32 @@ class TestChatIntegration:
         # for present one
         assert result == "Hello"
         assert meta_events == []
+
+
+class TestChatStructuredDelta:
+    """Non-string "d" values (e.g. rate-limit notices) must not break chat()."""
+
+    def test_chat_handles_dict_delta_and_keeps_rate_limit_meta(self):
+        notice = "You have reached your daily usage limit."
+        lines = [
+            json.dumps({"s": "meta", "state": {"rateLimitNotice": {"reachedLimit": True, "message": notice}}}),
+            json.dumps({"s": "answer", "d": {"delta": {"text": notice}}}),
+        ]
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.iter_lines.return_value = [l.encode() for l in lines]
+        with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
+            result, meta_events = chat("https://api.example.com/chat", "tok", {"messages": []})
+        assert result == notice
+        assert get_rate_limit_notice(meta_events) == notice
+
+    def test_delta_text_variants(self):
+        assert delta_text("a") == "a"
+        assert delta_text({"delta": {"text": "b"}}) == "b"
+        assert delta_text({"text": "c"}) == "c"
+        assert delta_text({"other": 1}) == ""
+        assert delta_text(None) == ""
+
+    def test_no_rate_limit_notice(self):
+        assert get_rate_limit_notice([{"s": "meta", "state": {"x": {}}}]) is None
+        assert get_rate_limit_notice([]) is None
