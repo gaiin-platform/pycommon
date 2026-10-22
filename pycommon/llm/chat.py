@@ -25,7 +25,10 @@ def delta_text(value):
 
 
 def get_rate_limit_notice(meta_events):
-    """Return the rate-limit message if any meta event reports a reached limit, else None."""
+    """Return the rate-limit message when a meta event reports a reached limit.
+
+    Return None if no event reports a reached limit.
+    """
     for event in meta_events or []:
         state = event.get("state") if isinstance(event, dict) else None
         if not isinstance(state, dict):

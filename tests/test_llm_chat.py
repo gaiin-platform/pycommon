@@ -467,14 +467,23 @@ class TestChatStructuredDelta:
     def test_chat_handles_dict_delta_and_keeps_rate_limit_meta(self):
         notice = "You have reached your daily usage limit."
         lines = [
-            json.dumps({"s": "meta", "state": {"rateLimitNotice": {"reachedLimit": True, "message": notice}}}),
+            json.dumps(
+                {
+                    "s": "meta",
+                    "state": {
+                        "rateLimitNotice": {"reachedLimit": True, "message": notice}
+                    },
+                }
+            ),
             json.dumps({"s": "answer", "d": {"delta": {"text": notice}}}),
         ]
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.iter_lines.return_value = [l.encode() for l in lines]
+        mock_response.iter_lines.return_value = [line.encode() for line in lines]
         with patch("pycommon.llm.chat.requests.post", return_value=mock_response):
-            result, meta_events = chat("https://api.example.com/chat", "tok", {"messages": []})
+            result, meta_events = chat(
+                "https://api.example.com/chat", "tok", {"messages": []}
+            )
         assert result == notice
         assert get_rate_limit_notice(meta_events) == notice
 
@@ -488,3 +497,6 @@ class TestChatStructuredDelta:
     def test_no_rate_limit_notice(self):
         assert get_rate_limit_notice([{"s": "meta", "state": {"x": {}}}]) is None
         assert get_rate_limit_notice([]) is None
+
+    def test_skips_event_with_non_dict_state(self):
+        assert get_rate_limit_notice([{"s": "meta", "state": None}]) is None
