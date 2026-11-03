@@ -1,8 +1,9 @@
 # =============================================================================
 # Tests for the unicode handling of lzw.py
 #
-# The wire format is shared with the frontend (utils/app/lzwCompression.ts in amplify-genai-frontend);
-# tests/fixtures/lzw_vectors.json holds vectors that BOTH implementations must reproduce exactly.
+# The wire format is shared with the frontend (utils/app/lzwCompression.ts in
+# amplify-genai-frontend); tests/fixtures/lzw_vectors.json holds vectors that BOTH
+# implementations must reproduce exactly.
 # =============================================================================
 
 import json
@@ -29,8 +30,8 @@ SAMPLES = {
     "devanagari": "नमस्ते दुनिया",
     "thai": "สวัสดีชาวโลก",
     "cjk": "你好，世界 こんにちは 한국어",
-    "emoji": "hi \U0001F600 there",
-    "emoji_modifier": "ok \U0001F44D\U0001F3FD done",
+    "emoji": "hi \U0001f600 there",
+    "emoji_modifier": "ok \U0001f44d\U0001f3fd done",
     "literal_tag": "U+0041",
     "literal_tag_in_text": "type U+0041 or U+ here",
     "literal_u_plus_end": "ends with U+",
@@ -38,7 +39,9 @@ SAMPLES = {
     "tag_lookalike_prefix": "U+00",
     "lowercase_tag_lookalike": "u+0041 and u+00e9",
     "three_digit_char_before_hex": "ā" + "abc" + "ł" + "deadbeef",
-    "mixed_json": json.dumps({"name": "łódź \U0001F600", "t": "U+0041"}, ensure_ascii=False),
+    "mixed_json": json.dumps(
+        {"name": "łódź \U0001f600", "t": "U+0041"}, ensure_ascii=False
+    ),
     "repetitive": "abababababababababab" * 20,
 }
 
@@ -61,7 +64,7 @@ class TestUnicodeRoundTrip:
         assert lzw_uncompress_text([]) == ""
 
     def test_large_non_latin_document(self):
-        text = "Привет мир U+0041 — zażółć \U0001F600 " * 5000
+        text = "Привет мир U+0041 — zażółć \U0001f600 " * 5000
         assert lzw_uncompress_text(lzw_compress(text)) == text
 
 
@@ -70,8 +73,8 @@ class TestWireFormat:
         assert _preprocess("а") == "U+0430"
         assert _preprocess("ł") == "U+0142"
         assert _preprocess("你") == "U+4f60"
-        assert _preprocess("\U0001F600") == "U+d83dU+de00"
-        assert _preprocess("\U0001F44D\U0001F3FD") == "U+d83dU+dc4dU+d83cU+dffd"
+        assert _preprocess("\U0001f600") == "U+d83dU+de00"
+        assert _preprocess("\U0001f44d\U0001f3fd") == "U+d83dU+dc4dU+d83cU+dffd"
         assert _preprocess("éñ") == "éñ"  # <= 255 stays literal
 
     def test_literal_u_plus_is_escaped(self):
@@ -83,9 +86,9 @@ class TestWireFormat:
 
     def test_no_five_digit_emoji_tags(self):
         # the old encoder wrote "U+1f600", which the decoder read as "U+1f60" + "0"
-        codes = lzw_compress("\U0001F600")
+        codes = lzw_compress("\U0001f600")
         assert "U+1f600" not in "".join(chr(c) for c in codes if c < 256)
-        assert lzw_uncompress_text(codes) == "\U0001F600"
+        assert lzw_uncompress_text(codes) == "\U0001f600"
 
     def test_lowercase_prefix_is_plain_text(self):
         assert lzw_uncompress_text(lzw_compress("u+0041")) == "u+0041"
@@ -94,7 +97,7 @@ class TestWireFormat:
         assert lzw_uncompress_text([ord(c) for c in "U+4F60"]) == "你"
 
     def test_surrogate_pairs_recombine(self):
-        assert lzw_uncompress_text([ord(c) for c in "U+d83dU+de00"]) == "\U0001F600"
+        assert lzw_uncompress_text([ord(c) for c in "U+d83dU+de00"]) == "\U0001f600"
         # a lone surrogate must not raise
         assert lzw_uncompress_text([ord(c) for c in "U+d83d"]) == "�"
 
@@ -103,7 +106,10 @@ class TestWireFormat:
 
 
 class TestLegacyThreeDigitTags:
-    """Older frontends wrote U+430 (unpadded). Those chats are still stored and must stay readable."""
+    """Older frontends wrote U+430 (unpadded).
+
+    Those chats are still stored and must stay readable.
+    """
 
     def test_three_digit_tag_followed_by_non_hex(self):
         assert lzw_uncompress_text([ord(c) for c in "U+430 "]) == "а "
@@ -136,7 +142,11 @@ class TestInvalidData:
 class TestCrossLanguageVectors:
     """tests/fixtures/lzw_vectors.json is also checked by the frontend tests."""
 
-    VECTORS = json.loads((Path(__file__).parent / "fixtures" / "lzw_vectors.json").read_text(encoding="utf-8"))
+    VECTORS = json.loads(
+        (Path(__file__).parent / "fixtures" / "lzw_vectors.json").read_text(
+            encoding="utf-8"
+        )
+    )
 
     @pytest.mark.parametrize("vector", VECTORS, ids=lambda v: repr(v["text"])[:40])
     def test_compress_matches(self, vector):

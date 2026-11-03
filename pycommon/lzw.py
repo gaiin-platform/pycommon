@@ -47,17 +47,21 @@ def is_lzw_compressed_format(data: Any) -> bool:
 # ---------------------------------------------------------------------------
 # Wire format (shared with the frontend, utils/app/lzwCompression.ts)
 #
-# LZW works on bytes of a string whose characters are all <= 255. Anything above U+00FF is written as a text
-# tag before compression and turned back after decompression:
+# LZW works on bytes of a string whose characters are all <= 255. Anything above
+# U+00FF is written as a text tag before compression and turned back after
+# decompression:
 #
-#   * the input is read as UTF-16 code units; a unit > 255 is written as "U+" + exactly four lowercase hex
-#     digits. Characters above U+FFFF (emoji) therefore become two surrogate tags, e.g. "U+d83dU+de00".
-#   * a literal "U" directly followed by "+" is written as the tag for 'U' ("U+0055"), so user text such as
-#     "U+0041" can never be mistaken for a tag.
-#   * decoding replaces tags by their code unit, then pairs surrogates back into real characters. The legacy
-#     unpadded three digit form ("U+430") that older frontends wrote is accepted when no further hex digit
-#     follows (otherwise it is ambiguous and the four digit reading wins).
-#   * the "U+" prefix is case sensitive (text such as "u+0041" is plain text); hex digits may be either case.
+#   * the input is read as UTF-16 code units; a unit > 255 is written as "U+" +
+#     exactly four lowercase hex digits. Characters above U+FFFF (emoji)
+#     therefore become two surrogate tags, e.g. "U+d83dU+de00".
+#   * a literal "U" directly followed by "+" is written as the tag for 'U'
+#     ("U+0055"), so user text such as "U+0041" can never be mistaken for a tag.
+#   * decoding replaces tags by their code unit, then pairs surrogates back into
+#     real characters. The legacy unpadded three digit form ("U+430") that older
+#     frontends wrote is accepted when no further hex digit follows (otherwise it
+#     is ambiguous and the four digit reading wins).
+#   * the "U+" prefix is case sensitive (text such as "u+0041" is plain text);
+#     hex digits may be either case.
 # ---------------------------------------------------------------------------
 _TAG_PATTERN = re.compile(r"U\+([0-9a-fA-F]{4})|U\+([0-9a-fA-F]{3})(?![0-9a-fA-F])")
 
@@ -81,16 +85,22 @@ def _preprocess(text: str) -> str:
 
 
 def _postprocess(text: str) -> str:
-    # Substituted code units may be lone surrogates; pair them back up into real characters.
+    # Substituted code units may be lone surrogates; pair them back up into real
+    # characters.
     with_units = _TAG_PATTERN.sub(
         lambda m: chr(int(m.group(1) or m.group(2), 16)), text
     )
-    return with_units.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
+    return with_units.encode("utf-16-le", "surrogatepass").decode(
+        "utf-16-le", "replace"
+    )
 
 
 def lzw_uncompress_text(compressed_data) -> str:
-    """Decode to the original text without parsing it. Returns "" for empty input and raises
-    ValueError for data that is not valid LZW output."""
+    """Decode to the original text without parsing it.
+
+    Returns "" for empty input and raises ValueError for data that is not valid
+    LZW output.
+    """
     if not compressed_data:
         return ""
 
