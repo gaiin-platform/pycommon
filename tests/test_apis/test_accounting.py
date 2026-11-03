@@ -1349,6 +1349,29 @@ class TestRecordAdditionalCharge:
                 assert "M" in item_details["dict_field"]
 
     @patch("pycommon.api.accounting._get_dynamodb_client")
+    def test_flat_cost_does_not_need_model_rate_table(self, mock_get_client):
+        """A flat-cost charge is recorded with only ADDITIONAL_CHARGES_TABLE set."""
+        with patch.dict(
+            os.environ, {"ADDITIONAL_CHARGES_TABLE": "test-charges-table"}, clear=True
+        ):
+            mock_dynamodb = Mock()
+            mock_get_client.return_value = mock_dynamodb
+
+            result = record_additional_charge(
+                self.account,
+                "amazon-textract",
+                token_count=3,
+                item_type="textract",
+                flat_cost=0.0045,
+            )
+
+            assert result == 0.0045
+            mock_dynamodb.query.assert_not_called()
+            item = mock_dynamodb.put_item.call_args[1]["Item"]
+            assert item["cost"]["N"] == "0.0045"
+            assert item["itemType"]["S"] == "textract"
+
+    @patch("pycommon.api.accounting._get_dynamodb_client")
     @patch("pycommon.api.accounting.logger")
     @patch("pycommon.api.accounting.uuid")
     def test_successful_charge_recording_with_flat_cost(

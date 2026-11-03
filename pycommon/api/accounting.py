@@ -21,12 +21,13 @@ def _get_dynamodb_client():
     return boto3.client("dynamodb")
 
 
-@required_env_vars(
-    {
-        "ADDITIONAL_CHARGES_TABLE": [DynamoDBOperation.PUT_ITEM],
-        "MODEL_RATE_TABLE": [DynamoDBOperation.GET_ITEM],
-    }
-)
+@required_env_vars({"MODEL_RATE_TABLE": [DynamoDBOperation.GET_ITEM]})
+def _model_rate_table_name() -> str:
+    """Name of the model rate table; only needed to price a charge by token count."""
+    return os.environ["MODEL_RATE_TABLE"]
+
+
+@required_env_vars({"ADDITIONAL_CHARGES_TABLE": [DynamoDBOperation.PUT_ITEM]})
 def record_additional_charge(
     account: Dict[str, Any],
     model_id: str,
@@ -73,7 +74,8 @@ def record_additional_charge(
 
     Environment Variables Required:
         ADDITIONAL_CHARGES_TABLE: Table name for storing additional charge records
-        MODEL_RATE_TABLE: Table name containing model pricing information
+        MODEL_RATE_TABLE: Table name containing model pricing information.
+            Only required when ``flat_cost`` is not provided.
 
     Note:
         Environment variables are validated and resolved by the @required_env_vars
@@ -90,9 +92,12 @@ def record_additional_charge(
         ... )
         >>> print(f"Cost recorded: ${cost:.6f}")
     """
-    # Environment variables guaranteed by @required_env_vars decorator
+    # ADDITIONAL_CHARGES_TABLE is guaranteed by the @required_env_vars decorator.
+    # MODEL_RATE_TABLE is only required when the cost is calculated from tokens, so
+    # services that record flat-cost charges (code interpreter sessions, Textract
+    # pages) do not need it.
     additional_charges_table_name = os.environ["ADDITIONAL_CHARGES_TABLE"]
-    model_rate_table_name = os.environ["MODEL_RATE_TABLE"]
+    model_rate_table_name = _model_rate_table_name() if flat_cost is None else None
 
     try:
         # Validate account data
