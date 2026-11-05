@@ -19,11 +19,10 @@ from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
+import jwt
 import requests
 from boto3.dynamodb.conditions import Key
 from dotenv import load_dotenv
-from jose import jwt
-from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
 from jsonschema import SchemaError
 from jsonschema import validate as json_validate
 from jsonschema.exceptions import ValidationError
@@ -47,6 +46,16 @@ from pycommon.lzw import is_lzw_compressed_format, lzw_uncompress
 logger = getLogger("authz")
 
 ALGORITHMS = ["RS256"]
+
+# PyJWT errors that mean "the signature was fine but a claim was not acceptable"
+_JWT_CLAIM_ERRORS = (
+    jwt.InvalidIssuerError,
+    jwt.InvalidAudienceError,
+    jwt.MissingRequiredClaimError,
+    jwt.ImmatureSignatureError,
+    jwt.InvalidIssuedAtError,
+)
+
 # used to minimize the number of calls to OAuth issuer for JWKS
 JWKS_CACHE_TTL = 60 * 5  # 5 minutes
 JWKS_CACHE_TIME = None
@@ -196,6 +205,11 @@ def _get_jwks_for_url(oauth_issuer_base_url: str, fail_open: bool) -> dict:
         raise ClaimException("Invalid JWKS response")
 
 
+def _jwk_to_public_key(jwk: Dict[str, Any]) -> Any:
+    """Convert a JWKS entry into an RS256 public key usable by ``jwt.decode``."""
+    return jwt.PyJWK.from_dict(jwk, algorithm="RS256").key
+
+
 @required_env_vars(
     {
         "ACCOUNTS_DYNAMO_TABLE": [
@@ -245,7 +259,7 @@ def get_claims(token: str) -> dict:
     jwks_data = get_jwks_for_url(oauth_issuer_base_url, fail_open=True)
     try:
         header = jwt.get_unverified_header(token)
-    except JWTError as e:
+    except jwt.PyJWTError as e:
         # Malformed JWT (bad base64, missing header, etc.) — return 401, not 502
         logger.error(f"Malformed JWT header: {e}")
         raise ClaimException("Invalid JWT token: malformed header")
@@ -264,26 +278,38 @@ def get_claims(token: str) -> dict:
 
     # Finally, decode
     try:
+        # The key is pinned to RS256 so a JWKS entry can never be used with a
+        # different algorithm (e.g. as an HMAC secret).
+        signing_key = _jwk_to_public_key(rsa_key)
+        # Audience is checked manually below: Cognito ACCESS tokens carry no
+        # 'aud' claim, and PyJWT would reject them if an audience were passed.
         payload = jwt.decode(
             token,
-            rsa_key,
+            signing_key,
             algorithms=ALGORITHMS,
-            audience=oauth_audience,
             issuer=oauth_issuer_base_url,
+            options={"verify_aud": False},
         )
-    except ExpiredSignatureError as e:
+    except jwt.ExpiredSignatureError as e:
         logger.error(f"JWT token has expired: {e}")
         raise ClaimException("JWT token has expired")
-    except JWTClaimsError as e:
+    except _JWT_CLAIM_ERRORS as e:
         logger.error(f"JWT claims error: {e}")
         raise ClaimException("Invalid JWT claims")
-    except JWTError as e:
+    except jwt.PyJWTError as e:
         logger.error(f"JWT decoding error: {e}")
         raise ClaimException("Invalid JWT token")
 
-    # Cognito ACCESS tokens omit the 'aud' claim, which causes python-jose 3.x
-    # to silently skip audience validation (_validate_aud returns early when aud
-    # is absent).  Enforce that only access tokens — not id tokens or custom
+    # If the token carries an 'aud' claim, it must include our audience.
+    token_aud = payload.get("aud")
+    if token_aud is not None:
+        audiences = [token_aud] if isinstance(token_aud, str) else list(token_aud)
+        if oauth_audience not in audiences:
+            logger.error(f"JWT audience mismatch: expected '{oauth_audience}'")
+            raise ClaimException("Invalid JWT claims")
+
+    # Cognito ACCESS tokens omit the 'aud' claim, so audience validation above is
+    # skipped for them.  Enforce that only access tokens — not id tokens or custom
     # tokens — are accepted here.  Id tokens carry 'token_use: id' and would
     # otherwise pass signature/issuer checks even though they should never be
     # used as API bearer credentials.

@@ -270,7 +270,7 @@ class AwsUser(UserABC):
         # because the dynamodb table has keys like "custom:saml_groups",
         # we need to alias them for the update expression because boto3
         # doesn't like special characters in the expression attribute names.
-        key_alias = lambda k: f"{k.replace(':','_')}"  # noqa: E731
+        key_alias = lambda k: k.replace(":", "_")  # noqa: E731
 
         try:
             table = self._user_table()

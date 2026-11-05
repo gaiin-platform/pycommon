@@ -6,9 +6,8 @@ from unittest.mock import MagicMock, patch
 import boto3
 import pytest
 import requests
-from jose import ExpiredSignatureError, JWTError
-from jose.exceptions import JWTClaimsError
 from jsonschema.exceptions import ValidationError
+from jwt import ExpiredSignatureError, InvalidIssuerError, PyJWTError
 
 from pycommon.authz import (
     _determine_api_user,
@@ -69,6 +68,15 @@ always_allow_permission_checker(None, None, None, None)
 @pytest.fixture(autouse=True)
 def clear_jwks_cache():
     _get_jwks_for_url.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def stub_jwk_conversion():
+    # These tests use placeholder JWKS entries and a mocked jwt.decode, so skip
+    # converting the JWK into a real key. Real-key coverage lives in
+    # test_authz_jwt_verification.py.
+    with patch("pycommon.authz._jwk_to_public_key", return_value="mock_public_key"):
+        yield
 
 
 @patch("pycommon.authz.requests.get")
@@ -1736,7 +1744,7 @@ def test_get_claims_jwt_decode_error(
         json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
     )
     mock_get_header.return_value = {"kid": "kid1"}
-    mock_decode.side_effect = JWTError("decode error")
+    mock_decode.side_effect = PyJWTError("decode error")
     with pytest.raises(ClaimException, match="Invalid JWT token"):
         get_claims("sometoken")
 
@@ -1784,7 +1792,7 @@ def test_get_claims_jwt_expired_claims_error(
         json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
     )
     mock_get_header.return_value = {"kid": "kid1"}
-    mock_decode.side_effect = JWTClaimsError("Invalid JWT Claims")
+    mock_decode.side_effect = InvalidIssuerError("Invalid JWT Claims")
     with pytest.raises(ClaimException, match="Invalid JWT claims"):
         get_claims("sometoken")
 
@@ -3692,7 +3700,7 @@ def test_get_claims_malformed_jwt_header(
         ok=True,
         json=MagicMock(return_value={"keys": [{"kid": "mock_kid"}]}),
     )
-    mock_get_header.side_effect = JWTError("Invalid header: not enough segments")
+    mock_get_header.side_effect = PyJWTError("Invalid header: not enough segments")
 
     with pytest.raises(ClaimException, match="Invalid JWT token: malformed header"):
         get_claims("not.a.real.jwt")
@@ -3718,8 +3726,8 @@ def test_get_claims_id_token_rejected(
         json=MagicMock(return_value={"keys": [{"kid": "kid1"}]}),
     )
     mock_get_header.return_value = {"kid": "kid1"}
-    # Simulate a Cognito ID token — has token_use='id', no 'aud' (so jose skips
-    # audience check), but our explicit check must still reject it.
+    # Simulate a Cognito ID token — has token_use='id', no 'aud' (so audience
+    # validation is skipped), but our explicit check must still reject it.
     mock_decode.return_value = {"username": "mockuser", "token_use": "id"}
 
     with pytest.raises(ClaimException, match="token_use must be 'access'"):
