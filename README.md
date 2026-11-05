@@ -10,6 +10,14 @@ Install directly from GitHub:
 pip install git+https://github.com/gaiin-platform/pycommon.git
 ```
 
+To install a specific version, add `@<ref>` (the Amplify backend uses `@v0.1.2`):
+
+```bash
+pip install git+https://github.com/gaiin-platform/pycommon.git@v0.1.2
+```
+
+`v0.1.2` is a Git branch in this repository, not a tag, so the commit you get is whatever the branch points at when you install. See [RELEASE_NOTES_v0.1.2.md](./RELEASE_NOTES_v0.1.2.md) for what changed and how to record the commit you built from.
+
 ## Features
 
 - **API Utilities**: Common patterns for AWS Lambda API operations
