@@ -59,7 +59,7 @@ def test_a_document_not_in_the_migration_is_not_an_error(caplog):
     table = MagicMock()
     table.update_item.side_effect = Exception("ConditionalCheckFailedException")
     assert (
-        mc.add_doc_cost(f"global2/{H}.content.json", "qaCost", 1.0, table=table)
+        mc.add_doc_cost(f"global2/{H}.content.json", "qaCalls", 1.0, table=table)
         is False
     )
     assert not caplog.records
@@ -69,10 +69,10 @@ def test_other_failures_are_logged_and_never_raised(caplog):
     table = MagicMock()
     table.update_item.side_effect = Exception("throttled")
     assert (
-        mc.add_doc_cost(f"global2/{H}.content.json", "qaCost", 1.0, table=table)
+        mc.add_doc_cost(f"global2/{H}.content.json", "qaCalls", 1.0, table=table)
         is False
     )
-    assert "Could not add qaCost" in caplog.text
+    assert "Could not add qaCalls" in caplog.text
 
 
 def test_migration_table_reads_the_environment(monkeypatch):

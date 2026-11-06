@@ -6,8 +6,9 @@ up afterwards. Each cost is therefore added to the document's migration row
 
     embeddingCost  Nova embeddings, billed per call
     ocrCost        Textract pages, billed per run
-    qaCost         question generation, calculated from tokens (the chat service
-                   does not return its billed cost)
+    qaCalls        question generation calls (a count, not dollars: the chat
+                   service bills them and does not return what a call cost, so
+                   the admin tab prices each call from the chat usage records)
 
 Only documents already in the migration have a row; nothing is ever created here,
 and bookkeeping never raises.
@@ -23,7 +24,7 @@ logger = logging.getLogger("rag_migration_cost")
 
 LEGACY_PREFIX = "global/"
 NEW_PREFIX = "global2/"
-FIELDS = ("embeddingCost", "qaCost", "ocrCost")
+FIELDS = ("embeddingCost", "qaCalls", "ocrCost")
 
 _table = None
 
@@ -49,7 +50,7 @@ def migration_table():
 
 
 def add_doc_cost(content_key, field, amount, table=None):
-    """Add ``amount`` (USD) to ``field`` on the document's migration row.
+    """Add ``amount`` (USD, or a count for qaCalls) to ``field`` on the document's row.
 
     True when it was added.
     """
